@@ -1024,7 +1024,6 @@ mod helper_tests {
 
     #[test]
     fn activity_summary_amount_keeps_fixed_right_aligned_columns() {
-        const VALUE_WIDTH: &str = "Theme.activity_amount_w - (Theme.activity_amount_token_gap_w + Theme.activity_amount_token_avatar_w + Theme.activity_amount_token_symbol_w)";
         const COLUMN_WIDTH: &str = "root.col_w - (Theme.activity_amount_token_gap_w + Theme.activity_amount_token_avatar_w + Theme.activity_amount_token_symbol_w)";
         let rows = include_str!("../../ui/pages/wallet_components.slint");
         let header = include_str!("../../ui/pages/wallet_sections.slint");
