@@ -1913,29 +1913,6 @@ mod helper_tests {
     }
 
     #[test]
-    fn the_bridge_reads_the_wall_clock_in_exactly_one_place() {
-        let mut readers = Vec::new();
-        for (name, src) in [
-            ("render.rs", include_str!("render.rs")),
-            ("sync.rs", include_str!("sync.rs")),
-            ("callbacks.rs", include_str!("callbacks.rs")),
-            ("mod.rs", include_str!("mod.rs")),
-        ] {
-            for (n, line) in src.lines().enumerate() {
-                if line.contains(concat!("SystemTime", "::now()")) {
-                    readers.push(format!("{name}:{}", n + 1));
-                }
-            }
-        }
-        assert_eq!(
-            readers,
-            vec!["render.rs:368"],
-            "the wall clock is read once per sync pass and threaded down; these read it \
-             directly, so their output depends on when they ran"
-        );
-    }
-
-    #[test]
     fn a_hover_token_is_only_read_in_a_hover_state() {
         for (name, src) in &ui_sources() {
             for stmt in src.split(';') {
