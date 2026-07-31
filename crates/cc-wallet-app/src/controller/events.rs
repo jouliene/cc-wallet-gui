@@ -191,6 +191,7 @@ impl AppController {
             } => {
                 if seq == self.fee_request_seq {
                     self.state.fee_estimating = false;
+                    self.state.fee_estimate_stale = false;
                     if generation == self.subscription_generation {
                         self.state.fee_estimate = Some(estimate);
                     }
@@ -204,6 +205,7 @@ impl AppController {
             } => {
                 if seq == self.fee_request_seq {
                     self.state.fee_estimating = false;
+                    self.state.fee_estimate_stale = false;
                     let owns_refinement = self.pending_max_seq == Some(seq);
                     if generation == self.subscription_generation && owns_refinement {
                         let form_frozen = self.pending_authorization.is_some()
@@ -243,6 +245,7 @@ impl AppController {
             AppEvent::FeeEstimateFailed { generation, seq } => {
                 if seq == self.fee_request_seq {
                     self.state.fee_estimating = false;
+                    self.state.fee_estimate_stale = false;
                     if generation == self.subscription_generation {
                         self.state.fee_estimate = None;
                     }

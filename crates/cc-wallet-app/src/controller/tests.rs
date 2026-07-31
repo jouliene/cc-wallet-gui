@@ -11288,3 +11288,61 @@ fn switching_wallets_drops_the_swap_receipt_of_the_one_left_behind() {
     assert!(c.swap_in_flight.is_none());
     cleanup(&dir);
 }
+
+#[test]
+fn the_send_button_settles_once_instead_of_blinking_while_the_fee_lands() {
+    let dir = temp_dir("send-button-settles");
+    let (mut c, _fake) = ready_to_send(&dir);
+    c.state_mut().send_form.destination.clear();
+    c.state_mut().send_form.amount.clear();
+
+    let mut seen = Vec::new();
+    let record = |c: &AppController, seen: &mut Vec<bool>| {
+        let now = c.state().send_ready();
+        if seen.last() != Some(&now) {
+            seen.push(now);
+        }
+    };
+    record(&c, &mut seen);
+
+    c.handle_command(AppCommand::SetSendAmount("1.0".to_owned()));
+    record(&c, &mut seen);
+    c.handle_command(AppCommand::SetSendDestination(SEND_DEST.to_owned()));
+    record(&c, &mut seen);
+
+    assert!(
+        c.state().fee_estimate_stale,
+        "an edited form has no fee of its own yet"
+    );
+    assert!(
+        !c.state().send_ready(),
+        "the button stays off while the number under it is still the previous form's"
+    );
+    assert!(
+        c.state().send_enabled(),
+        "the send itself is not blocked — a debounced form keeps the last estimate"
+    );
+
+    c.estimate_fee();
+    record(&c, &mut seen);
+    c.apply_event(AppEvent::FeeEstimated {
+        generation: c.subscription_generation,
+        seq: c.fee_request_seq,
+        estimate: FeeEstimate {
+            fee_nanos: 2_804_671,
+            deploy: false,
+        },
+    });
+    record(&c, &mut seen);
+
+    assert!(
+        c.state().send_ready(),
+        "once the estimate lands the button turns on"
+    );
+    assert_eq!(
+        seen,
+        vec![false, true],
+        "the button may only go off-then-on; it blinked instead: {seen:?}"
+    );
+    cleanup(&dir);
+}

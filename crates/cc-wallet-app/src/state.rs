@@ -231,6 +231,7 @@ pub struct AppState {
     pub send_form: SendForm,
     pub fee_estimate: Option<FeeEstimate>,
     pub fee_estimating: bool,
+    pub fee_estimate_stale: bool,
     pub max_refining: bool,
     pub recipient_check: RecipientCheck,
     pub allow_unbounced: bool,
@@ -322,6 +323,7 @@ impl Default for AppState {
             send_form: SendForm::default(),
             fee_estimate: None,
             fee_estimating: false,
+            fee_estimate_stale: false,
             max_refining: false,
             recipient_check: RecipientCheck::Unchecked,
             allow_unbounced: false,
@@ -856,6 +858,10 @@ impl AppState {
             && self.recipient_valid()
             && self.amount_positive()
             && self.can_afford_send()
+    }
+
+    pub fn send_ready(&self) -> bool {
+        self.send_enabled() && !self.fee_estimate_stale
     }
 
     pub fn delete_contact(&mut self, index: usize) {

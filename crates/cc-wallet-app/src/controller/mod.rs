@@ -513,6 +513,7 @@ impl AppController {
 
     fn schedule_fee_reestimate(&mut self) {
         self.clear_pending_max();
+        self.state.fee_estimate_stale = true;
         self.session.fee_reestimate_at = Some(Instant::now() + Duration::from_millis(600));
     }
 

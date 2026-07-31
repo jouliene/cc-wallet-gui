@@ -190,15 +190,19 @@ impl AppController {
             Ok(request) => request,
             Err(_) => {
                 if self.state.fee_estimate.is_some() || self.state.fee_estimating {
+                    self.state.fee_estimate_stale = false;
                     return;
                 }
                 let Some(address) = self.state.wallet.as_ref().map(|w| w.address.clone()) else {
+                    self.state.fee_estimate_stale = false;
                     return;
                 };
                 SendRequest::native(address, 1).expect("the loaded wallet address is valid")
             }
         };
-        let _ = self.spawn_fee_estimate(request, false);
+        if self.spawn_fee_estimate(request, false).is_none() && !self.state.fee_estimating {
+            self.state.fee_estimate_stale = false;
+        }
     }
 
     pub(super) fn set_max_amount(&mut self) {
