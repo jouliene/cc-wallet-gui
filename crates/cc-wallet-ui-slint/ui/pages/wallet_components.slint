@@ -163,7 +163,7 @@ export component ActivityListRow inherits Rectangle {
                             alignment: center;
                             Chip {
                                 label: root.item.kind;
-                                min_w: Theme.activity_type_chip_w;
+                                min_w: 34px;
                                 fg: !root.item.success ? Palette.negative : (root.item.is_in ? Palette.value_in : Palette.value_out);
                                 bg: !root.item.success ? Palette.negative_quiet : (root.item.is_in ? Palette.positive_quiet : Palette.badge_neutral);
                                 frame: !root.item.success ? Palette.negative_border : (root.item.is_in ? Palette.positive_border : Palette.border_subtle);
@@ -229,7 +229,7 @@ export component ActivityListRow inherits Rectangle {
                     clip: true;
                     Amount {
                         width: parent.width;
-                        alignment: end;
+                        alignment: start;
                         amount: root.item.fee;
                         tint: Palette.value_neutral;
                         int_weight: Fonts.semibold;
