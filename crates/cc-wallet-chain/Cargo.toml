@@ -1,0 +1,27 @@
+[package]
+name = "cc-wallet-chain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+default = []
+test-support = []
+
+[dependencies]
+cc-wallet-domain = { path = "../cc-wallet-domain" }
+cc-wallet-tycho = { path = "../cc-wallet-tycho" }
+blake3 = "1"
+sha2 = { version = "=0.10.9", default-features = false }
+tokio = { version = "1", features = ["rt", "time"] }
+zeroize.workspace = true
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+
+[lints]
+workspace = true

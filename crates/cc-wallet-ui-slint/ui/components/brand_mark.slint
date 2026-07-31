@@ -1,0 +1,95 @@
+import { Palette } from "../design_tokens.slint";
+export component BrandMark inherits Rectangle {
+    in property <length> size: 34px;
+    in property <color> outer_tint: Palette.brand_outer;
+    in property <color> inner_tint: Palette.brand_inner;
+
+    property <float> cx: 50;
+    property <float> cy: 50;
+    property <angle> mouth: 28deg;
+    property <float> r_outer: 42.5;
+    property <float> w_outer: 10;
+    property <float> r_inner: 23.5;
+    property <float> w_inner: 10;
+
+    width: root.size;
+    height: root.size;
+    horizontal-stretch: 0;
+
+    pure function px(r: float, a: angle) -> float {
+        return root.cx + r * cos(a);
+    }
+    pure function py(r: float, a: angle) -> float {
+        return root.cy + r * sin(a);
+    }
+
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        fill: root.outer_tint;
+        MoveTo {
+            x: root.px(root.r_outer + root.w_outer / 2, root.mouth);
+            y: root.py(root.r_outer + root.w_outer / 2, root.mouth);
+        }
+        ArcTo {
+            radius-x: root.r_outer + root.w_outer / 2;
+            radius-y: root.r_outer + root.w_outer / 2;
+            x: root.px(root.r_outer + root.w_outer / 2, -root.mouth);
+            y: root.py(root.r_outer + root.w_outer / 2, -root.mouth);
+            large-arc: true;
+            sweep: true;
+        }
+        LineTo {
+            x: root.px(root.r_outer - root.w_outer / 2, -root.mouth);
+            y: root.py(root.r_outer - root.w_outer / 2, -root.mouth);
+        }
+        ArcTo {
+            radius-x: root.r_outer - root.w_outer / 2;
+            radius-y: root.r_outer - root.w_outer / 2;
+            x: root.px(root.r_outer - root.w_outer / 2, root.mouth);
+            y: root.py(root.r_outer - root.w_outer / 2, root.mouth);
+            large-arc: true;
+            sweep: false;
+        }
+        Close { }
+    }
+
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        fill: root.inner_tint;
+        MoveTo {
+            x: root.px(root.r_inner + root.w_inner / 2, root.mouth);
+            y: root.py(root.r_inner + root.w_inner / 2, root.mouth);
+        }
+        ArcTo {
+            radius-x: root.r_inner + root.w_inner / 2;
+            radius-y: root.r_inner + root.w_inner / 2;
+            x: root.px(root.r_inner + root.w_inner / 2, -root.mouth);
+            y: root.py(root.r_inner + root.w_inner / 2, -root.mouth);
+            large-arc: true;
+            sweep: true;
+        }
+        LineTo {
+            x: root.px(root.r_inner - root.w_inner / 2, -root.mouth);
+            y: root.py(root.r_inner - root.w_inner / 2, -root.mouth);
+        }
+        ArcTo {
+            radius-x: root.r_inner - root.w_inner / 2;
+            radius-y: root.r_inner - root.w_inner / 2;
+            x: root.px(root.r_inner - root.w_inner / 2, root.mouth);
+            y: root.py(root.r_inner - root.w_inner / 2, root.mouth);
+            large-arc: true;
+            sweep: false;
+        }
+        Close { }
+    }
+}

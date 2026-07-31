@@ -1,0 +1,190 @@
+import { Theme } from "../theme.slint";
+import { Palette, Fonts, Radii, Space, Motion } from "../design_tokens.slint";
+import { StatusDot } from "../widgets.slint";
+import { BrandMark } from "brand_mark.slint";
+
+component Tab inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    callback clicked();
+    border-radius: Radii.sm;
+    border-width: fs.has-focus ? 2px : 0px;
+    border-color: Palette.focus_ring;
+    fs := FocusScope {
+        enabled: true;
+        key-pressed(e) => {
+            if (e.text == " " || e.text == "\n") {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+    background: root.active ? Palette.accent_quiet : (ta.has-hover ? Palette.hover_strong : transparent);
+    animate background { duration: Motion.base; easing: Motion.curve; }
+    HorizontalLayout {
+        padding-left: 18px;
+        padding-right: 18px;
+        padding-top: Space.s_8;
+        padding-bottom: Space.s_8;
+        Text {
+            text: root.label;
+            color: root.active ? Palette.accent_text : Palette.text_tertiary;
+            font-family: Fonts.ui;
+            font-weight: Fonts.semibold;
+            font-size: Fonts.body;
+            vertical-alignment: center;
+        }
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component TopNav inherits Rectangle {
+    in property <string> selected_tab;
+    in property <string> endpoint;
+    in property <bool> live;
+    in property <bool> wallet_enabled: true;
+    callback nav_wallet();
+    callback nav_swap();
+    callback nav_contacts();
+    callback nav_explorer();
+    callback nav_settings();
+    callback retry_connection();
+    height: Theme.topnav_h;
+
+    HorizontalLayout {
+        spacing: Space.s_0;
+        HorizontalLayout {
+            spacing: Space.s_10;
+            alignment: start;
+            VerticalLayout {
+                alignment: center;
+                BrandMark { size: 38px; }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: "CC Wallet";
+                    color: Palette.text_primary;
+                    font-family: Fonts.ui;
+                    font-weight: Fonts.semibold;
+                    font-size: Fonts.title;
+                }
+            }
+        }
+
+        Rectangle { width: 26px; }
+
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                background: Palette.surface_inset;
+                border-radius: Radii.md;
+                border-width: 1px;
+                border-color: Palette.border_subtle;
+                HorizontalLayout {
+                    padding: Space.s_4;
+                    spacing: Space.s_4;
+                    Tab {
+                        label: "Wallet";
+                        active: root.selected_tab == "Wallet";
+                        clicked => { root.nav_wallet(); }
+                    }
+                    Tab {
+                        label: "Swap";
+                        active: root.selected_tab == "Swap";
+                        clicked => { root.nav_swap(); }
+                    }
+                    Tab {
+                        label: "Contacts";
+                        active: root.selected_tab == "Contacts";
+                        clicked => { root.nav_contacts(); }
+                    }
+                    Tab {
+                        label: "Explorer";
+                        active: root.selected_tab == "Explorer";
+                        clicked => { root.nav_explorer(); }
+                    }
+                    Tab {
+                        label: "Settings";
+                        active: root.selected_tab == "Settings";
+                        clicked => { root.nav_settings(); }
+                    }
+                }
+            }
+        }
+
+        Rectangle { }
+
+        HorizontalLayout {
+            spacing: Space.s_10;
+            alignment: end;
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    background: Palette.surface_inset;
+                    border-radius: Radii.sm;
+                    border-width: 1px;
+                    border-color: Palette.border_subtle;
+                    max-width: 360px;
+                    HorizontalLayout {
+                        padding-left: Space.s_10;
+                        padding-right: Space.s_10;
+                        padding-top: Space.s_6;
+                        padding-bottom: Space.s_6;
+                        Text {
+                            text: root.endpoint;
+                            color: Palette.text_quiet;
+                            font-family: Fonts.mono;
+                            font-size: Fonts.small;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    background: root.live ? Palette.positive_quiet : Palette.negative_quiet;
+                    border-radius: Radii.sm;
+                    border-width: 1px;
+                    border-color: root.live ? Palette.positive_border : Palette.negative_border;
+                    HorizontalLayout {
+                        padding-left: Space.s_10;
+                        padding-right: Space.s_12;
+                        padding-top: Space.s_6;
+                        padding-bottom: Space.s_6;
+                        spacing: Space.s_6;
+                        VerticalLayout {
+                            alignment: center;
+                            StatusDot {
+                                tint: root.live ? Palette.positive : Palette.negative;
+                                pulse: root.live;
+                            }
+                        }
+
+                        Text {
+                            text: root.live ? "Live" : "Offline — retry";
+                            color: root.live ? Palette.positive : Palette.negative;
+                            font-family: Fonts.ui;
+                            font-weight: Fonts.bold;
+                            font-size: Fonts.small;
+                            vertical-alignment: center;
+                        }
+                    }
+                    retry_ta := TouchArea {
+                        enabled: !root.live;
+                        mouse-cursor: pointer;
+                        clicked => { root.retry_connection(); }
+                    }
+                }
+            }
+        }
+    }
+}

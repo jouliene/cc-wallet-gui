@@ -1,0 +1,331 @@
+import { Theme } from "../theme.slint";
+import { Palette, Fonts, Elevation, Motion, Radii, Space } from "../design_tokens.slint";
+import { Icon, Avatar, Card, CardHeader, MicroLabel, PrimaryButton, GhostButton, IconButton, Chip, Field, EmptyState, UserActivity } from "../widgets.slint";
+import { ContactRow } from "../models.slint";
+import { ScrollView } from "std-widgets.slint";
+import { ContactDisplayRow, ContactEditRow } from "contacts_components.slint";
+
+export component ContactsPage inherits VerticalLayout {
+    in property <[ContactRow]> contacts;
+    in property <int> contact_count;
+    in property <length> page_height: 400px;
+    callback save_contact(int, string, string, string);
+    callback delete_contact(int);
+    callback quick_send(string);
+    callback contact_address_is_valid(string) -> bool;
+    callback contact_conflict(int, string, string) -> string;
+    pure callback contact_matches_search(string, string, string, string) -> bool;
+    pure callback matching_contact_count(string) -> int;
+    pure callback contact_search_rank(int, string, int) -> int;
+    callback reorder_contacts(int, int);
+
+    height: root.page_height;
+
+    property <int> editing: -1;
+    property <length> row_h: 62px;
+    property <length> edit_row_h: 170px;
+    property <bool> edited_row_matches: root.editing >= 0
+        && (root.search == ""
+            || root.contact_matches_search(root.contacts[root.editing].name, root.contacts[root.editing].address, root.contacts[root.editing].tag, root.search));
+    property <int> visible_row_count: root.search == ""
+        ? root.contacts.length
+        : root.matching_contact_count(root.search) + (root.editing >= 0 && !root.edited_row_matches ? 1 : 0);
+    property <length> list_natural_h: root.visible_row_count * root.row_h
+        + (root.editing == -2 ? root.edit_row_h : 0px)
+        + (root.editing >= 0 ? (root.edit_row_h - root.row_h) : 0px);
+    property <bool> confirm_delete: false;
+    property <bool> address_valid: true;
+    property <string> conflict_error: "";
+    in-out property <string> draft_name: "";
+    in-out property <string> draft_addr: "";
+    in-out property <string> draft_tag: "";
+    in-out property <string> search: "";
+
+    property <int> drag_index: -1;
+    property <length> drag_start_y: 0px;
+    property <length> drag_current_y: 0px;
+    property <int> drag_target_index: root.drag_index < 0 ? -1 : max(0, min(root.contacts.length - 1, round(root.drag_current_y / root.row_h)));
+
+    function start_drag(i: int) {
+        if (root.search != "" || root.editing != -1) {
+            return;
+        }
+        UserActivity.ping();
+        root.drag_index = i;
+        root.drag_start_y = i * root.row_h;
+        root.drag_current_y = i * root.row_h;
+    }
+    function update_drag(total_dy: length) {
+        if (root.drag_index < 0) {
+            return;
+        }
+        UserActivity.ping();
+        root.drag_current_y = max(0px, min((root.contacts.length - 1) * root.row_h, root.drag_start_y + total_dy));
+    }
+    function end_drag() {
+        if (root.drag_index >= 0 && root.drag_target_index >= 0 && root.drag_target_index != root.drag_index) {
+            root.reorder_contacts(root.drag_index, root.drag_target_index);
+        }
+        root.drag_index = -1;
+        root.drag_current_y = 0px;
+    }
+
+    pure function rank(i: int) -> int {
+        return root.search == "" ? i : root.contact_search_rank(i, root.search, root.editing);
+    }
+
+    pure function row_y(i: int) -> length {
+        if (root.editing == -2) {
+            return root.edit_row_h + root.rank(i) * root.row_h;
+        }
+        if (root.editing >= 0) {
+            return root.rank(i) * root.row_h + (root.rank(i) > root.rank(root.editing) ? (root.edit_row_h - root.row_h) : 0px);
+        }
+        if (root.drag_index < 0 || i == root.drag_index) {
+            return root.rank(i) * root.row_h;
+        }
+        if (root.drag_target_index > root.drag_index && i > root.drag_index && i <= root.drag_target_index) {
+            return (i - 1) * root.row_h;
+        }
+        if (root.drag_target_index < root.drag_index && i >= root.drag_target_index && i < root.drag_index) {
+            return (i + 1) * root.row_h;
+        }
+        return root.rank(i) * root.row_h;
+    }
+
+    pure function is_last_visible(i: int) -> bool {
+        return root.rank(i) == root.visible_row_count - 1;
+    }
+
+    function recompute_conflict() {
+        root.conflict_error = root.contact_conflict(root.editing, root.draft_name, root.draft_addr);
+    }
+    function start_add() {
+        root.editing = -2;
+        root.draft_name = "";
+        root.draft_addr = "";
+        root.draft_tag = "";
+        root.confirm_delete = false;
+        root.address_valid = true;
+        root.conflict_error = "";
+    }
+    function start_edit(i: int) {
+        root.editing = i;
+        root.draft_name = root.contacts[i].name;
+        root.draft_addr = root.contacts[i].address;
+        root.draft_tag = root.contacts[i].tag;
+        root.confirm_delete = false;
+        root.address_valid = root.contact_address_is_valid(root.contacts[i].address);
+        root.conflict_error = "";
+    }
+    function cancel_edit() {
+        root.editing = -1;
+        root.confirm_delete = false;
+    }
+
+    spacing: Space.stack_gap;
+
+    toolbar := HorizontalLayout {
+        spacing: Space.s_12;
+        Rectangle {
+            horizontal-stretch: 1;
+            height: 46px;
+            border-radius: Radii.md;
+            border-width: 1px;
+            border-color: search_field.has_focus ? Palette.focus_ring : Palette.border_medium;
+            background: Palette.surface_raised;
+            HorizontalLayout {
+                padding-left: Space.s_14;
+                spacing: Space.s_8;
+                VerticalLayout { alignment: center; Icon { source: @image-url("../../assets/icons/search.svg"); tint: Palette.text_quiet; width: 16px; height: 16px; } }
+                search_field := Field {
+                    text <=> root.search;
+                    placeholder: "Search contacts";
+                    field_bg: transparent;
+                    border_normal: transparent;
+                    show_focus_border: false;
+                    pad_left: 2px;
+                }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            PrimaryButton {
+                label: "＋  Add contact";
+                height: 46px;
+                clicked => { root.start_add(); }
+            }
+        }
+    }
+
+    Card {
+        vertical-stretch: 1;
+        if root.contact_count == 0 && root.editing != -2: Rectangle {
+            x: 0px;
+            y: header_row.y + header_row.height;
+            width: parent.width;
+            height: parent.height - header_row.y - header_row.height;
+            EmptyState {
+                width: 100%;
+                height: 100%;
+                icon: @image-url("../../assets/icons/users.svg");
+                title: "No contacts yet";
+                subtitle: "Add a recipient to send in one click.";
+            }
+        }
+        if root.contact_count > 0 || root.editing == -2: list_wrap := Rectangle {
+            x: 0px;
+            y: header_row.y + header_row.height;
+            width: parent.width;
+            height: parent.height - header_row.y - header_row.height;
+
+            property <length> scroll_top: -list_scroll.viewport-y;
+            property <length> scroll_bottom: self.scroll_top + list_scroll.visible-height;
+            property <length> autoscroll_dy: root.drag_index < 0 ? 0px : (
+                root.drag_current_y < self.scroll_top + 50px ? -10px : (
+                root.drag_current_y > self.scroll_bottom - 50px ? 10px : 0px));
+            autoscroll_timer := Timer {
+                interval: Motion.frame;
+                running: list_wrap.autoscroll_dy != 0px;
+                triggered => {
+                    list_scroll.viewport-y = max(
+                        -max(0px, root.list_natural_h - list_scroll.visible-height),
+                        min(0px, list_scroll.viewport-y - list_wrap.autoscroll_dy));
+                }
+            }
+
+            list_scroll := ScrollView {
+                x: 0px;
+                y: 0px;
+                scrolled => { UserActivity.ping(); }
+                width: 100%;
+                height: 100%;
+                vertical-scrollbar-policy: ScrollBarPolicy.always-off;
+                horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+                viewport-height: root.list_natural_h;
+                Rectangle {
+                    width: 100%;
+                    height: root.list_natural_h;
+                    rows := Rectangle {
+                        x: 0px;
+                        y: 0px;
+                        width: parent.width;
+                        height: parent.height;
+                        if root.editing == -2: ContactEditRow {
+                            x: 0px;
+                            y: 0px;
+                            width: parent.width;
+                            height: root.edit_row_h;
+                            is_new: true;
+                            last: root.visible_row_count == 0;
+                            draft_name <=> root.draft_name;
+                            draft_tag <=> root.draft_tag;
+                            draft_addr <=> root.draft_addr;
+                            confirm_delete: false;
+                            address_valid: root.address_valid;
+                            conflict_error: root.conflict_error;
+                            addr_edited(t) => { root.address_valid = root.contact_address_is_valid(t); root.recompute_conflict(); }
+                            name_edited(t) => { root.recompute_conflict(); }
+                            save => {
+                                root.save_contact(root.editing, root.draft_name, root.draft_addr, root.draft_tag);
+                                root.cancel_edit();
+                            }
+                            cancel => { root.cancel_edit(); }
+                        }
+                        for c[i] in root.contacts: Rectangle {
+                            x: 0px;
+                            y: root.row_y(i);
+                            width: parent.width;
+                            height: root.editing == i ? root.edit_row_h : root.row_h;
+                            animate y { duration: Motion.base; easing: Motion.curve; }
+                            if root.editing == i: ContactEditRow {
+                                width: 100%;
+                                is_new: false;
+                                last: root.is_last_visible(i);
+                                draft_name <=> root.draft_name;
+                                draft_tag <=> root.draft_tag;
+                                draft_addr <=> root.draft_addr;
+                                confirm_delete: root.confirm_delete;
+                                address_valid: root.address_valid;
+                                conflict_error: root.conflict_error;
+                                addr_edited(t) => { root.address_valid = root.contact_address_is_valid(t); root.recompute_conflict(); }
+                                name_edited(t) => { root.recompute_conflict(); }
+                                save => {
+                                    root.save_contact(root.editing, root.draft_name, root.draft_addr, root.draft_tag);
+                                    root.cancel_edit();
+                                }
+                                cancel => { root.cancel_edit(); }
+                                request_delete => { root.confirm_delete = true; }
+                                cancel_delete => { root.confirm_delete = false; }
+                                confirm_delete_action => {
+                                    root.delete_contact(root.editing);
+                                    root.cancel_edit();
+                                }
+                            }
+                            if root.editing != i && (root.search == "" || root.contact_matches_search(c.name, c.address, c.tag, root.search)): ContactDisplayRow {
+                                width: 100%;
+                                row_h: root.row_h;
+                                contact: c;
+                                last: root.is_last_visible(i);
+                                can_drag: root.search == "" && root.editing == -1;
+                                dragging: root.drag_index == i;
+                                quick_send => { root.quick_send(c.address); }
+                                edit => { root.start_edit(i); }
+                                drag_pressed => { root.start_drag(i); }
+                                drag_moved(dy) => { root.update_drag(dy); }
+                                drag_released => { root.end_drag(); }
+                            }
+                        }
+                    }
+                    if root.drag_index >= 0: Rectangle {
+                        x: 0px;
+                        y: root.drag_target_index * root.row_h - 1px;
+                        width: parent.width;
+                        height: 2px;
+                        background: Palette.accent;
+                        animate y { duration: Motion.fast; easing: Motion.curve; }
+                    }
+                    if root.drag_index >= 0: Rectangle {
+                        x: 0px;
+                        y: root.drag_current_y;
+                        width: parent.width;
+                        height: root.row_h;
+                        background: Palette.surface_raised;
+                        border-radius: Radii.lg;
+                        border-width: 1px;
+                        border-color: Palette.accent;
+                        drop-shadow-blur: 14px;
+                        drop-shadow-color: Elevation.drag_shadow;
+                        drop-shadow-offset-y: 6px;
+                        HorizontalLayout {
+                            padding-left: Space.s_16;
+                            padding-right: Space.s_16;
+                            padding-top: Space.s_6;
+                            padding-bottom: Space.s_6;
+                            spacing: Space.s_12;
+                            VerticalLayout {
+                                alignment: center;
+                                Avatar { initial: root.contacts[root.drag_index].initial; tint: root.contacts[root.drag_index].color; size: 34px; }
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                spacing: Space.s_4;
+                                Text { text: root.contacts[root.drag_index].name; color: Palette.text_primary; font-family: Fonts.ui; font-weight: Fonts.semibold; font-size: Fonts.body; overflow: elide; }
+                                Text { text: root.contacts[root.drag_index].address; color: Palette.text_tertiary; font-family: Fonts.mono; font-size: Fonts.small; overflow: elide; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        header_row := CardHeader {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            icon: @image-url("../../assets/icons/users.svg");
+            title: "Contacts";
+            subtitle: "Saved recipients you can send to in one click.";
+            meta: root.contact_count + " total";
+        }
+    }
+}

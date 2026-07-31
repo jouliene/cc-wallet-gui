@@ -1,0 +1,507 @@
+import { Theme, PageScroll } from "../theme.slint";
+import { Palette, Fonts, Fade, Motion, Space } from "../design_tokens.slint";
+import { TracePartyCol, TraceEdgeRow } from "../models.slint";
+import { CopyButton, Avatar, Amount } from "../widgets.slint";
+
+component SheetBar inherits Rectangle {
+    in property <bool> vertical;
+    in property <float> shown;
+    in property <length> span;
+    in property <length> pos;
+    callback pan_to(length);
+
+    property <length> extent: root.vertical ? root.height : root.width;
+    property <length> thumb: max(38px, root.extent * root.shown);
+    property <length> track: root.extent - root.thumb;
+    property <length> at: root.span > 0px ? -root.pos / root.span * root.track : 0px;
+    property <length> grab: 0px;
+
+    background: transparent;
+
+    pure function pan_for(a: length) -> length {
+        return root.track > 0px ? -(min(max(a, 0px), root.track) / root.track) * root.span : 0px;
+    }
+    pure function held_at() -> length { return root.vertical ? bar.pressed-y : bar.pressed-x; }
+    pure function moved_by() -> length {
+        return root.vertical ? bar.mouse-y - bar.pressed-y : bar.mouse-x - bar.pressed-x;
+    }
+
+    Rectangle {
+        x: root.vertical ? 3px : root.at;
+        y: root.vertical ? root.at : 3px;
+        width: root.vertical ? parent.width - 6px : root.thumb;
+        height: root.vertical ? root.thumb : parent.height - 6px;
+        border-radius: 2px;
+        background: bar.pressed ? Palette.text_tertiary : (bar.has-hover ? Palette.text_quiet : Palette.border_strong);
+        animate background { duration: Motion.fast; easing: Motion.curve; }
+    }
+    bar := TouchArea {
+        mouse-cursor: MouseCursor.default;
+        pointer-event(ev) => {
+            if (ev.kind == PointerEventKind.down) {
+                if (root.held_at() < root.at || root.held_at() > root.at + root.thumb) {
+                    root.pan_to(root.pan_for(root.held_at() - root.thumb / 2));
+                }
+                root.grab = root.at;
+            }
+        }
+        moved => { root.pan_to(root.pan_for(root.grab + root.moved_by())); }
+    }
+}
+
+export component TraceDiagram inherits Rectangle {
+    in property <[TracePartyCol]> parties;
+    in property <[TraceEdgeRow]> edges;
+    in property <length> viewport_h: 380px;
+    in property <bool> raw_ops: false;
+
+    property <length> col_w: 220px;
+    property <length> row_h: 66px;
+    property <length> gutter_w: 148px;
+    property <length> head_h: 46px;
+    property <length> bar_w: 11px;
+    property <length> content_w: root.parties.length * root.col_w;
+    property <length> content_h: root.edges.length * root.row_h;
+    property <bool> roams_y: root.content_h > root.viewport_h;
+    property <length> view_w: root.width - root.gutter_w - 2px - (root.roams_y ? root.bar_w : 0px);
+    property <bool> roams_x: root.content_w > root.view_w;
+    property <length> min_pan_x: min(root.view_w - root.content_w, 0px);
+    property <length> min_pan_y: min(root.viewport_h - root.content_h - (root.roams_x ? root.bar_w : 0px), 0px);
+    property <length> pan_x: 0px;
+    property <length> pan_y: 0px;
+
+    property <bool> dragging: false;
+    property <length> grab_x: 0px;
+    property <length> grab_y: 0px;
+    property <length> auto_x: 0px;
+    property <length> auto_y: 0px;
+    property <length> vel_x: 0px;
+    property <length> vel_y: 0px;
+    property <length> was_x: 0px;
+    property <length> was_y: 0px;
+    property <length> mark_x: 0px;
+    property <length> mark_y: 0px;
+
+    property <float> lit_row: Math.floor((root.pointer_y() - root.pan_y) / root.row_h);
+    property <bool> lit: sheet.has-hover && root.pointer_y() > 0px;
+
+    height: root.head_h + root.viewport_h + 2px;
+    border-width: 1px;
+    border-color: Palette.border_subtle;
+
+    changed edges => { root.dragging = false; root.halt(); root.pan_x = 0px; root.pan_y = 0px; }
+
+    pure function clamp_x(v: length) -> length { return min(max(v, root.min_pan_x), 0px); }
+    pure function clamp_y(v: length) -> length { return min(max(v, root.min_pan_y), 0px); }
+    pure function centre(column: int) -> length { return column * root.col_w + root.col_w / 2; }
+    pure function far(v: length) -> length { return v > 0px ? v : -v; }
+    pure function pointer_x() -> length { return sheet.mouse-x - root.gutter_w; }
+    pure function pointer_y() -> length { return sheet.mouse-y - root.head_h; }
+    pure function said(op: string, raw_op: string) -> string {
+        return root.raw_ops && raw_op != "" ? raw_op : op;
+    }
+    pure function row_tone(idx: int, focus: bool) -> color {
+        return root.lit && idx == root.lit_row
+            ? Palette.hover_strong
+            : (focus ? Palette.hover_row : transparent);
+    }
+    pure function edge_pull(at: length, extent: length) -> length {
+        return at < 0px
+            ? -min(-at * 0.3, 26px)
+            : (at > extent ? min((at - extent) * 0.3, 26px) : 0px);
+    }
+
+    function follow() {
+        root.pan_x = root.clamp_x(root.grab_x + (sheet.mouse-x - sheet.pressed-x) + root.auto_x);
+        root.pan_y = root.clamp_y(root.grab_y + (sheet.mouse-y - sheet.pressed-y) + root.auto_y);
+    }
+    function take() {
+        root.dragging = true;
+        root.grab_x = root.pan_x;
+        root.grab_y = root.pan_y;
+        root.auto_x = 0px;
+        root.auto_y = 0px;
+        root.was_x = root.pan_x;
+        root.was_y = root.pan_y;
+        root.halt();
+    }
+    function let_go(thrown: bool) {
+        root.dragging = false;
+        if (!thrown) { root.halt(); }
+    }
+    function halt() { root.vel_x = 0px; root.vel_y = 0px; }
+    function nudge(dx: length, dy: length) {
+        root.halt();
+        root.pan_x = root.clamp_x(root.pan_x + dx);
+        root.pan_y = root.clamp_y(root.pan_y + dy);
+    }
+    function wheel(dx: length, dy: length, sideways: bool) -> EventResult {
+        root.halt();
+        root.mark_x = root.pan_x;
+        root.mark_y = root.pan_y;
+        if (sideways || !root.roams_y) {
+            root.pan_x = root.clamp_x(root.pan_x + (dx != 0px ? dx : dy) * 1.15);
+        } else {
+            root.pan_x = root.clamp_x(root.pan_x + dx * 1.15);
+            root.pan_y = root.clamp_y(root.pan_y + dy * 1.15);
+        }
+        return root.pan_x != root.mark_x || root.pan_y != root.mark_y
+            ? EventResult.accept
+            : EventResult.reject;
+    }
+
+    Timer {
+        interval: Motion.frame;
+        running: root.dragging || root.far(root.vel_x) > 0.4px || root.far(root.vel_y) > 0.4px;
+        triggered => {
+            if (root.dragging) {
+                if (root.roams_x && sheet.pressed-x > root.gutter_w) {
+                    root.auto_x += root.edge_pull(root.pointer_x(), root.view_w);
+                }
+                if (root.roams_y && sheet.pressed-y > root.head_h) {
+                    root.auto_y += root.edge_pull(root.pointer_y(), root.viewport_h);
+                }
+                root.follow();
+                root.vel_x = root.vel_x * 0.5 + (root.pan_x - root.was_x) * 0.5;
+                root.vel_y = root.vel_y * 0.5 + (root.pan_y - root.was_y) * 0.5;
+                root.was_x = root.pan_x;
+                root.was_y = root.pan_y;
+            } else {
+                root.pan_x = root.clamp_x(root.pan_x + root.vel_x);
+                root.pan_y = root.clamp_y(root.pan_y + root.vel_y);
+                if (root.pan_x == 0px || root.pan_x == root.min_pan_x) { root.vel_x = 0px; }
+                if (root.pan_y == 0px || root.pan_y == root.min_pan_y) { root.vel_y = 0px; }
+                root.vel_x *= 0.93;
+                root.vel_y *= 0.93;
+            }
+        }
+    }
+
+    keys := FocusScope {
+        width: 0px;
+        height: 0px;
+        key-pressed(ev) => {
+            if (ev.text == Key.UpArrow) { root.nudge(0px, root.row_h); return accept; }
+            if (ev.text == Key.DownArrow) { root.nudge(0px, -root.row_h); return accept; }
+            if (ev.text == Key.LeftArrow) { root.nudge(root.col_w, 0px); return accept; }
+            if (ev.text == Key.RightArrow) { root.nudge(-root.col_w, 0px); return accept; }
+            if (ev.text == Key.PageUp) { root.nudge(0px, root.viewport_h - root.row_h); return accept; }
+            if (ev.text == Key.PageDown) { root.nudge(0px, root.row_h - root.viewport_h); return accept; }
+            if (ev.text == Key.Home) { root.halt(); root.pan_x = 0px; root.pan_y = 0px; return accept; }
+            if (ev.text == Key.End) { root.halt(); root.pan_y = root.min_pan_y; return accept; }
+            return reject;
+        }
+    }
+
+    sheet := TouchArea {
+        x: 1px;
+        y: 1px;
+        width: root.width - 2px;
+        height: root.height - 2px;
+        mouse-cursor: root.dragging ? MouseCursor.grabbing : MouseCursor.grab;
+        changed has-hover => { PageScroll.held = self.has-hover; }
+        pointer-event(ev) => {
+            if (ev.kind == PointerEventKind.down) {
+                PageScroll.held = true;
+                keys.focus();
+                root.take();
+            }
+            if (ev.kind == PointerEventKind.up) { root.let_go(true); }
+            if (ev.kind == PointerEventKind.cancel) { root.let_go(false); }
+        }
+        moved => { root.follow(); }
+        scroll-event(ev) => { return root.wheel(ev.delta-x, ev.delta-y, ev.modifiers.shift); }
+
+        HorizontalLayout {
+            x: 0;
+            y: 0;
+            width: parent.width;
+            height: root.head_h;
+            Rectangle {
+                width: root.gutter_w;
+                background: Palette.surface_overlay;
+                Text {
+                    x: 14px;
+                    text: "TRANSACTION";
+                    color: Palette.text_quiet;
+                    font-family: Fonts.ui;
+                    font-weight: Fonts.bold;
+                    font-size: Fonts.micro;
+                    letter-spacing: Space.s_2;
+                    vertical-alignment: center;
+                }
+            }
+            Rectangle {
+                clip: true;
+                background: Palette.surface_overlay;
+                for p[i] in root.parties: Rectangle {
+                    x: i * root.col_w + root.pan_x;
+                    width: root.col_w;
+                    height: parent.height;
+                    Rectangle { x: 0; width: 1px; height: parent.height; background: Palette.border_subtle; }
+                    HorizontalLayout {
+                        padding-left: Space.s_12;
+                        padding-right: Space.s_6;
+                        spacing: Space.s_2;
+                        VerticalLayout {
+                            alignment: center;
+                            spacing: Space.s_2;
+                            Text {
+                                text: p.label;
+                                color: p.is_external ? Palette.text_quiet : Palette.text_secondary;
+                                font-family: p.is_external || p.named ? Fonts.ui : Fonts.mono;
+                                font-weight: Fonts.semibold;
+                                font-size: Fonts.micro;
+                                overflow: elide;
+                            }
+                            if p.contract != "": Text {
+                                text: p.contract;
+                                color: Palette.text_quiet;
+                                font-family: Fonts.ui;
+                                font-size: Fonts.micro;
+                                overflow: elide;
+                            }
+                        }
+                        if !p.is_external: VerticalLayout {
+                            alignment: center;
+                            CopyButton { value: p.address; }
+                        }
+                    }
+                }
+                Rectangle {
+                    x: root.content_w + root.pan_x - 1px;
+                    width: 1px;
+                    height: parent.height;
+                    background: Palette.border_subtle;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            x: 0;
+            y: root.head_h;
+            width: parent.width;
+            height: root.viewport_h;
+
+            Rectangle {
+                width: root.gutter_w;
+                clip: true;
+                background: Palette.surface_sunken;
+                for e[i] in root.edges: Rectangle {
+                    y: i * root.row_h + root.pan_y;
+                    height: root.row_h;
+                    width: parent.width;
+                    background: root.row_tone(i, e.focus);
+                    Rectangle { y: 0; height: 1px; width: parent.width; background: Palette.border_hairline; }
+                    HorizontalLayout {
+                        padding-left: Space.s_14;
+                        padding-right: Space.s_6;
+                        spacing: Space.s_2;
+                        alignment: start;
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: e.executed ? e.hash_short : (e.is_event ? "event" : "—");
+                                color: e.executed ? (e.ok ? Palette.accent_text : Palette.negative) : Palette.text_quiet;
+                                font-family: e.executed ? Fonts.mono : Fonts.ui;
+                                font-size: Fonts.micro;
+                                vertical-alignment: center;
+                            }
+                        }
+                        if e.executed: VerticalLayout {
+                            alignment: center;
+                            CopyButton { value: e.hash_full; }
+                        }
+                    }
+                }
+                Rectangle { x: parent.width - 1px; width: 1px; height: parent.height; background: Palette.border_subtle; }
+            }
+
+            Rectangle {
+                clip: true;
+                background: Palette.surface_raised;
+
+                Rectangle {
+                    x: root.pan_x;
+                    y: root.pan_y;
+                    width: root.content_w;
+                    height: root.content_h;
+
+                    for p[i] in root.parties: Rectangle {
+                        x: i * root.col_w;
+                        width: 1px;
+                        height: parent.height;
+                        background: Palette.border_subtle;
+                    }
+                    Rectangle {
+                        x: root.content_w - 1px;
+                        width: 1px;
+                        height: parent.height;
+                        background: Palette.border_subtle;
+                    }
+
+                    for e[i] in root.edges: edge_row := Rectangle {
+                        y: i * root.row_h;
+                        height: root.row_h;
+                        width: parent.width;
+                        background: root.row_tone(i, e.focus);
+                        property <length> from_x: root.centre(e.from);
+                        property <length> to_x: root.centre(e.to);
+                        property <length> line_y: root.row_h / 2 + 4px;
+                        property <bool> rightward: self.to_x >= self.from_x;
+                        property <bool> loops: e.from == e.to;
+                        property <length> hook_w: 34px;
+                        property <length> hook_h: 18px;
+                        property <bool> says_right: e.from + 1 < root.parties.length;
+                        property <length> says_x: !self.loops
+                            ? min(self.from_x, self.to_x)
+                            : (self.says_right
+                                ? self.from_x + self.hook_w + 12px
+                                : self.from_x - self.hook_w - 12px - root.col_w);
+                        property <length> says_w: !self.loops
+                            ? max(max(self.from_x, self.to_x) - min(self.from_x, self.to_x), root.col_w)
+                            : root.col_w;
+                        property <color> tone: e.is_event ? Palette.text_quiet : (!e.executed ? Palette.warning : (e.ok ? Palette.text_secondary : Palette.negative));
+
+                        Rectangle { y: 0; height: 1px; width: parent.width; background: Palette.border_hairline; }
+
+                        if !edge_row.loops: Rectangle {
+                            x: min(parent.from_x, parent.to_x);
+                            width: max(max(parent.from_x, parent.to_x) - min(parent.from_x, parent.to_x), 2px);
+                            y: parent.line_y;
+                            height: 1px;
+                            background: parent.tone;
+                        }
+                        if edge_row.loops: Rectangle {
+                            x: parent.from_x;
+                            y: parent.line_y;
+                            width: parent.hook_w;
+                            height: 1px;
+                            background: parent.tone;
+                        }
+                        if edge_row.loops: Rectangle {
+                            x: parent.from_x + parent.hook_w;
+                            y: parent.line_y;
+                            width: 1px;
+                            height: parent.hook_h;
+                            background: parent.tone;
+                        }
+                        if edge_row.loops: Rectangle {
+                            x: parent.from_x + 7px;
+                            y: parent.line_y + parent.hook_h;
+                            width: parent.hook_w - 7px;
+                            height: 1px;
+                            background: parent.tone;
+                        }
+                        Rectangle {
+                            x: parent.from_x - 3px;
+                            y: parent.line_y - 2.5px;
+                            width: 6px;
+                            height: 6px;
+                            border-radius: self.height / 2;
+                            background: parent.tone;
+                        }
+                        Path {
+                            x: edge_row.loops
+                                ? edge_row.from_x
+                                : edge_row.to_x - (edge_row.rightward ? 9px : 0px);
+                            y: edge_row.loops
+                                ? edge_row.line_y + edge_row.hook_h - 5px
+                                : edge_row.line_y - 4.5px;
+                            width: 9px;
+                            height: 10px;
+                            viewbox-width: 9;
+                            viewbox-height: 10;
+                            fill: parent.tone;
+                            MoveTo { x: edge_row.loops || !edge_row.rightward ? 0 : 9; y: 5; }
+                            LineTo { x: edge_row.loops || !edge_row.rightward ? 9 : 0; y: 0; }
+                            LineTo { x: edge_row.loops || !edge_row.rightward ? 9 : 0; y: 10; }
+                            Close { }
+                        }
+
+                        Text {
+                            x: parent.says_x;
+                            width: parent.says_w;
+                            y: parent.line_y - 22px;
+                            height: 18px;
+                            horizontal-alignment: edge_row.loops
+                                ? (edge_row.says_right
+                                    ? TextHorizontalAlignment.left
+                                    : TextHorizontalAlignment.right)
+                                : TextHorizontalAlignment.center;
+                            text: root.said(e.op, e.raw_op) + (e.comment != "" ? " · " + e.comment : "");
+                            color: e.is_event ? Palette.text_quiet : (!e.executed ? Palette.warning : (e.ok ? Palette.text_value : Palette.negative));
+                            font-family: Fonts.ui;
+                            font-weight: Fonts.semibold;
+                            font-size: Fonts.micro;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                        Rectangle {
+                            x: edge_row.loops
+                                ? edge_row.says_x
+                                : (edge_row.from_x + edge_row.to_x) / 2 - self.width / 2;
+                            width: edge_row.loops
+                                ? edge_row.says_w
+                                : max(max(parent.from_x, parent.to_x) - min(parent.from_x, parent.to_x), 2 * root.col_w);
+                            y: parent.line_y + 4px;
+                            height: 18px;
+                            clip: true;
+                            HorizontalLayout {
+                                alignment: edge_row.loops
+                                    ? (edge_row.says_right ? LayoutAlignment.start : LayoutAlignment.end)
+                                    : LayoutAlignment.center;
+                                spacing: Space.s_16;
+                                for m in e.movements: Amount {
+                                    amount: m;
+                                    tint: Palette.text_value;
+                                    font_size: Fonts.micro;
+                                }
+                            }
+                        }
+                        if !e.is_event && (!e.executed || !e.ok): Text {
+                            x: edge_row.loops
+                                ? edge_row.says_x
+                                : edge_row.to_x + (edge_row.rightward ? 12px : -110px);
+                            width: edge_row.loops ? edge_row.says_w : 100px;
+                            y: edge_row.loops ? parent.line_y - 22px : parent.line_y - 8px;
+                            height: 16px;
+                            text: !e.executed ? "not executed" : e.failure;
+                            color: !e.executed ? Palette.warning : Palette.negative;
+                            font-family: Fonts.ui;
+                            font-weight: Fonts.semibold;
+                            font-size: Fonts.micro;
+                            horizontal-alignment: edge_row.loops || !parent.rightward
+                                ? TextHorizontalAlignment.right
+                                : TextHorizontalAlignment.left;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                if root.roams_y: SheetBar {
+                    x: parent.width - root.bar_w;
+                    y: 0;
+                    width: root.bar_w;
+                    height: parent.height - (root.roams_x ? root.bar_w : 0px);
+                    vertical: true;
+                    shown: root.viewport_h / root.content_h;
+                    span: -root.min_pan_y;
+                    pos: root.pan_y;
+                    pan_to(v) => { root.halt(); root.pan_y = root.clamp_y(v); }
+                }
+                if root.roams_x: SheetBar {
+                    x: 0;
+                    y: parent.height - root.bar_w;
+                    width: parent.width - (root.roams_y ? root.bar_w : 0px);
+                    height: root.bar_w;
+                    vertical: false;
+                    shown: root.view_w / root.content_w;
+                    span: -root.min_pan_x;
+                    pos: root.pan_x;
+                    pan_to(v) => { root.halt(); root.pan_x = root.clamp_x(v); }
+                }
+            }
+        }
+    }
+}

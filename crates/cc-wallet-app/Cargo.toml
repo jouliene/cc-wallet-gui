@@ -1,0 +1,30 @@
+[package]
+name = "cc-wallet-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+cc-wallet-chain = { path = "../cc-wallet-chain" }
+cc-wallet-domain = { path = "../cc-wallet-domain" }
+cc-wallet-storage = { path = "../cc-wallet-storage" }
+cc-wallet-vault = { path = "../cc-wallet-vault" }
+getrandom.workspace = true
+serde_json = "1"
+subtle = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "time"] }
+zeroize.workspace = true
+arboard = { version = "3", default-features = false, features = [
+    "wayland-data-control",
+] }
+
+[dev-dependencies]
+cc-wallet-chain = { path = "../cc-wallet-chain", features = ["test-support"] }
+cc-wallet-domain = { path = "../cc-wallet-domain", features = ["test-fixtures"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,457 @@
+import { Theme } from "../theme.slint";
+import { Palette, Fonts, Space, Radii } from "../design_tokens.slint";
+import { Icon, InlineError, MicroLabel, PrimaryButton, GhostButton, IconButton, Field, DialogCard, Checkbox, StatusBar } from "../widgets.slint";
+import { SegChoice, EditableSeedChip } from "../pages/settings_components.slint";
+
+export component LockScreen inherits Rectangle {
+    in property <bool> onboarding;
+    in property <bool> busy;
+    in property <string> error;
+    in property <string> active_wallet;
+    in property <bool> can_back;
+    in-out property <string> name;
+    in-out property <int> workchain: 0;
+    in-out property <string> pw;
+    in-out property <string> pw2;
+    in-out property <[string]> import_words: ["", "", "", "", "", "", "", "", "", "", "", ""];
+    property <int> import_gen: 0;
+    in property <bool> import_valid;
+    in property <bool> import_filled;
+    in property <bool> backup_confirmed;
+    callback unlock(string);
+    callback create(string, int, int, string, string);
+    callback confirm_backup(bool);
+    callback back();
+    callback onboard_generate() -> [string];
+    callback onboard_stage_from_grid();
+    callback copy_seed(string);
+    callback copy_seed_from_grid();
+    callback import_edited();
+    callback distribute_seed(string) -> [string];
+    callback import_cell_edited(int, string, [string]) -> [string];
+
+    property <bool> pw_visible: false;
+    property <string> net_preset: "testnet";
+    property <int> step: 1;
+    property <int> pending_import_index: -1;
+    property <bool> paste_via_button: false;
+    in property <string> clipboard_notice: "";
+    in property <int> seed_copy_ttl: 0;
+    property <bool> can_create: !root.busy && root.import_valid && root.pw != "" && root.pw == root.pw2 && root.backup_confirmed;
+
+    background: Palette.surface_base;
+    TouchArea {}
+
+    function chosen_network_id() -> int {
+        return root.net_preset == "testnet" ? 2000 : 0;
+    }
+    function submit_create() {
+        if (root.busy || !root.can_create) {
+            return;
+        }
+        root.create(root.name, root.chosen_network_id(), root.workchain, root.pw, root.pw2);
+    }
+    function go_unlock() {
+        if (!root.busy) {
+            root.unlock(root.pw);
+        }
+    }
+
+    DialogCard {
+        width: 440px;
+        height: card.preferred-height;
+
+        card := VerticalLayout {
+            padding: Space.s_24;
+            spacing: Space.s_16;
+
+            HorizontalLayout {
+                spacing: Space.s_12;
+                Rectangle {
+                    width: 40px;
+                    height: 40px;
+                    border-radius: Radii.md;
+                    background: Palette.accent_quiet;
+                    Icon {
+                        source: @image-url("../../assets/icons/lock.svg");
+                        tint: Palette.accent_text;
+                        width: 20px;
+                        height: 20px;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: Space.s_4;
+                    horizontal-stretch: 1;
+                    Text {
+                        text: !root.onboarding
+                            ? (root.active_wallet != "" ? "Unlock “" + root.active_wallet + "”" : "Unlock your wallet")
+                            : (root.step == 1 ? "Create a wallet" : "Secure your wallet");
+                        color: Palette.text_primary;
+                        font-family: Fonts.ui;
+                        font-weight: Fonts.bold;
+                        font-size: Fonts.title;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: !root.onboarding
+                            ? "Enter your password to unlock."
+                            : (root.step == 1
+                                ? "Name it and pick its network."
+                                : "Save your recovery phrase, then set a password.");
+                        color: Palette.text_tertiary;
+                        font-family: Fonts.ui;
+                        font-size: Fonts.small;
+                        wrap: word-wrap;
+                    }
+                }
+                if root.onboarding: VerticalLayout {
+                    alignment: start;
+                    padding-top: Space.s_4;
+                    Text {
+                        text: "Step " + root.step + "/2";
+                        color: Palette.text_quiet;
+                        font-family: Fonts.ui;
+                        font-size: Fonts.micro;
+                    }
+                }
+            }
+
+            if !root.onboarding: VerticalLayout {
+                spacing: Space.s_8;
+                MicroLabel { text: "PASSWORD"; }
+                Rectangle {
+                    height: Theme.pw_field_h;
+                    Field {
+                        text <=> root.pw;
+                        height_: Theme.pw_field_h;
+                        input_type: root.pw_visible ? InputType.text : InputType.password;
+                        is_secret: true;
+                        placeholder: "••••••••";
+                        pad_right: 38px;
+                        accepted => { root.go_unlock(); }
+                    }
+                    IconButton {
+                        x: parent.width - self.width - 6px;
+                        y: (parent.height - self.height) / 2;
+                        size: 26px;
+                        icon_size: 16px;
+                        icon: root.pw_visible ? @image-url("../../assets/icons/eye-off.svg") : @image-url("../../assets/icons/eye.svg");
+                        tint: Palette.text_tertiary;
+                        clicked => { root.pw_visible = !root.pw_visible; }
+                    }
+                }
+            }
+
+            if root.onboarding && root.step == 1: VerticalLayout {
+                spacing: Space.s_16;
+
+                VerticalLayout {
+                    spacing: Space.s_8;
+                    MicroLabel { text: "WALLET NAME"; }
+                    Rectangle {
+                        height: Theme.pw_field_h;
+                        Field {
+                            text <=> root.name;
+                            height_: Theme.pw_field_h;
+                            placeholder: "My Wallet";
+                            accepted => { if (root.name != "") { root.step = 2; } }
+                        }
+                    }
+                }
+
+                VerticalLayout {
+                    spacing: Space.s_8;
+                    MicroLabel { text: "NETWORK"; }
+                    Rectangle {
+                        height: 40px;
+                        border-radius: Radii.md;
+                        background: Palette.surface_inset;
+                        border-width: 1px;
+                        border-color: Palette.border_subtle;
+                        HorizontalLayout {
+                            padding: Space.s_4;
+                            spacing: Space.s_4;
+                            SegChoice { horizontal-stretch: 1; min-width: 0px; preferred-width: 0px; label: "Tycho testnet"; active: root.net_preset == "testnet"; clicked => { root.net_preset = "testnet"; } }
+                            SegChoice { horizontal-stretch: 1; min-width: 0px; preferred-width: 0px; label: "Local"; active: root.net_preset == "local"; clicked => { root.net_preset = "local"; } }
+                        }
+                    }
+                }
+
+                VerticalLayout {
+                    spacing: Space.s_8;
+                    MicroLabel { text: "WORKCHAIN"; }
+                    Rectangle {
+                        height: 40px;
+                        border-radius: Radii.md;
+                        background: Palette.surface_inset;
+                        border-width: 1px;
+                        border-color: Palette.border_subtle;
+                        HorizontalLayout {
+                            padding: Space.s_4;
+                            spacing: Space.s_4;
+                            SegChoice { horizontal-stretch: 1; min-width: 0px; preferred-width: 0px; label: "Basechain (0)"; active: root.workchain == 0; clicked => { root.workchain = 0; } }
+                            SegChoice { horizontal-stretch: 1; min-width: 0px; preferred-width: 0px; label: "Masterchain (-1)"; active: root.workchain == -1; clicked => { root.workchain = -1; } }
+                        }
+                    }
+                }
+            }
+
+            if root.onboarding && root.step == 2: VerticalLayout {
+                spacing: Space.s_14;
+
+                VerticalLayout {
+                    spacing: Space.s_8;
+                    HorizontalLayout {
+                        height: 17px;
+                        spacing: Space.s_6;
+                        MicroLabel { text: "RECOVERY PHRASE"; vertical-alignment: center; }
+                        Rectangle { }
+                        if root.clipboard_notice != "": InlineError {
+                            text: root.clipboard_notice;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Space.field_gap;
+                        for rowidx in 4: irow := HorizontalLayout {
+                            spacing: Space.field_gap;
+                            for col in 3: EditableSeedChip {
+                                width: (irow.width - 2 * Space.field_gap) / 3;
+                                number: rowidx * 3 + col + 1;
+                                word: root.import_words[rowidx * 3 + col];
+                                resync_gen: root.import_gen;
+                                edited(t) => {
+                                    root.import_words = root.import_cell_edited(rowidx * 3 + col, t, root.import_words);
+                                    root.import_gen += 1;
+                                    root.import_edited();
+                                    root.onboard_stage_from_grid();
+                                }
+                                paste_requested => {
+                                    root.paste_via_button = false;
+                                    root.pending_import_index = rowidx * 3 + col;
+                                    import_paste.paste_replace();
+                                }
+                            }
+                        }
+                    }
+                    StatusBar {
+                        label: !root.import_filled
+                            ? "Generate a new phrase or paste an existing one"
+                            : (root.import_valid ? "Valid recovery phrase" : "Not a valid recovery phrase");
+                        tint: root.import_valid ? Palette.positive : (!root.import_filled ? Palette.text_quiet : Palette.warning);
+                        fill: root.import_valid ? Palette.positive_quiet : (!root.import_filled ? Palette.surface_sunken : Palette.warning_quiet);
+                        frame: root.import_valid ? Palette.positive_border : (!root.import_filled ? Palette.border_subtle : Palette.border_subtle);
+                        icon: root.import_valid ? @image-url("../../assets/icons/check.svg") : @image-url("../../assets/icons/alert.svg");
+                        show_icon: root.import_filled;
+                    }
+                    HorizontalLayout {
+                        spacing: Space.s_8;
+                        GhostButton {
+                            horizontal-stretch: 1; min-width: 0px; preferred-width: 0px;
+                            label: "Generate";
+                            clicked => {
+                                focus_sink.focus();
+                                root.import_words = root.onboard_generate();
+                                root.import_gen += 1;
+                                root.import_edited();
+                                root.onboard_stage_from_grid();
+                            }
+                        }
+                        GhostButton {
+                            horizontal-stretch: 1; min-width: 0px; preferred-width: 0px;
+                            label: "Paste";
+                            clicked => {
+                                root.paste_via_button = true;
+                                import_paste.paste_replace();
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            Rectangle { width: 1px; height: 20px; background: Palette.border_medium; }
+                        }
+                        GhostButton {
+                            width: 64px;
+                            label: root.seed_copy_ttl > 0 ? (root.seed_copy_ttl + "s") : "Copy";
+                            enabled: root.import_filled;
+                            clicked => { root.copy_seed_from_grid(); }
+                        }
+                        GhostButton {
+                            label: "Clear";
+                            clicked => {
+                                focus_sink.focus();
+                                root.import_words = root.distribute_seed("");
+                                root.import_gen += 1;
+                                root.import_edited();
+                                root.onboard_stage_from_grid();
+                            }
+                        }
+                    }
+                }
+
+                VerticalLayout {
+                    spacing: Space.s_8;
+                    MicroLabel { text: "PASSWORD"; }
+                    Rectangle {
+                        height: Theme.pw_field_h;
+                        Field {
+                            text <=> root.pw;
+                            height_: Theme.pw_field_h;
+                            input_type: root.pw_visible ? InputType.text : InputType.password;
+                        is_secret: true;
+                            placeholder: "at least 8 characters";
+                            pad_right: 38px;
+                        }
+                        IconButton {
+                            x: parent.width - self.width - 6px;
+                            y: (parent.height - self.height) / 2;
+                            size: 26px;
+                            icon_size: 16px;
+                            icon: root.pw_visible ? @image-url("../../assets/icons/eye-off.svg") : @image-url("../../assets/icons/eye.svg");
+                            tint: Palette.text_tertiary;
+                            clicked => { root.pw_visible = !root.pw_visible; }
+                        }
+                    }
+                }
+
+                VerticalLayout {
+                    spacing: Space.s_8;
+                    MicroLabel { text: "CONFIRM PASSWORD"; }
+                    Rectangle {
+                        height: Theme.pw_field_h;
+                        Field {
+                            text <=> root.pw2;
+                            height_: Theme.pw_field_h;
+                            input_type: root.pw_visible ? InputType.text : InputType.password;
+                        is_secret: true;
+                            placeholder: "••••••••";
+                            accepted => { root.submit_create(); }
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: Space.s_10;
+                    Checkbox {
+                        checked: root.backup_confirmed;
+                        active_color: Palette.accent_fill;
+                        toggled(v) => { root.confirm_backup(v); }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        backup_toggle := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.confirm_backup(!root.backup_confirmed); }
+                            Text {
+                                text: "I have safely saved my recovery phrase.";
+                                color: root.backup_confirmed ? Palette.text_secondary : Palette.text_tertiary;
+                                font-family: Fonts.ui;
+                                font-size: Fonts.small;
+                            }
+                        }
+                    }
+                    Rectangle { }
+                }
+            }
+
+            if root.error != "": InlineError { text: root.error; }
+
+            if !root.onboarding: PrimaryButton {
+                label: root.busy ? "Working…" : "Unlock";
+                height: 44px;
+                enabled: !root.busy;
+                clicked => { root.go_unlock(); }
+            }
+            if root.onboarding && root.step == 1: PrimaryButton {
+                label: "Next";
+                icon: @image-url("../../assets/icons/chevron-right.svg");
+                has_icon: true;
+                height: 44px;
+                enabled: root.name != "";
+                clicked => { if (root.name != "") { root.step = 2; } }
+            }
+            if root.onboarding && root.step == 2: PrimaryButton {
+                label: root.busy ? "Working…" : "Create wallet";
+                height: 44px;
+                enabled: root.can_create;
+                clicked => { root.submit_create(); }
+            }
+
+            if root.onboarding && root.step == 2 && !root.busy: HorizontalLayout {
+                alignment: center;
+                back_step := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.step = 1; }
+                    HorizontalLayout {
+                        spacing: Space.s_6;
+                        alignment: center;
+                        VerticalLayout {
+                            alignment: center;
+                            Icon {
+                                source: @image-url("../../assets/icons/chevron-left.svg");
+                                tint: back_step.has-hover ? Palette.accent_text : Palette.text_tertiary;
+                                width: 14px;
+                                height: 14px;
+                            }
+                        }
+                        Text {
+                            text: "Back";
+                            color: back_step.has-hover ? Palette.accent_text : Palette.text_tertiary;
+                            font-family: Fonts.ui;
+                            font-size: Fonts.small;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+
+            if root.can_back && !root.busy && (!root.onboarding || root.step == 1): HorizontalLayout {
+                alignment: center;
+                back_touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.back(); }
+                    HorizontalLayout {
+                        spacing: Space.s_6;
+                        alignment: center;
+                        VerticalLayout {
+                            alignment: center;
+                            Icon {
+                                source: @image-url("../../assets/icons/chevron-left.svg");
+                                tint: back_touch.has-hover ? Palette.accent_text : Palette.text_tertiary;
+                                width: 14px;
+                                height: 14px;
+                            }
+                        }
+                        Text {
+                            text: "Back to wallets";
+                            color: back_touch.has-hover ? Palette.accent_text : Palette.text_tertiary;
+                            font-family: Fonts.ui;
+                            font-size: Fonts.small;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+
+        }
+
+        import_paste := Field {
+            visible: false;
+            width: 0px;
+            height: 0px;
+            is_secret: true;
+            edited(t) => {
+                root.import_words = root.paste_via_button
+                    ? root.distribute_seed(t)
+                    : root.import_cell_edited(root.pending_import_index, t, root.import_words);
+                root.import_gen += 1;
+                root.import_edited();
+                root.onboard_stage_from_grid();
+                import_paste.set_text("");
+            }
+        }
+        focus_sink := FocusScope {
+            width: 0px;
+            height: 0px;
+        }
+    }
+}

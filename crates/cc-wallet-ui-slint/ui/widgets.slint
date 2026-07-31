@@ -1,0 +1,914 @@
+import { Theme } from "theme.slint";
+import { TokenAmount } from "models.slint";
+import { Palette, Fonts, Elevation, Motion, Radii, Space, Fade } from "design_tokens.slint";
+
+export struct EditFmt {
+    text: string,
+    cursor: int,
+}
+
+export global AmountFormat {
+    callback regroup(text: string, cursor: int) -> EditFmt;
+}
+
+export global ClipboardBridge {
+    callback copy_text(string);
+}
+
+export global UserActivity {
+    callback ping();
+}
+
+export component Icon inherits Image {
+    in property <brush> tint: Palette.text_secondary;
+    colorize: root.tint;
+    image-fit: contain;
+    accessible-role: none;
+}
+
+export component Checkbox inherits Rectangle {
+    in property <bool> checked;
+    in property <bool> enabled: true;
+    in property <color> active_color: Palette.accent_fill;
+    callback toggled(bool);
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    border-width: fs.has-focus ? 2px : 1px;
+    border-color: fs.has-focus
+        ? Palette.focus_ring
+        : (!root.enabled
+            ? Palette.border_subtle
+            : (root.checked ? root.active_color : Palette.border_strong));
+    fs := FocusScope {
+        enabled: root.enabled;
+        key-pressed(e) => {
+            if (e.text == " " || e.text == "\n") {
+                root.toggled(!root.checked);
+                return accept;
+            }
+            return reject;
+        }
+    }
+    background: root.checked ? root.active_color : transparent;
+    if root.checked: Icon {
+        source: @image-url("../assets/icons/check.svg");
+        tint: Palette.text_on_fill;
+        width: 12px;
+        height: 12px;
+    }
+    TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: self.enabled ? pointer : default;
+        clicked => {
+            root.toggled(!root.checked);
+        }
+    }
+}
+
+export component Avatar inherits Rectangle {
+    in property <string> initial;
+    in property <color> tint: Palette.accent;
+    in property <length> size: 38px;
+    in property <length> font_size: max(9px, root.size * 0.44);
+    width: root.size;
+    height: root.size;
+    border-radius: root.size * 0.3;
+    background: root.tint;
+    Text {
+        text: root.initial;
+        color: Palette.text_on_fill;
+        font-family: Fonts.ui;
+        font-weight: Fonts.bold;
+        font-size: root.font_size;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+export component StatusDot inherits Rectangle {
+    in property <color> tint: Palette.positive;
+    in property <bool> pulse: true;
+    width: 7px;
+    height: 7px;
+    border-radius: self.height / 2;
+    background: root.tint;
+    property <float> a: 1.0;
+    states [
+        dim when root.pulse: { a: 0.35; in { animate a { duration: Motion.slow; easing: Motion.curve; } } }
+    ]
+    opacity: root.a;
+}
+
+export component Card inherits Rectangle {
+    background: Palette.surface_raised;
+    border-radius: Radii.lg;
+    border-width: 1px;
+    border-color: Palette.border_subtle;
+}
+
+export component CardHeader inherits Rectangle {
+    in property <image> icon;
+    in property <string> title;
+    in property <string> subtitle;
+    in property <string> meta;
+    in property <bool> hairline: true;
+    height: row.preferred-height;
+    Rectangle {
+        y: parent.height - 1px;
+        height: root.hairline ? 1px : 0px;
+        background: Palette.border_subtle;
+    }
+    row := HorizontalLayout {
+        padding-left: Space.s_16;
+        padding-right: Space.s_16;
+        padding-top: Space.s_10;
+        padding-bottom: Space.s_10;
+        spacing: Space.s_12;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 40px;
+                height: 40px;
+                border-radius: Radii.md;
+                background: Palette.accent_quiet;
+                Icon {
+                    source: root.icon;
+                    tint: Palette.accent_text;
+                    width: 20px;
+                    height: 20px;
+                }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: Space.s_2;
+            Text {
+                text: root.title;
+                color: Palette.text_primary;
+                font-family: Fonts.ui;
+                font-weight: Fonts.semibold;
+                font-size: Fonts.title;
+            }
+            if root.subtitle != "": Text {
+                text: root.subtitle;
+                color: Palette.text_tertiary;
+                font-family: Fonts.ui;
+                font-size: Fonts.small;
+                wrap: word-wrap;
+            }
+        }
+        Rectangle { }
+        if root.meta != "": VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.meta;
+                color: Palette.text_quiet;
+                font-family: Fonts.ui;
+                font-size: Fonts.small;
+                horizontal-alignment: right;
+            }
+        }
+        @children
+    }
+}
+
+export component MenuSurface inherits Rectangle {
+    background: Palette.surface_overlay;
+    border-radius: Radii.md;
+    border-width: 1px;
+    border-color: Palette.border_strong;
+    drop-shadow-blur: 44px;
+    drop-shadow-color: Elevation.menu_shadow;
+    drop-shadow-offset-y: 22px;
+    @children
+}
+
+export component DialogCard inherits Rectangle {
+    background: Palette.surface_raised;
+    border-radius: Radii.lg;
+    border-width: 1px;
+    border-color: Palette.border_strong;
+    drop-shadow-blur: 80px;
+    drop-shadow-color: Elevation.dialog_shadow;
+    drop-shadow-offset-y: 30px;
+    @children
+}
+
+export component DialogHeader inherits HorizontalLayout {
+    in property <image> icon;
+    in property <string> title;
+    in property <string> subtitle;
+    in property <color> badge_bg: Palette.accent_quiet;
+    in property <color> badge_tint: Palette.accent_text;
+    spacing: Space.s_12;
+    VerticalLayout {
+        alignment: center;
+        Rectangle {
+            width: 40px;
+            height: 40px;
+            border-radius: Radii.md;
+            background: root.badge_bg;
+            Icon {
+                source: root.icon;
+                tint: root.badge_tint;
+                width: 20px;
+                height: 20px;
+            }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        spacing: Space.s_4;
+        Text {
+            text: root.title;
+            color: Palette.text_primary;
+            font-family: Fonts.ui;
+            font-weight: Fonts.bold;
+            font-size: Fonts.title;
+            overflow: elide;
+        }
+        if root.subtitle != "": Text {
+            text: root.subtitle;
+            color: Palette.text_tertiary;
+            font-family: Fonts.ui;
+            font-size: Fonts.small;
+            wrap: word-wrap;
+        }
+    }
+}
+
+export component EmptyState inherits VerticalLayout {
+    in property <image> icon;
+    in property <string> title;
+    in property <string> subtitle;
+    in property <length> budget: 9999px;
+    property <bool> show_badge: root.budget >= 150px;
+    property <bool> show_subtitle: root.budget >= 88px;
+    alignment: center;
+    spacing: Space.s_12;
+    if root.show_badge: HorizontalLayout {
+        alignment: center;
+        Rectangle {
+            width: 52px;
+            height: 52px;
+            border-radius: self.width * 0.3;
+            background: Palette.accent_quiet;
+            Icon {
+                source: root.icon;
+                tint: Palette.accent_text;
+                width: 24px;
+                height: 24px;
+            }
+        }
+    }
+    VerticalLayout {
+        spacing: Space.s_4;
+        Text {
+            text: root.title;
+            color: Palette.text_secondary;
+            font-family: Fonts.ui;
+            font-weight: Fonts.semibold;
+            font-size: Fonts.body;
+            horizontal-alignment: center;
+        }
+        if root.subtitle != "" && root.show_subtitle: Text {
+            text: root.subtitle;
+            color: Palette.text_quiet;
+            font-family: Fonts.ui;
+            font-size: Fonts.small;
+            horizontal-alignment: center;
+        }
+    }
+    @children
+}
+
+export component FieldLabel inherits Text {
+    color: Palette.text_quiet;
+    font-family: Fonts.ui;
+    font-size: Fonts.small;
+}
+
+export component MicroLabel inherits Text {
+    color: Palette.text_quiet;
+    font-family: Fonts.ui;
+    font-weight: Fonts.bold;
+    font-size: Fonts.micro;
+    letter-spacing: Space.s_2;
+}
+
+export struct TableColumn {
+    label: string,
+    x: length,
+    width: length,
+    right: bool,
+}
+
+export component TableHeader inherits Rectangle {
+    in property <[TableColumn]> columns;
+    width: 100%;
+    height: 32px;
+    for col in root.columns: MicroLabel {
+        x: col.x;
+        y: 8px;
+        width: col.width;
+        text: col.label;
+        horizontal-alignment: col.right ? right : left;
+    }
+}
+
+export component PrimaryButton inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <bool> has_icon: false;
+    in property <bool> enabled: true;
+    in property <length> font_size: Fonts.body;
+    in property <length> radius: Radii.md;
+    in property <length> height_: 40px;
+    in property <brush> bg: Palette.accent_fill;
+    callback clicked();
+    height: root.height_;
+    border-radius: root.radius;
+    background: root.enabled ? root.bg : Palette.surface_disabled;
+    border-width: fs.has-focus ? 2px : 0px;
+    border-color: Palette.focus_ring;
+    fs := FocusScope {
+        enabled: root.enabled;
+        key-pressed(e) => {
+            if (e.text == " " || e.text == "\n") {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+    property <float> hover_a: 0;
+    Rectangle {
+        border-radius: parent.border-radius;
+        background: Palette.text_on_fill;
+        opacity: root.hover_a;
+    }
+    HorizontalLayout {
+        padding-left: 18px;
+        padding-right: 18px;
+        alignment: center;
+        spacing: Space.s_6;
+        if root.has_icon: VerticalLayout {
+            alignment: center;
+            Icon {
+                source: root.icon;
+                tint: root.enabled ? Palette.text_on_fill : Palette.text_tertiary;
+                width: 14px;
+                height: 14px;
+            }
+        }
+        Text {
+            text: root.label;
+            color: root.enabled ? Palette.text_on_fill : Palette.text_tertiary;
+            font-family: Fonts.ui;
+            font-weight: Fonts.semibold;
+            font-size: root.font_size;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+    states [
+        hovered when ta.has-hover && root.enabled: { hover_a: 0.07; }
+    ]
+    animate hover_a { duration: Motion.base; easing: Motion.curve; }
+}
+
+export component GhostButton inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <bool> has_icon: false;
+    in property <bool> enabled: true;
+    in property <color> text_color: Palette.text_secondary;
+    in property <color> frame: Palette.border_strong;
+    in property <length> radius: Radii.sm;
+    in property <length> pad_h: 12px;
+    in property <length> height_: 34px;
+    callback clicked();
+    height: root.height_;
+    horizontal-stretch: 0;
+    border-radius: root.radius;
+    border-width: fs.has-focus ? 2px : 1px;
+    border-color: fs.has-focus ? Palette.focus_ring : (root.enabled ? root.frame : Palette.border_subtle);
+    fs := FocusScope {
+        enabled: root.enabled;
+        key-pressed(e) => {
+            if (e.text == " " || e.text == "\n") {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+    background: Palette.surface_inset;
+    clip: true;
+    property <float> hover_a: 0;
+    Rectangle {
+        border-radius: parent.radius;
+        background: Palette.text_on_fill;
+        opacity: root.hover_a;
+    }
+    HorizontalLayout {
+        padding-left: root.pad_h;
+        padding-right: root.pad_h;
+        spacing: Space.s_6;
+        alignment: center;
+        if root.has_icon: Icon {
+            source: root.icon;
+            tint: root.enabled ? root.text_color : Palette.text_quiet;
+            width: 15px;
+            height: 15px;
+        }
+        Text {
+            text: root.label;
+            color: root.enabled ? root.text_color : Palette.text_quiet;
+            font-family: Fonts.ui;
+            font-weight: Fonts.semibold;
+            font-size: Fonts.body;
+            vertical-alignment: center;
+        }
+    }
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+    states [
+        hovered when ta.has-hover && root.enabled: { hover_a: 0.05; }
+    ]
+    animate hover_a { duration: Motion.base; easing: Motion.curve; }
+}
+
+export component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <color> tint: Palette.text_tertiary;
+    in property <length> size: 30px;
+    in property <length> icon_size: 15px;
+    in property <bool> enabled: true;
+    in property <bool> active: false;
+    callback clicked();
+    width: root.size;
+    height: root.size;
+    border-radius: Radii.sm;
+    border-width: fs.has-focus ? 2px : 0px;
+    border-color: Palette.focus_ring;
+    fs := FocusScope {
+        enabled: root.enabled;
+        key-pressed(e) => {
+            if (e.text == " " || e.text == "\n") {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+    background: root.active ? Palette.accent_quiet : (ta.has-hover ? Palette.hover_strong : transparent);
+    animate background { duration: Motion.fast; easing: Motion.curve; }
+    Icon {
+        source: root.icon;
+        tint: root.active ? Palette.accent_text : root.tint;
+        width: root.icon_size;
+        height: root.icon_size;
+    }
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component CopyButton inherits IconButton {
+    in property <string> value;
+    in property <color> idle_tint: Palette.text_quiet;
+    property <bool> copied: false;
+    icon: root.copied ? @image-url("../assets/icons/check.svg") : @image-url("../assets/icons/copy.svg");
+    tint: root.copied ? Palette.positive : root.idle_tint;
+    size: 24px;
+    icon_size: 16px;
+    clicked => {
+        ClipboardBridge.copy_text(root.value);
+        root.copied = true;
+        reset.running = true;
+    }
+    reset := Timer { interval: Motion.ack_dwell; running: false; triggered => { root.copied = false; self.running = false; } }
+}
+
+export component RefreshButton inherits IconButton {
+    in property <color> idle_tint: Palette.text_quiet;
+    in property <bool> acknowledged: false;
+    property <bool> asked: false;
+    property <bool> ticked: root.asked || root.acknowledged;
+    callback refreshed();
+    icon: root.ticked ? @image-url("../assets/icons/check.svg") : @image-url("../assets/icons/refresh.svg");
+    tint: root.ticked ? Palette.positive : root.idle_tint;
+    size: 24px;
+    icon_size: 14px;
+    clicked => {
+        root.refreshed();
+        root.asked = true;
+        reset.running = true;
+    }
+    reset := Timer { interval: Motion.ack_dwell; running: false; triggered => { root.asked = false; self.running = false; } }
+}
+
+export component Chip inherits Rectangle {
+    in property <string> label;
+    in property <color> fg: Palette.text_tertiary;
+    in property <color> bg: Palette.surface_inset;
+    in property <color> frame: Palette.border_subtle;
+    in property <length> font_size: Fonts.micro;
+    in property <int> weight: 600;
+    in property <length> min_w: 0px;
+    border-radius: Radii.sm;
+    background: root.bg;
+    border-width: 1px;
+    border-color: root.frame;
+    min-height: 20px;
+    min-width: root.min_w;
+    HorizontalLayout {
+        padding-left: Space.s_8;
+        padding-right: Space.s_8;
+        padding-top: Space.s_4;
+        padding-bottom: Space.s_4;
+        Text {
+            text: root.label;
+            color: root.fg;
+            font-family: Fonts.ui;
+            font-weight: root.weight;
+            font-size: root.font_size;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
+
+export component Amount inherits HorizontalLayout {
+    in property <TokenAmount> amount;
+    in property <string> sign;
+    in property <color> tint: Palette.text_primary;
+    in property <length> font_size: Fonts.body;
+    in property <int> int_weight: Fonts.bold;
+    in property <bool> show_token: true;
+    in property <color> symbol_tint: Palette.text_tertiary;
+    alignment: start;
+    spacing: 0px;
+    Text {
+        text: root.sign + root.amount.amount_int;
+        color: root.tint;
+        font-family: Fonts.ui;
+        font-weight: root.int_weight;
+        font-size: root.font_size;
+        vertical-alignment: center;
+    }
+    Text {
+        text: root.amount.amount_frac;
+        color: root.tint;
+        opacity: Fade.muted;
+        font-family: Fonts.ui;
+        font-weight: Fonts.regular;
+        font-size: root.font_size;
+        vertical-alignment: center;
+    }
+    if root.show_token: Rectangle { width: Theme.activity_amount_token_gap_w; }
+    if root.show_token: VerticalLayout {
+        alignment: center;
+        Avatar {
+            initial: root.amount.initial;
+            tint: root.amount.color;
+            size: Theme.activity_amount_token_avatar_w;
+        }
+    }
+    if root.show_token: Rectangle { width: 6px; }
+    if root.show_token: Text {
+        text: root.amount.symbol;
+        color: root.symbol_tint;
+        font-family: Fonts.ui;
+        font-weight: Fonts.semibold;
+        font-size: Fonts.micro;
+        vertical-alignment: center;
+    }
+}
+
+export component MaxChip inherits Rectangle {
+    callback clicked();
+    in property <bool> enabled_: true;
+    width: 44px;
+    height: 24px;
+    border-radius: Radii.sm;
+    background: ta.has-hover ? Palette.accent_quiet_hover : Palette.accent_quiet;
+    border-width: fs.has-focus ? 2px : 0px;
+    border-color: Palette.focus_ring;
+    fs := FocusScope {
+        enabled: root.enabled_;
+        key-pressed(e) => {
+            if (e.text == " " || e.text == "\n") {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+    Text {
+        text: "MAX";
+        color: Palette.accent_text;
+        font-family: Fonts.ui;
+        font-weight: Fonts.bold;
+        font-size: Fonts.small;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    ta := TouchArea {
+        enabled: root.enabled_;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component NoticeBlock inherits Rectangle {
+    in property <string> lead;
+    in property <string> body;
+    in property <color> tint: Palette.warning;
+    in property <color> fill: Palette.warning_quiet;
+    in property <color> frame: Palette.border_subtle;
+    in property <image> icon: @image-url("../assets/icons/alert.svg");
+    border-radius: Radii.md;
+    background: root.fill;
+    border-width: 1px;
+    border-color: root.frame;
+    HorizontalLayout {
+        padding-left: Space.s_12;
+        padding-right: Space.s_12;
+        padding-top: Space.s_12;
+        padding-bottom: Space.s_12;
+        spacing: Space.s_8;
+        VerticalLayout {
+            alignment: start;
+            padding-top: Space.s_2;
+            Icon {
+                source: root.icon;
+                tint: root.tint;
+                width: 14px;
+                height: 14px;
+            }
+        }
+        VerticalLayout {
+            spacing: Space.s_2;
+            horizontal-stretch: 1;
+            if root.lead != "": Text {
+                text: root.lead;
+                color: root.tint;
+                font-family: Fonts.ui;
+                font-weight: Fonts.bold;
+                font-size: Fonts.small;
+                wrap: word-wrap;
+            }
+            if root.body != "": Text {
+                text: root.body;
+                color: root.tint;
+                font-family: Fonts.ui;
+                font-weight: Fonts.medium;
+                font-size: Fonts.small;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
+export component InlineError inherits HorizontalLayout {
+    in property <string> text;
+    spacing: Space.s_6;
+    alignment: start;
+    VerticalLayout {
+        alignment: start;
+        Icon {
+            source: @image-url("../assets/icons/info.svg");
+            tint: Palette.negative;
+            width: 14px;
+            height: 14px;
+        }
+    }
+    Text {
+        text: root.text;
+        color: Palette.negative;
+        font-family: Fonts.ui;
+        font-size: Fonts.small;
+        wrap: word-wrap;
+        horizontal-stretch: 1;
+        vertical-alignment: center;
+    }
+}
+
+export component StatusBar inherits Rectangle {
+    in property <string> label;
+    in property <color> tint: Palette.text_quiet;
+    in property <color> fill: Palette.surface_sunken;
+    in property <color> frame: Palette.border_subtle;
+    in property <image> icon;
+    in property <bool> show_icon: false;
+    height: 36px;
+    border-radius: Radii.md;
+    background: root.fill;
+    border-width: 1px;
+    border-color: root.frame;
+    HorizontalLayout {
+        padding-left: Space.s_12;
+        padding-right: Space.s_12;
+        spacing: Space.s_8;
+        if root.show_icon: VerticalLayout {
+            alignment: center;
+            Icon {
+                source: root.icon;
+                tint: root.tint;
+                width: 16px;
+                height: 16px;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.label;
+                color: root.tint;
+                font-family: Fonts.ui;
+                font-weight: Fonts.semibold;
+                font-size: Fonts.small;
+                overflow: elide;
+            }
+        }
+        Rectangle { }
+    }
+}
+
+export component Field inherits Rectangle {
+    in-out property <string> text;
+    in property <string> placeholder;
+    in property <bool> enabled: true;
+    in property <bool> read_only: false;
+    in property <TextHorizontalAlignment> alignment: TextHorizontalAlignment.left;
+    in property <InputType> input_type: InputType.text;
+    in property <bool> is_secret: false;
+    property <bool> holds_secret: root.is_secret || root.input_type == InputType.password;
+    in property <length> height_: Theme.field_h;
+    in property <length> font_size: Fonts.body;
+    in property <string> font_family: Fonts.ui;
+    in property <int> font_weight: Fonts.medium;
+    in property <length> pad_left: 12px;
+    in property <length> pad_right: 12px;
+    in property <color> field_bg: Palette.surface_sunken;
+    in property <color> border_normal: Palette.border_strong;
+    in property <bool> editing_border: false;
+    in property <bool> intercept_paste: false;
+    in property <bool> group_digits: false;
+    property <EditFmt> pending_fmt;
+    out property <bool> has_focus <=> input.has-focus;
+    in property <bool> show_focus_border: true;
+    callback edited(string);
+    callback accepted();
+    callback paste_requested();
+    callback escape_pressed();
+    in property <bool> handles_escape: false;
+
+    height: root.height_;
+    border-radius: Radii.md;
+    border-width: 1px;
+    border-color: !root.enabled
+        ? Palette.border_subtle
+        : ((input.has-focus || root.editing_border) && root.show_focus_border ? Palette.focus_ring : root.border_normal);
+    background: root.enabled ? root.field_bg : Palette.surface_disabled;
+    clip: true;
+    forward-focus: input;
+
+    public function paste() { input.paste(); }
+    public function set_text(t: string) { input.text = t; }
+    public function paste_replace() {
+        if (root.holds_secret) {
+            input.text = "";
+        } else {
+            input.select-all();
+        }
+        input.paste();
+    }
+    public function copy_all() {
+        if (!root.holds_secret) {
+            input.select-all();
+            input.copy();
+            input.clear-selection();
+        }
+    }
+
+    input := TextInput {
+        text <=> root.text;
+        enabled: root.enabled;
+        read-only: root.read_only;
+        input-type: root.input_type;
+        x: root.pad_left;
+        width: max(1px, parent.width - root.pad_left - root.pad_right);
+        height: 100%;
+        color: Palette.text_primary;
+        font-family: root.font_family;
+        font-size: root.font_size;
+        font-weight: root.font_weight;
+        horizontal-alignment: root.alignment;
+        vertical-alignment: center;
+        single-line: true;
+        selection-background-color: Palette.accent;
+        selection-foreground-color: Palette.text_on_fill;
+        edited => {
+            UserActivity.ping();
+            if (root.group_digits) {
+                root.pending_fmt = AmountFormat.regroup(self.text, self.cursor-position-byte-offset);
+                self.text = root.pending_fmt.text;
+                self.set-selection-offsets(root.pending_fmt.cursor, root.pending_fmt.cursor);
+            }
+            root.edited(self.text);
+        }
+        accepted => { root.accepted(); }
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                if (root.handles_escape) {
+                    root.escape_pressed();
+                    return accept;
+                }
+                return reject;
+            }
+            if (root.holds_secret
+                && (event.modifiers.control || event.modifiers.meta)
+                && (event.text == "c" || event.text == "C"
+                    || event.text == "x" || event.text == "X")) {
+                return accept;
+            }
+            if (root.holds_secret
+                && ((event.modifiers.control || event.modifiers.meta)
+                    && (event.text == "a" || event.text == "A"))) {
+                return accept;
+            }
+            if (root.holds_secret && event.modifiers.shift
+                && (event.text == Key.LeftArrow || event.text == Key.RightArrow
+                    || event.text == Key.UpArrow || event.text == Key.DownArrow
+                    || event.text == Key.Home || event.text == Key.End)) {
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    Text {
+        visible: root.text == "";
+        text: root.placeholder;
+        x: root.pad_left;
+        width: max(1px, parent.width - root.pad_left - root.pad_right);
+        height: 100%;
+        color: Palette.text_placeholder;
+        font-family: Fonts.ui;
+        font-weight: Fonts.regular;
+        font-size: root.font_size;
+        horizontal-alignment: root.alignment;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+
+    if !root.holds_secret: ContextMenuArea {
+        width: 100%;
+        height: 100%;
+        enabled: root.enabled;
+        Menu {
+            MenuItem {
+                title: "Copy";
+                enabled: root.text != "";
+                activated => { input.copy(); }
+            }
+            MenuItem {
+                title: "Paste";
+                enabled: root.enabled && !root.read_only;
+                activated => {
+                    if (root.intercept_paste) {
+                        root.paste_requested();
+                    } else {
+                        input.paste();
+                    }
+                }
+            }
+            MenuItem {
+                title: "Select All";
+                enabled: root.text != "";
+                activated => { input.select-all(); }
+            }
+        }
+    }
+
+    if root.holds_secret: TouchArea {
+        width: 100%;
+        height: 100%;
+        enabled: root.enabled;
+        mouse-cursor: MouseCursor.text;
+        clicked => { input.focus(); }
+    }
+}

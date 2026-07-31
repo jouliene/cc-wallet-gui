@@ -1,0 +1,181 @@
+import { Theme } from "../theme.slint";
+import { Palette, Fonts, Space, Radii, Motion } from "../design_tokens.slint";
+import { Icon, Avatar, PrimaryButton, GhostButton, IconButton, Chip, Field, ClipboardBridge, InlineError } from "../widgets.slint";
+import { ContactRow } from "../models.slint";
+
+export component ContactDisplayRow inherits Rectangle {
+    in property <ContactRow> contact;
+    in property <bool> last;
+    in property <length> row_h: 62px;
+    in property <bool> can_drag: true;
+    in property <bool> dragging: false;
+    property <bool> copied: false;
+    callback quick_send();
+    callback edit();
+    callback drag_pressed();
+    callback drag_moved(length);
+    callback drag_released();
+    height: root.row_h;
+    opacity: root.dragging ? 0 : 1.0;
+    if !root.last: Rectangle { y: parent.height - 1px; height: 1px; background: Palette.border_subtle; }
+    background: ta.has-hover ? Palette.hover_row : transparent;
+    ta := TouchArea { }
+    copy_timer := Timer { interval: Motion.ack_dwell; running: false; triggered => { root.copied = false; self.running = false; } }
+    HorizontalLayout {
+        padding-left: Space.s_6;
+        padding-right: Space.s_16;
+        padding-top: Space.s_6;
+        padding-bottom: Space.s_6;
+        spacing: Space.s_6;
+        VerticalLayout {
+            alignment: center;
+            grip := TouchArea {
+                width: 22px;
+                height: 40px;
+                enabled: root.can_drag;
+                mouse-cursor: !root.can_drag ? MouseCursor.default : (self.pressed ? MouseCursor.grabbing : MouseCursor.grab);
+                pointer-event(event) => {
+                    if (event.kind == PointerEventKind.down) {
+                        root.drag_pressed();
+                    }
+                    if (event.kind == PointerEventKind.up) {
+                        root.drag_released();
+                    }
+                }
+                moved => {
+                    if (self.pressed) {
+                        root.drag_moved(self.mouse-y - self.pressed-y);
+                    }
+                }
+                Rectangle {
+                    width: 22px;
+                    height: 22px;
+                    border-radius: Radii.sm;
+                    background: (root.can_drag && grip.has-hover) ? Palette.hover_strong : transparent;
+                    Icon {
+                        source: @image-url("../../assets/icons/grip-vertical.svg");
+                        tint: root.can_drag ? Palette.text_tertiary : Palette.text_quiet;
+                        width: 14px;
+                        height: 14px;
+                    }
+                }
+            }
+        }
+        VerticalLayout { alignment: center; Avatar { initial: root.contact.initial; tint: root.contact.color; size: 34px; } }
+        VerticalLayout {
+            alignment: center;
+            spacing: Space.s_4;
+            HorizontalLayout {
+                spacing: Space.s_8;
+                alignment: start;
+                Text { text: root.contact.name; color: Palette.text_primary; font-family: Fonts.ui; font-weight: Fonts.semibold; font-size: Fonts.body; vertical-alignment: center; overflow: elide; }
+                if root.contact.tag != "": VerticalLayout { alignment: center; Chip { label: root.contact.tag; } }
+            }
+            HorizontalLayout {
+                spacing: Space.s_6;
+                alignment: start;
+                Text { text: root.contact.address; color: Palette.text_tertiary; font-family: Fonts.mono; font-size: Fonts.small; vertical-alignment: center; overflow: elide; }
+                IconButton {
+                    icon: root.copied ? @image-url("../../assets/icons/check.svg") : @image-url("../../assets/icons/copy.svg");
+                    tint: root.copied ? Palette.positive : Palette.text_quiet;
+                    size: 24px;
+                    icon_size: 16px;
+                    clicked => {
+                        ClipboardBridge.copy_text(root.contact.address);
+                        root.copied = true;
+                        copy_timer.running = true;
+                    }
+                }
+            }
+        }
+        Rectangle { }
+        VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                spacing: Space.s_6;
+                IconButton { icon: @image-url("../../assets/icons/send.svg"); size: 34px; icon_size: 16px; clicked => { root.quick_send(); } }
+                IconButton { icon: @image-url("../../assets/icons/pencil.svg"); size: 34px; icon_size: 16px; clicked => { root.edit(); } }
+            }
+        }
+    }
+}
+
+export component ContactEditRow inherits Rectangle {
+    in property <bool> is_new;
+    in property <bool> last;
+    in-out property <string> draft_name;
+    in-out property <string> draft_tag;
+    in-out property <string> draft_addr;
+    in property <bool> confirm_delete;
+    in property <bool> address_valid;
+    in property <string> conflict_error;
+    callback addr_edited(string);
+    callback name_edited(string);
+    callback save();
+    callback cancel();
+    callback request_delete();
+    callback cancel_delete();
+    callback confirm_delete_action();
+
+    property <string> error_text: root.draft_addr == "" ? "" : (
+        !root.address_valid ? "Not a valid address" : root.conflict_error);
+
+    if !root.last: Rectangle { y: parent.height - 1px; height: 1px; background: Palette.border_subtle; }
+
+    VerticalLayout {
+        padding-left: Space.s_16;
+        padding-right: Space.s_16;
+        padding-top: Space.s_12;
+        padding-bottom: Space.s_12;
+        spacing: Space.s_10;
+        alignment: start;
+        HorizontalLayout {
+            spacing: Space.s_12;
+            Field {
+                horizontal-stretch: 1;
+                handles_escape: true;
+                escape_pressed => { root.cancel(); }
+                text <=> root.draft_name;
+                placeholder: "Contact name";
+                edited(t) => { root.name_edited(t); }
+            }
+            Field { width: 210px; text <=> root.draft_tag; placeholder: "Label"; handles_escape: true; escape_pressed => { root.cancel(); } }
+        }
+        Field {
+            handles_escape: true;
+            escape_pressed => { root.cancel(); }
+            text <=> root.draft_addr;
+            placeholder: "Contact address";
+            edited(t) => { root.addr_edited(t); }
+        }
+        HorizontalLayout {
+            if !root.is_new && !root.confirm_delete: GhostButton {
+                label: "Delete";
+                text_color: Palette.negative;
+                frame: Palette.negative_border;
+                clicked => { root.request_delete(); }
+            }
+            if !root.is_new && root.confirm_delete: HorizontalLayout {
+                spacing: Space.s_8;
+                VerticalLayout { alignment: center; Text { text: "Delete this contact?"; color: Palette.text_secondary; font-family: Fonts.ui; font-size: Fonts.body; vertical-alignment: center; } }
+                GhostButton { label: "No, keep"; clicked => { root.cancel_delete(); } }
+                PrimaryButton { label: "Yes, delete"; height: 34px; bg: Palette.negative_fill; clicked => { root.confirm_delete_action(); } }
+            }
+            if root.error_text != "" && !root.confirm_delete: InlineError {
+                horizontal-stretch: 1;
+                text: root.error_text;
+            }
+            if !(root.error_text != "" && !root.confirm_delete): Rectangle { horizontal-stretch: 1; }
+            HorizontalLayout {
+                spacing: Space.s_8;
+                GhostButton { label: "Cancel"; clicked => { root.cancel(); } }
+                PrimaryButton {
+                    label: "Save";
+                    height: 34px;
+                    enabled: root.draft_name != "" && root.draft_addr != "" && root.address_valid && root.conflict_error == "";
+                    clicked => { root.save(); }
+                }
+            }
+        }
+    }
+}

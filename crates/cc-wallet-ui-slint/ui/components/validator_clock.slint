@@ -1,0 +1,113 @@
+import { Theme } from "../theme.slint";
+import { Palette } from "../design_tokens.slint";
+
+export component ValidatorClock inherits Rectangle {
+    in property <angle> needle_angle: 66deg;
+    in property <float> elect_frac_start: 0.5;
+    in property <float> elect_frac_end: 0.82;
+    in property <bool> elections_open: false;
+    in property <bool> active_is_green: false;
+    in property <length> size: 190px;
+
+    property <float> cx: 150;
+    property <float> cy: 150;
+    property <float> ro: 145;
+    property <float> ri: 99;
+    property <float> f: 11;
+    property <float> r_tip: 142;
+    property <float> nw: 9;
+
+    property <color> green_round: Palette.clock_round_green;
+    property <color> blue_round: Palette.clock_round_blue;
+    property <color> needle_fill: Palette.clock_now;
+    property <color> seam: Palette.clock_seam;
+    property <bool> light_green_zone: root.elections_open && root.active_is_green;
+    property <bool> light_blue_zone: root.elections_open && !root.active_is_green;
+    property <float> pulse: 0.5 + 0.5 * sin(animation-tick() / 1300ms * 180deg);
+    property <color> hl_green: root.blue_round.brighter(0.22 + root.pulse * 0.22);
+    property <color> hl_blue: root.green_round.brighter(0.22 + root.pulse * 0.22);
+
+    property <angle> g_start: -90deg + root.elect_frac_start * 180deg;
+    property <angle> g_end: -90deg + root.elect_frac_end * 180deg;
+    property <angle> b_start: 90deg + root.elect_frac_start * 180deg;
+    property <angle> b_end: 90deg + root.elect_frac_end * 180deg;
+    property <angle> daf: (root.f / root.ri) * 1rad;
+
+    width: root.size;
+    height: root.size;
+    horizontal-stretch: 0;
+
+    pure function px(r: float, a: angle) -> float { return root.cx + r * cos(a); }
+    pure function py(r: float, a: angle) -> float { return root.cy + r * sin(a); }
+
+    Path {
+        width: 100%; height: 100%;
+        viewbox-x: 0; viewbox-y: 0; viewbox-width: 300; viewbox-height: 300;
+        fill: root.green_round;
+        stroke: root.seam; stroke-width: 1.5px;
+        MoveTo { x: root.cx; y: root.cy - root.ro; }
+        ArcTo { radius-x: root.ro; radius-y: root.ro; x: root.cx; y: root.cy + root.ro; large-arc: false; sweep: true; }
+        LineTo { x: root.cx; y: root.cy - root.ro; }
+        Close { }
+    }
+    Path {
+        width: 100%; height: 100%;
+        viewbox-x: 0; viewbox-y: 0; viewbox-width: 300; viewbox-height: 300;
+        fill: root.blue_round;
+        stroke: root.seam; stroke-width: 1.5px;
+        MoveTo { x: root.cx; y: root.cy - root.ro; }
+        ArcTo { radius-x: root.ro; radius-y: root.ro; x: root.cx; y: root.cy + root.ro; large-arc: false; sweep: false; }
+        LineTo { x: root.cx; y: root.cy - root.ro; }
+        Close { }
+    }
+
+    Path {
+        width: 100%; height: 100%;
+        viewbox-x: 0; viewbox-y: 0; viewbox-width: 300; viewbox-height: 300;
+        fill: root.light_green_zone ? root.hl_green : root.blue_round;
+        stroke: root.seam;
+        stroke-width: 1.5px;
+        MoveTo { x: root.px(root.ro, root.g_start); y: root.py(root.ro, root.g_start); }
+        ArcTo { radius-x: root.ro; radius-y: root.ro; x: root.px(root.ro, root.g_end); y: root.py(root.ro, root.g_end); large-arc: false; sweep: true; }
+        LineTo { x: root.px(root.ri + root.f, root.g_end); y: root.py(root.ri + root.f, root.g_end); }
+        ArcTo { radius-x: root.f; radius-y: root.f; x: root.px(root.ri, root.g_end - root.daf); y: root.py(root.ri, root.g_end - root.daf); large-arc: false; sweep: true; }
+        ArcTo { radius-x: root.ri; radius-y: root.ri; x: root.px(root.ri, root.g_start + root.daf); y: root.py(root.ri, root.g_start + root.daf); large-arc: false; sweep: false; }
+        ArcTo { radius-x: root.f; radius-y: root.f; x: root.px(root.ri + root.f, root.g_start); y: root.py(root.ri + root.f, root.g_start); large-arc: false; sweep: true; }
+        LineTo { x: root.px(root.ro, root.g_start); y: root.py(root.ro, root.g_start); }
+        Close { }
+    }
+    Path {
+        width: 100%; height: 100%;
+        viewbox-x: 0; viewbox-y: 0; viewbox-width: 300; viewbox-height: 300;
+        fill: root.light_blue_zone ? root.hl_blue : root.green_round;
+        stroke: root.seam;
+        stroke-width: 1.5px;
+        MoveTo { x: root.px(root.ro, root.b_start); y: root.py(root.ro, root.b_start); }
+        ArcTo { radius-x: root.ro; radius-y: root.ro; x: root.px(root.ro, root.b_end); y: root.py(root.ro, root.b_end); large-arc: false; sweep: true; }
+        LineTo { x: root.px(root.ri + root.f, root.b_end); y: root.py(root.ri + root.f, root.b_end); }
+        ArcTo { radius-x: root.f; radius-y: root.f; x: root.px(root.ri, root.b_end - root.daf); y: root.py(root.ri, root.b_end - root.daf); large-arc: false; sweep: true; }
+        ArcTo { radius-x: root.ri; radius-y: root.ri; x: root.px(root.ri, root.b_start + root.daf); y: root.py(root.ri, root.b_start + root.daf); large-arc: false; sweep: false; }
+        ArcTo { radius-x: root.f; radius-y: root.f; x: root.px(root.ri + root.f, root.b_start); y: root.py(root.ri + root.f, root.b_start); large-arc: false; sweep: true; }
+        LineTo { x: root.px(root.ro, root.b_start); y: root.py(root.ro, root.b_start); }
+        Close { }
+    }
+
+    Rectangle {
+        width: 1.5px;
+        height: parent.height;
+        background: root.seam;
+    }
+
+    Path {
+        width: 100%; height: 100%;
+        viewbox-x: 0; viewbox-y: 0; viewbox-width: 300; viewbox-height: 300;
+        fill: root.needle_fill;
+        stroke: root.seam;
+        stroke-width: 2px;
+        stroke-miter-limit: 30;
+        MoveTo { x: root.px(root.r_tip, root.needle_angle); y: root.py(root.r_tip, root.needle_angle); }
+        LineTo { x: root.px(root.nw, root.needle_angle + 90deg); y: root.py(root.nw, root.needle_angle + 90deg); }
+        ArcTo { radius-x: root.nw; radius-y: root.nw; x: root.px(root.nw, root.needle_angle - 90deg); y: root.py(root.nw, root.needle_angle - 90deg); large-arc: false; sweep: true; }
+        Close { }
+    }
+}

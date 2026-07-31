@@ -1,0 +1,625 @@
+import { Theme, Status } from "../theme.slint";
+import { Palette, Fonts, Radii, Space, Motion } from "../design_tokens.slint";
+import { Icon, Avatar, Card, CardHeader, MicroLabel, IconButton, Field, StatusDot, GhostButton, EmptyState, ClipboardBridge, UserActivity, MaxChip, TableHeader, PrimaryButton, InlineError } from "../widgets.slint";
+import { AssetRow, ActivityRow } from "../models.slint";
+import { AssetListRow, ActivityListRow, SegBtn } from "wallet_components.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export component OverviewStrip inherits Card {
+    in property <length> badge;
+    in property <string> active_wallet;
+    in property <string> address;
+    in property <string> wallet_status;
+    in property <bool> menu_open;
+    callback open_wallet_menu();
+    callback lock_now();
+    out property <length> switcher_abs_x: wallet_switcher.absolute-position.x;
+    out property <length> switcher_abs_y: wallet_switcher.absolute-position.y;
+    out property <length> switcher_h: wallet_switcher.height;
+    property <bool> copied: false;
+    HorizontalLayout {
+        padding-top: Space.s_12;
+        padding-bottom: Space.s_12;
+        padding-left: Space.s_16;
+        padding-right: Space.s_20;
+        spacing: 18px;
+        wallet_switcher := Rectangle {
+            width: 248px;
+            border-radius: Radii.md;
+            background: root.menu_open ? Palette.surface_inset : transparent;
+            HorizontalLayout {
+                padding-left: Space.s_0; padding-right: Space.s_8; spacing: Space.s_12;
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: root.badge; height: root.badge;
+                        border-radius: Radii.md;
+                        background: Palette.accent_quiet;
+                        Icon {
+                            source: @image-url("../../assets/icons/wallet.svg");
+                            tint: Palette.accent_text;
+                            width: 20px; height: 20px;
+                        }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: Space.s_4;
+                    horizontal-stretch: 1;
+                    MicroLabel { text: "WALLET"; }
+                    HorizontalLayout {
+                        spacing: Space.s_4;
+                        alignment: start;
+                        Text {
+                            text: root.active_wallet == "" ? "—" : root.active_wallet;
+                            color: Palette.text_primary;
+                            font-family: Fonts.ui;
+                            font-weight: Fonts.semibold;
+                            font-size: Fonts.body;
+                            overflow: elide;
+                            horizontal-stretch: 1;
+                            vertical-alignment: center;
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            Icon {
+                                source: @image-url("../../assets/icons/chevron-down.svg");
+                                tint: Palette.text_tertiary;
+                                width: 12px; height: 12px;
+                            }
+                        }
+                    }
+                }
+            }
+            TouchArea { mouse-cursor: pointer; clicked => { root.open_wallet_menu(); } }
+        }
+        Rectangle { width: 1px; background: Palette.border_subtle; }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: Space.s_4;
+            MicroLabel { text: "ADDRESS"; }
+            HorizontalLayout {
+                spacing: Space.s_6;
+                alignment: start;
+                Text {
+                    text: root.address == "" ? "—" : root.address;
+                    color: Palette.text_primary;
+                    font-family: Fonts.mono;
+                    font-weight: Fonts.medium;
+                    font-size: Fonts.body;
+                    overflow: elide;
+                    vertical-alignment: center;
+                }
+                IconButton {
+                    icon: root.copied ? @image-url("../../assets/icons/check.svg") : @image-url("../../assets/icons/copy.svg");
+                    tint: root.copied ? Palette.positive : Palette.text_quiet;
+                    size: 24px;
+                    icon_size: 16px;
+                    enabled: root.address != "";
+                    clicked => {
+                        ClipboardBridge.copy_text(root.address);
+                        root.copied = true;
+                        copy_timer.running = true;
+                    }
+                }
+            }
+        }
+        Rectangle { width: 1px; background: Palette.border_subtle; }
+        HorizontalLayout {
+            width: Theme.wallet_status_w;
+            VerticalLayout {
+                alignment: center;
+                spacing: Space.s_4;
+                MicroLabel { text: "STATUS"; }
+                HorizontalLayout {
+                    spacing: Space.s_6;
+                    alignment: start;
+                    VerticalLayout {
+                        alignment: center;
+                        StatusDot {
+                            tint: Status.account_fg(root.wallet_status);
+                            pulse: false;
+                        }
+                    }
+                    Text {
+                        text: root.wallet_status;
+                        color: Status.account_fg(root.wallet_status);
+                        font-family: Fonts.ui;
+                        font-weight: Fonts.semibold;
+                        font-size: Fonts.body;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+        Rectangle { width: 1px; background: Palette.border_subtle; }
+        VerticalLayout {
+            alignment: center;
+            lock_btn := Rectangle {
+                width: 40px; height: 40px;
+                border-radius: Radii.md;
+                border-width: 1px;
+                border-color: Palette.border_medium;
+                background: lock_ta.has-hover ? Palette.hover_strong : transparent;
+                Icon {
+                    source: @image-url("../../assets/icons/lock.svg");
+                    tint: Palette.text_secondary;
+                    width: 18px; height: 18px;
+                }
+                lock_ta := TouchArea { mouse-cursor: pointer; clicked => { root.lock_now(); } }
+            }
+        }
+    }
+    copy_timer := Timer { interval: Motion.ack_dwell; running: false; triggered => { root.copied = false; self.running = false; } }
+}
+
+export component AssetsCard inherits Card {
+    in property <[AssetRow]> assets;
+    in property <int> asset_count;
+    callback select_asset(int);
+    VerticalLayout {
+        CardHeader {
+            icon: @image-url("../../assets/icons/assets.svg");
+            title: "Assets";
+            meta: root.asset_count == 1 ? "1 token" : root.asset_count + " tokens";
+        }
+        Rectangle {
+            vertical-stretch: 1;
+            VerticalLayout {
+                padding: Space.s_12;
+                ScrollView {
+                    max-height: Theme.asset_list_max_h;
+                    viewport-height: root.assets.length * 59px - 5px;
+                    scrolled => { UserActivity.ping(); }
+                    vertical-scrollbar-policy: ScrollBarPolicy.always-off;
+                    horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+                    VerticalLayout {
+                        spacing: Space.row_gap;
+                        for a in root.assets: AssetListRow {
+                            asset: a;
+                            clicked => { if a.sendable { root.select_asset(a.control_id); } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component SendCard inherits Card {
+    in-out property <string> recipient;
+    in property <bool> recipient_valid;
+    in-out property <string> amount;
+    in property <bool> send_enabled;
+    in property <bool> form_locked;
+    in property <bool> insufficient_balance;
+    in property <bool> journal_blocking;
+    in property <bool> risk_override_eligible;
+    in property <bool> risk_override_form_ready;
+    in property <string> unlock_hint;
+    in property <string> sel_symbol;
+    in property <string> sel_initial;
+    in property <color> sel_color;
+    in property <bool> book_open;
+    in property <bool> token_open;
+    callback recipient_edited(string);
+    callback amount_edited(string);
+    callback clear_recipient();
+    callback max_amount();
+    callback request_send();
+    callback request_risk_override();
+    callback open_book();
+    callback open_token();
+    out property <length> recip_abs_x: recip_row.absolute-position.x;
+    out property <length> recip_abs_y: recip_row.absolute-position.y;
+    out property <length> recip_w: recip_row.width;
+    out property <length> recip_h: recip_row.height;
+    out property <length> token_abs_x: token_selector.absolute-position.x;
+    out property <length> token_abs_y: token_selector.absolute-position.y;
+    out property <length> token_w: token_selector.width;
+    out property <length> token_h: token_selector.height;
+    property <bool> pasted: false;
+    VerticalLayout {
+        CardHeader { icon: @image-url("../../assets/icons/send.svg"); title: "Send"; }
+        VerticalLayout {
+            padding-top: Space.card_pad_v;
+            padding-bottom: Space.s_12;
+            padding-left: Space.s_16;
+            padding-right: Space.s_16;
+            spacing: Space.s_10;
+
+            VerticalLayout {
+                spacing: Space.s_8;
+                HorizontalLayout {
+                    height: 17px;
+                    spacing: Space.s_8;
+                    alignment: start;
+                    VerticalLayout { alignment: center; MicroLabel { text: "RECIPIENT ADDRESS"; } }
+                    if root.recipient != "" && !root.recipient_valid: VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 1;
+                        InlineError { text: "Not a valid address"; }
+                    }
+                }
+                recip_row := Rectangle {
+                    height: Theme.field_h;
+                    recip_field := Field {
+                        text <=> root.recipient;
+                        enabled: !root.form_locked;
+                        placeholder: "Paste address or pick from contacts";
+                        pad_right: 108px;
+                        editing_border: root.book_open;
+                        edited(t) => { root.recipient_edited(t); }
+                    }
+                    HorizontalLayout {
+                        x: parent.width - 104px;
+                        width: 98px;
+                        height: Theme.field_h;
+                        alignment: end;
+                        spacing: Space.s_2;
+                        padding-right: Space.s_6;
+                        VerticalLayout {
+                            alignment: center;
+                            if root.recipient != "": IconButton {
+                                icon: @image-url("../../assets/icons/x.svg");
+                                size: 26px; icon_size: 13px;
+                                enabled: !root.form_locked;
+                                clicked => { root.recipient = ""; root.clear_recipient(); }
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            IconButton {
+                                icon: root.pasted ? @image-url("../../assets/icons/check.svg") : @image-url("../../assets/icons/paste.svg");
+                                tint: root.pasted ? Palette.positive : Palette.text_tertiary;
+                                size: 24px;
+                                icon_size: 16px;
+                                enabled: !root.form_locked;
+                                clicked => {
+                                    recip_field.paste_replace();
+                                    root.recipient_edited(root.recipient);
+                                    root.pasted = true;
+                                    paste_timer.running = true;
+                                }
+                            }
+                        }
+                        Rectangle { width: 1px; background: Palette.border_medium; }
+                        VerticalLayout {
+                            alignment: center;
+                            IconButton {
+                                icon: @image-url("../../assets/icons/contacts.svg");
+                                tint: Palette.text_tertiary;
+                                size: 24px;
+                                icon_size: 16px;
+                                enabled: !root.form_locked;
+                                active: root.book_open;
+                                clicked => { root.open_book(); }
+                            }
+                        }
+                    }
+                }
+            }
+
+            VerticalLayout {
+                spacing: Space.s_8;
+                HorizontalLayout {
+                    height: 17px;
+                    spacing: Space.s_8;
+                    alignment: start;
+                    VerticalLayout { alignment: center; MicroLabel { text: "AMOUNT"; } }
+                    if root.insufficient_balance: VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 1;
+                        InlineError { text: "Insufficient balance for this amount plus the fee"; }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: Space.s_10;
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        height: Theme.amount_h;
+                        amount_field := Field {
+                            text <=> root.amount;
+                            enabled: !root.form_locked;
+                            group_digits: true;
+                            placeholder: "0.0";
+                            height_: Theme.amount_h;
+                            font_family: Fonts.ui;
+                            font_size: Fonts.body;
+                            font_weight: 600;
+                            pad_right: 62px;
+                            edited(t) => { root.amount_edited(t); }
+                        }
+                        MaxChip {
+                            x: parent.width - 52px;
+                            y: (Theme.amount_h - 24px) / 2;
+                            enabled_: !root.form_locked;
+                            clicked => { root.max_amount(); }
+                        }
+                    }
+                    token_selector := Rectangle {
+                        width: Theme.token_selector_w;
+                        height: Theme.amount_h;
+                        border-radius: Radii.md;
+                        border-width: 1px;
+                        border-color: root.token_open ? Palette.selected_border : Palette.border_medium;
+                        background: Palette.surface_sunken;
+                        HorizontalLayout {
+                            padding-left: Space.s_10;
+                            padding-right: Space.s_12;
+                            spacing: Space.s_8;
+                            VerticalLayout { alignment: center; Avatar { initial: root.sel_initial; tint: root.sel_color; size: 22px; } }
+                            VerticalLayout { alignment: center; Text { text: root.sel_symbol; color: Palette.text_primary; font-family: Fonts.ui; font-weight: Fonts.semibold; font-size: Fonts.body; } }
+                            Rectangle { }
+                            VerticalLayout {
+                                alignment: center;
+                                Icon {
+                                    source: @image-url("../../assets/icons/chevron-down.svg");
+                                    tint: Palette.text_tertiary; width: 13px; height: 13px;
+                                }
+                            }
+                        }
+                        TouchArea { enabled: !root.form_locked; mouse-cursor: pointer; clicked => { root.open_token(); } }
+                    }
+                }
+            }
+
+            PrimaryButton {
+                height_: Theme.send_btn_h;
+                label: "Send " + root.sel_symbol;
+                enabled: root.send_enabled;
+                clicked => { root.request_send(); }
+            }
+
+            if root.journal_blocking && root.risk_override_eligible: Rectangle {
+                height: 32px;
+                HorizontalLayout {
+                    Rectangle { horizontal-stretch: 1; }
+                    GhostButton {
+                        label: root.risk_override_form_ready
+                            ? "Send another despite duplicate risk"
+                            : "Enter new transfer details first";
+                        enabled: root.risk_override_form_ready;
+                        height_: 28px;
+                        text_color: Palette.warning;
+                        frame: Palette.warning_border;
+                        clicked => { root.request_risk_override(); }
+                    }
+                }
+            }
+
+            Rectangle {
+                height: root.unlock_hint != "" ? 16px : 0px;
+                if root.unlock_hint != "": HorizontalLayout {
+                    spacing: Space.s_6;
+                    alignment: start;
+                    VerticalLayout { alignment: center; Icon { source: @image-url("../../assets/icons/lock.svg"); tint: Palette.text_quiet; width: 13px; height: 13px; } }
+                    Text { text: root.unlock_hint; color: Palette.text_quiet; font-family: Fonts.ui; font-size: Fonts.small; vertical-alignment: center; }
+                }
+            }
+        }
+    }
+    paste_timer := Timer { interval: Motion.ack_dwell; running: false; triggered => { root.pasted = false; self.running = false; } }
+}
+
+export component ActivityCard inherits Card {
+    in property <[ActivityRow]> activity;
+    in property <string> af_dir;
+    in property <int> af_token;
+    in property <string> af_token_symbol;
+    in property <string> af_token_mark;
+    in property <color> af_token_color;
+    in property <string> af_party_addr;
+    in property <string> af_party_label;
+    in property <bool> af_active;
+    in property <int> activity_total;
+    in property <int> activity_shown;
+    in property <bool> has_wallet;
+    callback set_dir(string);
+    callback open_token_filter();
+    callback clear_token();
+    callback open_party_filter();
+    callback clear_party();
+    callback clear_filters();
+    callback open_in_explorer(string, string);
+    out property <length> token_pill_abs_x: af_token_pill.absolute-position.x;
+    out property <length> token_pill_abs_y: af_token_pill.absolute-position.y;
+    out property <length> token_pill_w: af_token_pill.width;
+    out property <length> token_pill_h: af_token_pill.height;
+    out property <length> party_pill_abs_x: af_party_pill.absolute-position.x;
+    out property <length> party_pill_abs_y: af_party_pill.absolute-position.y;
+    out property <length> party_pill_w: af_party_pill.width;
+    out property <length> party_pill_h: af_party_pill.height;
+    clip: true;
+    pure function party_prefix() -> string {
+        return root.af_dir == "in" ? "From: " : (root.af_dir == "out" ? "To: " : "With: ");
+    }
+    VerticalLayout {
+        padding-bottom: Space.s_10;
+        CardHeader {
+            icon: @image-url("../../assets/icons/activity.svg");
+            title: "Activity";
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        height: 30px;
+                        background: Palette.surface_inset;
+                        border-radius: 9px;
+                        HorizontalLayout {
+                            padding: Space.s_4;
+                            spacing: Space.s_2;
+                            SegBtn { label: "All"; active: root.af_dir == "all"; clicked => { root.set_dir("all"); } }
+                            SegBtn { label: "IN"; active: root.af_dir == "in"; clicked => { root.set_dir("in"); } }
+                            SegBtn { label: "OUT"; active: root.af_dir == "out"; clicked => { root.set_dir("out"); } }
+                        }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    af_token_pill := Rectangle {
+                        height: 30px;
+                        border-radius: Radii.sm;
+                        background: root.af_token != -2 ? Palette.accent_quiet : Palette.surface_inset;
+                        border-width: 1px;
+                        border-color: root.af_token != -2 ? Palette.selected_border : Palette.border_medium;
+                        TouchArea { mouse-cursor: pointer; clicked => { root.open_token_filter(); } }
+                        HorizontalLayout {
+                            padding-left: Space.s_10;
+                            padding-right: Space.s_8;
+                            spacing: Space.s_6;
+                            if root.af_token != -2: VerticalLayout { alignment: center; Avatar { initial: root.af_token_mark; tint: root.af_token_color; size: 16px; } }
+                            VerticalLayout { alignment: center; Text { text: root.af_token == -2 ? "All tokens" : root.af_token_symbol; color: root.af_token != -2 ? Palette.accent_text : Palette.text_tertiary; font-family: Fonts.ui; font-weight: Fonts.semibold; font-size: Fonts.small; } }
+                            VerticalLayout {
+                                alignment: center;
+                                if root.af_token == -2: Icon { source: @image-url("../../assets/icons/chevron-down.svg"); tint: Palette.text_tertiary; width: 11px; height: 11px; }
+                                if root.af_token != -2: IconButton { icon: @image-url("../../assets/icons/x.svg"); tint: Palette.accent_text; size: 18px; icon_size: 11px; clicked => { root.clear_token(); } }
+                            }
+                        }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    af_party_pill := Rectangle {
+                        height: 30px;
+                        border-radius: Radii.sm;
+                        background: root.af_party_addr != "" ? Palette.accent_quiet : Palette.surface_inset;
+                        border-width: 1px;
+                        border-color: root.af_party_addr != "" ? Palette.selected_border : Palette.border_medium;
+                        TouchArea { mouse-cursor: pointer; clicked => { root.open_party_filter(); } }
+                        HorizontalLayout {
+                            padding-left: Space.s_10;
+                            padding-right: Space.s_8;
+                            spacing: Space.s_6;
+                            VerticalLayout { alignment: center; Text { text: root.af_party_addr == "" ? "Anyone" : (root.party_prefix() + root.af_party_label); color: root.af_party_addr != "" ? Palette.accent_text : Palette.text_tertiary; font-family: Fonts.ui; font-weight: Fonts.semibold; font-size: Fonts.small; max-width: 200px; overflow: elide; } }
+                            VerticalLayout {
+                                alignment: center;
+                                if root.af_party_addr == "": Icon { source: @image-url("../../assets/icons/chevron-down.svg"); tint: Palette.text_tertiary; width: 11px; height: 11px; }
+                                if root.af_party_addr != "": IconButton { icon: @image-url("../../assets/icons/x.svg"); tint: Palette.accent_text; size: 18px; icon_size: 11px; clicked => { root.clear_party(); } }
+                            }
+                        }
+                    }
+                }
+                VerticalLayout { alignment: center; Text { text: root.af_active ? (root.activity_shown + " of " + root.activity_total) : (root.activity_total == 1 ? "1 tx" : root.activity_total + " txs"); color: Palette.text_quiet; font-family: Fonts.ui; font-size: Fonts.small; } }
+                if root.af_active: VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        height: 26px;
+                        border-radius: 7px;
+                        background: clear_ta.has-hover ? Palette.hover_strong : transparent;
+                        HorizontalLayout {
+                            padding-left: Space.s_8; padding-right: Space.s_8; spacing: Space.s_4;
+                            VerticalLayout { alignment: center; Icon { source: @image-url("../../assets/icons/x.svg"); tint: Palette.text_tertiary; width: 11px; height: 11px; } }
+                            VerticalLayout { alignment: center; Text { text: "Clear"; color: Palette.text_tertiary; font-family: Fonts.ui; font-size: Fonts.small; } }
+                        }
+                        clear_ta := TouchArea { mouse-cursor: pointer; clicked => { root.clear_filters(); } }
+                    }
+                }
+        }
+        if root.activity_shown > 0: TableHeader {
+            columns: [
+                { label: "TIME", x: Theme.activity_row_pad, width: Theme.activity_time_w },
+                {
+                    label: "TYPE",
+                    x: Theme.activity_row_pad + Theme.activity_time_w,
+                    width: Theme.activity_type_w,
+                },
+                {
+                    label: "TO / FROM",
+                    x: Theme.activity_row_pad + Theme.activity_time_w + Theme.activity_type_w,
+                    width: self.width - Theme.activity_row_pad - Theme.activity_action_w - Theme.activity_final_w - Theme.activity_fee_w - Theme.activity_money_gap - Theme.activity_amount_w - (Theme.activity_row_pad + Theme.activity_time_w + Theme.activity_type_w),
+                },
+                {
+                    label: "AMOUNT",
+                    x: self.width - Theme.activity_row_pad - Theme.activity_action_w - Theme.activity_final_w - Theme.activity_fee_w - Theme.activity_money_gap - Theme.activity_amount_w,
+                    width: Theme.activity_amount_w - (Theme.activity_amount_token_gap_w + Theme.activity_amount_token_avatar_w + Theme.activity_amount_token_symbol_w),
+                    right: true,
+                },
+                {
+                    label: "FEE",
+                    x: self.width - Theme.activity_row_pad - Theme.activity_action_w - Theme.activity_final_w - Theme.activity_fee_w,
+                    width: Theme.activity_fee_w,
+                    right: true,
+                },
+                {
+                    label: "FINALITY",
+                    x: self.width - Theme.activity_row_pad - Theme.activity_action_w - Theme.activity_final_w,
+                    width: Theme.activity_final_w,
+                    right: true,
+                },
+            ];
+        }
+        if root.activity_shown > 0: Rectangle { height: 1px; background: Palette.border_subtle; }
+        if root.activity_total == 0: Rectangle {
+            vertical-stretch: 1;
+            EmptyState {
+                width: 100%;
+                height: 100%;
+                budget: root.height - Theme.card_header_h;
+                icon: @image-url("../../assets/icons/activity.svg");
+                title: root.has_wallet ? "No activity yet" : "No wallet loaded";
+                subtitle: root.has_wallet ? "Transactions you send and receive will appear here." : "Load a wallet to see its activity.";
+            }
+        }
+        if root.activity_total > 0 && root.activity_shown == 0: Rectangle {
+            vertical-stretch: 1;
+            EmptyState {
+                width: 100%;
+                height: 100%;
+                budget: root.height - Theme.card_header_h - Theme.activity_filter_h;
+                icon: @image-url("../../assets/icons/funnel.svg");
+                title: "No transactions match the filters";
+                subtitle: root.activity_total + " transactions are hidden by the current filters.";
+                HorizontalLayout {
+                    alignment: center;
+                    GhostButton {
+                        label: "Clear filters";
+                        clicked => { root.clear_filters(); }
+                    }
+                }
+            }
+        }
+        if root.activity_shown > 0: Rectangle {
+            vertical-stretch: 1;
+            min-height: 0px;
+            activity_scroll := ScrollView {
+                width: 100%;
+                height: 100%;
+                scrolled => { UserActivity.ping(); }
+                vertical-scrollbar-policy: ScrollBarPolicy.always-off;
+                horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+                viewport-height: activity_list.preferred-height;
+                activity_list := VerticalLayout {
+                    for r in root.activity: VerticalLayout {
+                        if r.group != "": Rectangle {
+                            height: 26px;
+                            Rectangle {
+                                x: 8px;
+                                width: parent.width - 16px;
+                                height: 20px;
+                                y: (parent.height - self.height) / 2;
+                                background: Palette.surface_overlay;
+                                border-radius: Radii.sm;
+                            }
+                            Text {
+                                width: 100%;
+                                text: r.group;
+                                color: Palette.text_quiet;
+                                font-family: Fonts.ui;
+                                font-weight: Fonts.bold;
+                                font-size: Fonts.micro;
+                                letter-spacing: Space.s_2;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                        ActivityListRow {
+                            item: r;
+                            open_in_explorer => { root.open_in_explorer(r.party_full, r.tx_hash); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

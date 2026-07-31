@@ -1,0 +1,141 @@
+export global Space {
+    out property <length> s_0: 0px;
+    out property <length> s_2: 2px;
+    out property <length> s_4: 4px;
+    out property <length> s_6: 6px;
+    out property <length> s_8: 8px;
+    out property <length> s_10: 10px;
+    out property <length> s_12: 12px;
+    out property <length> s_14: 14px;
+    out property <length> s_16: 16px;
+    out property <length> s_20: 20px;
+    out property <length> s_24: 24px;
+
+    out property <length> page_inset: 10px;
+    out property <length> stack_gap: 10px;
+    out property <length> card_pad_h: 16px;
+    out property <length> card_pad_v: 12px;
+    out property <length> card_pad_v_empty: 24px;
+    out property <length> row_gap: 6px;
+    out property <length> field_gap: 8px;
+}
+
+export global Fonts {
+    out property <string> ui: "Manrope";
+    out property <string> mono: "Chivo Mono";
+
+    out property <length> micro: 11.5px;
+    out property <length> small: 12.5px;
+    out property <length> body: 14px;
+    out property <length> title: 19px;
+    out property <length> display: 22px;
+    out property <length> hero: 26px;
+
+    out property <int> regular: 400;
+    out property <int> semibold: 600;
+    out property <int> bold: 700;
+    out property <int> medium: 500;
+
+    out property <length> tracking_caps: 1px;
+}
+
+export global Radii {
+    out property <length> sm: 8px;
+    out property <length> md: 12px;
+    out property <length> lg: 16px;
+}
+
+export global Palette {
+    out property <color> surface_base: #06070A;
+    out property <color> surface_raised: #121722;
+    out property <color> surface_sunken: #0B0F17;
+    out property <color> surface_inset: #0E131C;
+    out property <color> surface_overlay: #141A26;
+    out property <color> surface_disabled: #1A2130;
+
+    out property <color> border_subtle: #FFFFFF0F;
+    out property <color> border_hairline: #FFFFFF0D;
+    out property <color> border_medium: #FFFFFF14;
+    out property <color> border_strong: #FFFFFF5A;
+    out property <color> focus_ring: #3B82F6;
+    out property <color> selected_border: #3B82F680;
+
+    out property <color> hover_row: #FFFFFF08;
+    out property <color> hover_strong: #FFFFFF14;
+
+    out property <color> badge_neutral: #FFFFFF0A;
+
+    out property <color> text_primary: #F0F3F9;
+    out property <color> text_secondary: #C7CEDB;
+    out property <color> text_value: #AEB7C6;
+    out property <color> text_tertiary: #8A93A6;
+    out property <color> text_quiet: #798298;
+    out property <color> text_placeholder: #707D94;
+    out property <color> text_on_fill: #FFFFFF;
+
+    out property <color> accent: #3B82F6;
+    out property <color> accent_fill: #1E5FD0;
+    out property <color> accent_quiet: #3B82F621;
+    out property <color> accent_quiet_hover: #3B82F633;
+    out property <color> accent_text: #8FB6FB;
+
+    out property <color> positive: #34D399;
+    out property <color> positive_quiet: #34D3991A;
+    out property <color> positive_border: #34D39940;
+
+    out property <color> negative: #F87171;
+    out property <color> negative_quiet: #F871711A;
+    out property <color> negative_border: #F8717140;
+    out property <color> negative_fill: #DC2626;
+
+    out property <color> warning: #F59E0B;
+    out property <color> warning_quiet: #F59E0B1F;
+    out property <color> warning_border: #F59E0B38;
+
+    out property <color> info: #8FB6FB;
+    out property <color> info_quiet: #3B82F621;
+    out property <color> info_border: #3B82F680;
+
+    out property <color> value_in: #34D399;
+    out property <color> value_out: #C7CEDB;
+    out property <color> value_neutral: #C7CEDB;
+
+    out property <color> clock_now: #F26722;
+    out property <color> clock_round_green: #5F9E77;
+    out property <color> clock_round_blue: #4E6E9E;
+    out property <color> clock_seam: #06070A;
+    out property <color> brand_outer: #00BCF5;
+    out property <color> brand_inner: #0B7CFD;
+}
+
+export global Elevation {
+    out property <color> scrim: #06070AE6;
+
+    out property <color> cover: #06070A;
+
+    out property <color> menu_shadow: #000000BF;
+    out property <length> menu_blur: 44px;
+    out property <length> menu_offset_y: 22px;
+
+    out property <color> dialog_shadow: #000000D9;
+    out property <length> dialog_blur: 80px;
+    out property <length> dialog_offset_y: 30px;
+
+    out property <color> drag_shadow: #00000066;
+    out property <length> drag_blur: 14px;
+    out property <length> drag_offset_y: 6px;
+}
+
+export global Motion {
+    out property <duration> fast: 120ms;
+    out property <duration> base: 160ms;
+    out property <duration> slow: 900ms;
+    out property <duration> ack_dwell: 1400ms;
+    out property <duration> frame: 16ms;
+    out property <easing> curve: ease-out;
+}
+
+export global Fade {
+    out property <float> muted: 0.65;
+    out property <float> disabled: 0.45;
+}

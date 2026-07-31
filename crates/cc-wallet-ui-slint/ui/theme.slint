@@ -1,0 +1,64 @@
+import { Palette } from "design_tokens.slint";
+
+export global Theme {
+
+    out property <color> text_3: #8A93A6;
+
+    out property <length> wallet_status_w: 96px;
+
+    out property <length> window_w: 1180px;
+    out property <length> window_h: 820px;
+    out property <length> window_min_h: 720px;
+    out property <length> topnav_h: 60px;
+    out property <length> card_header_h: 60px;
+    out property <length> activity_filter_h: 46px;
+    out property <length> tx_row_line_h: 20px;
+    out property <length> tx_row_pad_v: 5px;
+    out property <length> field_h: 44px;
+    out property <length> amount_h: 46px;
+    out property <length> send_btn_h: 48px;
+    out property <length> pw_field_h: 46px;
+    out property <length> asset_list_max_h: 236px;
+    out property <length> assets_panel_w: 427px;
+    out property <length> token_selector_w: 150px;
+
+    out property <length> activity_time_w: 78px;
+    out property <length> activity_type_w: 58px;
+    out property <length> activity_amount_w: 220px;
+    out property <length> activity_amount_token_gap_w: 9px;
+    out property <length> activity_amount_token_avatar_w: 18px;
+    out property <length> activity_amount_token_symbol_w: 58px;
+    out property <length> activity_money_gap: 36px;
+    out property <length> activity_fee_w: 92px;
+    out property <length> activity_final_w: 70px;
+    out property <length> activity_action_w: 26px;
+    out property <length> activity_row_pad: 16px;
+    out property <length> explorer_amount_w: 226px;
+    out property <length> explorer_fee_w: 112px;
+    out property <length> explorer_hash_w: 168px;
+    out property <length> explorer_hash_gap: 14px;
+    out property <length> account_label_w: 106px;
+    out property <length> stat_label_w: 84px;
+    out property <length> account_boc_w: 264px;
+    out property <length> account_list_row_h: 26px;
+    out property <int> account_list_max_rows: 3;
+    out property <int> decoded_list_max_rows: 6;
+
+}
+
+export global Status {
+    pure public function account_fg(status: string) -> color {
+        return status == "Active" ? Palette.positive
+            : status == "Uninit" ? Palette.warning
+            : status == "Frozen" ? Palette.negative
+            : Palette.text_tertiary;
+    }
+}
+
+export global Anim {
+    in-out property <angle> spin: 0deg;
+}
+
+export global PageScroll {
+    in-out property <bool> held: false;
+}

@@ -1,0 +1,687 @@
+import "../assets/fonts/Manrope-Regular.ttf";
+import "../assets/fonts/Manrope-Medium.ttf";
+import "../assets/fonts/Manrope-SemiBold.ttf";
+import "../assets/fonts/Manrope-Bold.ttf";
+import "../assets/fonts/Manrope-ExtraBold.ttf";
+import "../assets/fonts/ChivoMono-Regular.ttf";
+import "../assets/fonts/ChivoMono-SemiBold.ttf";
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Anim, PageScroll } from "theme.slint";
+import { Space, Fonts, Radii, Palette, Elevation, Motion, Fade } from "design_tokens.slint";
+import { PrimaryButton, IconButton, Icon, AmountFormat, ClipboardBridge, UserActivity } from "widgets.slint";
+import { TopNav } from "components/top_nav.slint";
+import { AuthModal } from "components/auth_modal.slint";
+import { RiskModal } from "components/risk_modal.slint";
+import { LockScreen } from "components/lock_screen.slint";
+import { WalletPicker } from "components/wallet_picker.slint";
+import { WalletPage } from "pages/wallet_page.slint";
+import { SwapPage } from "pages/swap_page.slint";
+import { ContactsPage } from "pages/contacts_page.slint";
+import { ExplorerPage } from "pages/explorer_page.slint";
+import { SettingsPage } from "pages/settings_page.slint";
+import { AssetRow, ContactRow, ActivityRow, TokenAmount, RiskOverlapRow, CurrencyRow, FieldRow, AccountView, NetworkStatsView, ExplorerTxRow, TracePartyCol, TraceEdgeRow } from "models.slint";
+
+export { AssetRow, ContactRow, ActivityRow, TokenAmount, RiskOverlapRow, NetworkStatsView, Anim, AmountFormat, ClipboardBridge, UserActivity }
+
+export component AppWindow inherits Window {
+    title: "CC Wallet";
+    default-font-family: Fonts.ui;
+    preferred-width: Theme.window_w;
+    preferred-height: Theme.window_h;
+    min-width: Theme.window_w;
+    min-height: Theme.window_min_h;
+    background: Palette.surface_base;
+
+    in-out property <string> selected_tab: "Wallet";
+    changed selected_tab => { PageScroll.held = false; }
+    in-out property <string> endpoint: "http://127.0.0.1:8001";
+    in property <bool> live: false;
+    in property <bool> has_wallet: false;
+    in property <string> error_text: "";
+    in property <bool> error_dismissible: false;
+
+    in property <bool> locked: true;
+    changed locked => { PageScroll.held = false; }
+    in property <bool> selecting: false;
+    in property <bool> onboarding: false;
+    in property <bool> key_busy: false;
+    in property <string> lock_error: "";
+    in property <[string]> wallet_names: [];
+    in property <string> active_wallet: "";
+    in-out property <string> lock_name: "";
+    in-out property <int> lock_workchain: 0;
+    in-out property <string> lock_pw: "";
+    in-out property <string> lock_pw2: "";
+
+    in property <string> wallet_address: "";
+    in property <string> wallet_status: "Non-exist";
+    in property <[AssetRow]> assets: [];
+    in property <int> asset_count: 0;
+    in property <string> sel_symbol: "COIN";
+    in property <string> sel_initial: "C";
+    in property <color> sel_color: Palette.accent;
+    in-out property <string> recipient: "";
+    in property <bool> recipient_valid: false;
+    in-out property <string> amount: "";
+    in property <bool> send_enabled: false;
+    in property <bool> send_form_locked: false;
+    in property <bool> insufficient_balance: false;
+    in property <bool> journal_blocking: false;
+    in property <bool> risk_override_eligible: false;
+    in property <bool> risk_override_form_ready: false;
+    in-out property <bool> allow_unbounced: false;
+    in property <[ActivityRow]> activity: [];
+    in property <string> af_dir: "all";
+    in property <int> af_token: -2;
+    in property <string> af_token_symbol: "";
+    in property <string> af_token_mark: "";
+    in property <color> af_token_color: Palette.accent;
+    in property <string> af_party_addr: "";
+    in property <string> af_party_label: "";
+    in property <bool> af_active: false;
+    in property <int> activity_total: 0;
+    in property <int> activity_shown: 0;
+    in property <string> unlock_hint: "";
+
+    in property <bool> swap_pool_ready: false;
+    in property <bool> swap_pool_loading: false;
+    in property <string> swap_pool_message: "";
+    in property <bool> swap_paused: false;
+    in property <string> swap_pool_address: "";
+    in property <string> swap_pool_short: "";
+    in property <string> swap_pool_fee: "";
+    in property <[AssetRow]> swap_reserves: [];
+    in property <[AssetRow]> swap_from_assets: [];
+    in property <[AssetRow]> swap_to_assets: [];
+    in property <TokenAmount> swap_from_token;
+    in property <TokenAmount> swap_to_token;
+    in-out property <string> swap_amount: "";
+    in property <TokenAmount> swap_quote_out;
+    in property <TokenAmount> swap_min_received;
+    in property <bool> swap_quote_available: false;
+    in property <bool> swap_unsupported: false;
+    in property <string> swap_rate_text: "";
+    in property <string> swap_fee_text: "";
+    in property <int> swap_slippage_bps: 50;
+    in property <int> swap_slippage_max_bps: 1000;
+    in-out property <string> swap_slippage_input: "";
+    in property <bool> swap_slippage_valid: true;
+    in property <bool> swap_enabled: false;
+    in property <bool> swapping: false;
+    in property <TokenAmount> swap_confirm_in;
+    in property <TokenAmount> swap_confirm_out;
+    in property <bool> swap_confirm_out_known: false;
+    in property <bool> swap_receipt_open: false;
+    in property <string> swap_receipt_state: "";
+    in property <TokenAmount> swap_receipt_sent;
+    in property <TokenAmount> swap_receipt_received;
+    in property <TokenAmount> swap_receipt_expected;
+    in property <TokenAmount> swap_receipt_fee;
+    in property <string> swap_receipt_time: "";
+    callback nav_swap();
+    callback swap_select_from(int);
+    callback swap_select_to(int);
+    callback swap_amount_edited(string);
+    callback swap_max_amount();
+    callback flip_swap();
+    callback step_slippage(bool);
+    callback slippage_edited(string);
+    callback request_swap();
+    callback dismiss_swap_receipt();
+
+    in property <[ContactRow]> contacts: [];
+    in property <int> contact_count: 0;
+
+    in property <[AssetRow]> all_assets: [];
+    in property <string> workchain: "-1";
+    in property <string> global_id: "—";
+    in property <string> network_name: "";
+    in property <[string]> network_endpoints: [];
+    in property <int> network_selected_endpoint: 0;
+    in property <string> endpoint_test_result: "";
+    in property <[string]> seed_words: [];
+    in property <string> seed_text: "";
+    in property <bool> seed_saved: false;
+    in property <bool> seed_revealed: false;
+    in property <bool> seed_unsaved: false;
+    in property <string> clipboard_notice: "";
+    in property <int> seed_copy_ttl: 0;
+    in property <int> autolock_mins: 5;
+    in property <int> screen_lock_mins: 5;
+    in-out property <[string]> import_words: ["", "", "", "", "", "", "", "", "", "", "", ""];
+    in property <bool> import_valid: false;
+    in property <bool> import_filled: false;
+    in property <bool> backup_confirmed: false;
+    in property <bool> onboard_import_valid: false;
+
+    in property <bool> auth_open: false;
+    in property <string> auth_mode: "enter";
+    in property <string> auth_purpose: "send";
+    in property <string> auth_title: "";
+    in property <string> auth_subtitle: "";
+    in property <bool> auth_show_summary: false;
+    in property <TokenAmount> tx_amount;
+    in property <string> tx_to: "";
+    in property <bool> tx_in_contacts: false;
+    in property <string> tx_to_addr_full: "";
+    in property <string> tx_fee: "";
+    in property <string> auth_recipient_state: "pending";
+    in property <string> auth_recipient_notice: "";
+    in property <string> auth_recipient_ack_label: "";
+    in property <string> auth_error: "";
+    in property <bool> auth_send_options_editable: false;
+    in-out property <string> auth_pw: "";
+    in-out property <string> auth_pw2: "";
+    in-out property <bool> auth_remember: false;
+
+    in property <bool> risk_review_open: false;
+    in property <string> risk_review_details: "";
+    in property <[RiskOverlapRow]> risk_overlap_rows: [];
+    in property <bool> risk_requires_duplicate_confirmation: false;
+    in-out property <string> risk_typed_confirmation: "";
+    in-out property <bool> risk_ack_both_may_debit: false;
+    in-out property <bool> risk_ack_duplicate: false;
+
+    in property <angle>  clock_needle_angle: 66deg;
+    in property <float>  clock_elect_start: 0.68;
+    in property <float>  clock_elect_end: 0.85;
+    in property <string> clock_active_round: "";
+    in property <string> clock_round_ends_in: "";
+    in property <string> clock_elections: "";
+    in property <string> clock_elections_countdown: "";
+    in property <bool>   clock_elections_open: false;
+    in property <bool>   clock_active_green: false;
+
+    in property <bool>   expl_loading: false;
+    in property <string> expl_error: "";
+    in property <bool>   expl_has_account: false;
+    in property <AccountView> expl_account;
+    in property <[CurrencyRow]> expl_currencies: [];
+    in property <[FieldRow]> expl_contract_fields: [];
+    in property <NetworkStatsView> expl_network;
+    in property <[ExplorerTxRow]> expl_txs: [];
+    in property <bool> expl_txs_loading: false;
+    in property <string> expl_txs_error: "";
+    in property <int> expl_txs_skipped: 0;
+    in-out property <string> expl_address: "";
+    in property <bool> expl_trace_open: false;
+    in property <bool> expl_trace_loading: false;
+    in property <string> expl_trace_error: "";
+    in property <string> expl_trace_hash: "";
+    in property <string> expl_trace_summary: "";
+    in property <[TracePartyCol]> expl_trace_parties: [];
+    in property <[TraceEdgeRow]> expl_trace_edges: [];
+    callback inspect_account(string);
+    callback trace_transaction(string);
+    callback close_trace();
+
+    callback nav_wallet();
+    callback nav_contacts();
+    callback nav_explorer();
+    callback nav_settings();
+    callback refresh_wallet();
+    callback clear_error();
+    callback select_asset(int);
+    callback recipient_edited(string);
+    callback amount_edited(string);
+    callback clear_recipient();
+    callback pick_contact(string);
+    callback select_send_token(int);
+    callback max_amount();
+    callback set_allow_unbounced(bool);
+    callback request_send();
+    callback request_risk_override();
+    callback set_risk_overlap(int, bool);
+    callback confirm_risk_override();
+    callback cancel_risk_override();
+    callback activity_set_dir(string);
+    callback activity_set_token(int);
+    callback activity_set_party(string);
+    callback activity_clear_filters();
+    callback open_in_explorer(string, string);
+    callback save_contact(int, string, string, string);
+    callback delete_contact(int);
+    callback reorder_contacts(int, int);
+    callback quick_send(string);
+    callback contact_address_is_valid(string) -> bool;
+    pure callback contact_matches_search(string, string, string, string) -> bool;
+    pure callback matching_contact_count(string) -> int;
+    pure callback contact_search_rank(int, string, int) -> int;
+    callback contact_conflict(int, string, string) -> string;
+    callback endpoint_is_valid(string) -> bool;
+    callback reveal_seed();
+    callback hide_seed();
+    callback copy_seed(string);
+    callback generate_seed();
+    callback onboard_import_changed(string);
+    callback onboard_generate() -> [string];
+    callback onboard_stage_from_grid();
+    callback copy_seed_from_grid();
+    callback use_seed();
+    callback discard_seed();
+    callback delete_wallet();
+    callback switch_wallet();
+    callback switch_to_wallet(string);
+    callback import_seed(string);
+    callback set_password();
+    callback toggle_asset(int, bool);
+    callback set_autolock(int);
+    callback select_endpoint(int);
+    callback remove_endpoint(string);
+    callback add_endpoint(string);
+    callback test_endpoint(string);
+    callback import_edited();
+    callback import_submit();
+    callback distribute_seed(string) -> [string];
+    callback import_cell_edited(int, string, [string]) -> [string];
+    callback auth_submit();
+    callback auth_cancel();
+    callback unlock(string);
+    callback create_wallet(string, int, int, string, string);
+    callback confirm_backup(bool);
+    callback select_wallet(string);
+    callback new_wallet_request();
+    callback delete_wallet_from_picker(string, string);
+    callback back_to_picker();
+    callback lock_now();
+    callback set_screen_lock(int);
+
+    if !root.locked: VerticalLayout {
+        padding-left: Space.page_inset;
+        padding-right: Space.page_inset;
+        padding-top: Space.page_inset;
+        padding-bottom: Space.page_inset;
+        spacing: Space.page_inset;
+
+        TopNav {
+            selected_tab: root.selected_tab;
+            endpoint: root.endpoint;
+            live: root.live;
+            wallet_enabled: root.has_wallet;
+            nav_wallet => { root.selected_tab = "Wallet"; root.nav_wallet(); }
+            nav_swap => { root.selected_tab = "Swap"; root.nav_swap(); }
+            nav_contacts => { root.selected_tab = "Contacts"; root.nav_contacts(); }
+            nav_explorer => { root.selected_tab = "Explorer"; root.nav_explorer(); }
+            nav_settings => { root.selected_tab = "Settings"; root.nav_settings(); }
+            retry_connection => { root.refresh_wallet(); }
+        }
+
+        if root.error_text != "": Rectangle {
+            height: 40px;
+            border-radius: Radii.md;
+            background: Palette.negative_quiet;
+            border-width: 1px;
+            border-color: Palette.negative_border;
+            HorizontalLayout {
+                padding-left: Space.s_12;
+                padding-right: Space.s_4;
+                spacing: Space.s_6;
+                Text {
+                    horizontal-stretch: 1;
+                    text: root.error_text;
+                    color: Palette.negative;
+                    font-family: Fonts.ui;
+                    font-size: Fonts.body;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                if root.error_dismissible: VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: @image-url("../assets/icons/x.svg");
+                        tint: Palette.negative;
+                        size: 30px;
+                        icon_size: 14px;
+                        clicked => { root.clear_error(); }
+                    }
+                }
+            }
+        }
+
+        content_area := Rectangle {
+          vertical-stretch: 1;
+          preferred-height: 200px;
+          scroll := Flickable {
+            width: 100%;
+            height: 100%;
+            interactive: !PageScroll.held;
+            flicked => { UserActivity.ping(); }
+            viewport-width: content_area.width;
+            viewport-height: holder.preferred-height;
+            holder := VerticalLayout {
+                width: content_area.width;
+            if root.selected_tab == "Wallet": WalletPage {
+                width: holder.width;
+                page_height: scroll.height;
+                has_wallet: root.has_wallet;
+                address: root.wallet_address;
+                wallet_status: root.wallet_status;
+                active_wallet: root.active_wallet;
+                wallet_names: root.wallet_names;
+                assets: root.assets;
+                asset_count: root.asset_count;
+                sel_symbol: root.sel_symbol;
+                sel_initial: root.sel_initial;
+                sel_color: root.sel_color;
+                recipient <=> root.recipient;
+                recipient_valid: root.recipient_valid;
+                amount <=> root.amount;
+                send_enabled: root.send_enabled;
+                send_form_locked: root.send_form_locked;
+                insufficient_balance: root.insufficient_balance;
+                journal_blocking: root.journal_blocking;
+                risk_override_eligible: root.risk_override_eligible;
+                risk_override_form_ready: root.risk_override_form_ready;
+                address_book: root.contacts;
+                address_book_count: root.contact_count;
+                activity: root.activity;
+                af_dir: root.af_dir;
+                af_token: root.af_token;
+                af_token_symbol: root.af_token_symbol;
+                af_token_mark: root.af_token_mark;
+                af_token_color: root.af_token_color;
+                all_assets: root.all_assets;
+                af_party_addr: root.af_party_addr;
+                af_party_label: root.af_party_label;
+                af_active: root.af_active;
+                activity_total: root.activity_total;
+                activity_shown: root.activity_shown;
+                unlock_hint: root.unlock_hint;
+                activity_set_dir(d) => { root.activity_set_dir(d); }
+                activity_set_token(t) => { root.activity_set_token(t); }
+                activity_set_party(a) => { root.activity_set_party(a); }
+                activity_clear_filters => { root.activity_clear_filters(); }
+                open_in_explorer(address, hash) => { root.open_in_explorer(address, hash); }
+                select_asset(id) => { root.select_asset(id); }
+                switch_to_wallet(n) => { root.switch_to_wallet(n); }
+                open_wallets => { root.switch_wallet(); }
+                lock_now => { root.lock_now(); }
+                recipient_edited(t) => { root.recipient_edited(t); }
+                amount_edited(t) => { root.amount_edited(t); }
+                clear_recipient => { root.clear_recipient(); }
+                pick_contact(a) => { root.pick_contact(a); }
+                select_send_token(id) => { root.select_send_token(id); }
+                max_amount => { root.max_amount(); }
+                request_send => { root.request_send(); }
+                request_risk_override => { root.request_risk_override(); }
+                contact_matches_search(n, a, t, q) => { root.contact_matches_search(n, a, t, q) }
+                matching_contact_count(q) => { root.matching_contact_count(q) }
+            }
+            if root.selected_tab == "Swap": SwapPage {
+                width: holder.width;
+                page_height: scroll.height;
+                has_wallet: root.has_wallet;
+                pool_ready: root.swap_pool_ready;
+                pool_loading: root.swap_pool_loading;
+                pool_message: root.swap_pool_message;
+                paused: root.swap_paused;
+                pool_address: root.swap_pool_address;
+                pool_short: root.swap_pool_short;
+                pool_fee: root.swap_pool_fee;
+                reserves: root.swap_reserves;
+                from_assets: root.swap_from_assets;
+                to_assets: root.swap_to_assets;
+                from_token: root.swap_from_token;
+                to_token: root.swap_to_token;
+                amount <=> root.swap_amount;
+                quote_out: root.swap_quote_out;
+                min_received: root.swap_min_received;
+                quote_available: root.swap_quote_available;
+                unsupported: root.swap_unsupported;
+                rate_text: root.swap_rate_text;
+                fee_text: root.swap_fee_text;
+                slippage_bps: root.swap_slippage_bps;
+                slippage_max_bps: root.swap_slippage_max_bps;
+                slippage_input <=> root.swap_slippage_input;
+                slippage_valid: root.swap_slippage_valid;
+                swap_enabled: root.swap_enabled;
+                swapping: root.swapping;
+                receipt_open: root.swap_receipt_open;
+                receipt_state: root.swap_receipt_state;
+                receipt_sent: root.swap_receipt_sent;
+                receipt_received: root.swap_receipt_received;
+                receipt_expected: root.swap_receipt_expected;
+                receipt_fee: root.swap_receipt_fee;
+                receipt_time: root.swap_receipt_time;
+                select_from(id) => { root.swap_select_from(id); }
+                select_to(id) => { root.swap_select_to(id); }
+                amount_edited(t) => { root.swap_amount_edited(t); }
+                max_amount => { root.swap_max_amount(); }
+                flip => { root.flip_swap(); }
+                step_slippage(up) => { root.step_slippage(up); }
+                slippage_edited(t) => { root.slippage_edited(t); }
+                request_swap => { root.request_swap(); }
+                dismiss_receipt => { root.dismiss_swap_receipt(); }
+            }
+            if root.selected_tab == "Contacts": ContactsPage {
+                width: holder.width;
+                page_height: scroll.height;
+                contacts: root.contacts;
+                contact_count: root.contact_count;
+                save_contact(idx, n, a, t) => { root.save_contact(idx, n, a, t); }
+                delete_contact(i) => { root.delete_contact(i); }
+                reorder_contacts(from, to) => { root.reorder_contacts(from, to); }
+                quick_send(a) => { root.quick_send(a); }
+                contact_address_is_valid(a) => { root.contact_address_is_valid(a) }
+                contact_conflict(idx, n, a) => { root.contact_conflict(idx, n, a) }
+                contact_matches_search(n, a, t, q) => { root.contact_matches_search(n, a, t, q) }
+                matching_contact_count(q) => { root.matching_contact_count(q) }
+                contact_search_rank(i, q, e) => { root.contact_search_rank(i, q, e) }
+            }
+            if root.selected_tab == "Explorer": ExplorerPage {
+                width: holder.width;
+                page_height: scroll.height;
+                clock_needle_angle: root.clock_needle_angle;
+                clock_elect_start: root.clock_elect_start;
+                clock_elect_end: root.clock_elect_end;
+                clock_active_round: root.clock_active_round;
+                clock_round_ends_in: root.clock_round_ends_in;
+                clock_elections: root.clock_elections;
+                clock_elections_countdown: root.clock_elections_countdown;
+                clock_elections_open: root.clock_elections_open;
+                clock_active_green: root.clock_active_green;
+                loading: root.expl_loading;
+                error: root.expl_error;
+                has_account: root.expl_has_account;
+                account: root.expl_account;
+                currencies: root.expl_currencies;
+                contract_fields: root.expl_contract_fields;
+                network: root.expl_network;
+                txs: root.expl_txs;
+                txs_loading: root.expl_txs_loading;
+                txs_error: root.expl_txs_error;
+                txs_skipped: root.expl_txs_skipped;
+                trace_open: root.expl_trace_open;
+                trace_loading: root.expl_trace_loading;
+                trace_error: root.expl_trace_error;
+                trace_hash: root.expl_trace_hash;
+                trace_summary: root.expl_trace_summary;
+                trace_parties: root.expl_trace_parties;
+                trace_edges: root.expl_trace_edges;
+                open_trace(h) => { root.trace_transaction(h); }
+                close_trace() => { root.close_trace(); }
+                address_input <=> root.expl_address;
+                lookup(a) => { root.inspect_account(a); }
+            }
+            if root.selected_tab == "Settings": SettingsPage {
+                width: holder.width;
+                workchain: root.workchain;
+                global_id: root.global_id;
+                network_name: root.network_name;
+                endpoints: root.network_endpoints;
+                selected_endpoint: root.network_selected_endpoint;
+                endpoint_test_result: root.endpoint_test_result;
+                select_endpoint(i) => { root.select_endpoint(i); }
+                remove_endpoint(u) => { root.remove_endpoint(u); }
+                add_endpoint(u) => { root.add_endpoint(u); }
+                test_endpoint(u) => { root.test_endpoint(u); }
+                seed_words: root.seed_words;
+                seed_text: root.seed_text;
+                seed_saved: root.seed_saved;
+                seed_revealed: root.seed_revealed;
+                seed_unsaved: root.seed_unsaved;
+                clipboard_notice: root.clipboard_notice;
+                seed_copy_ttl: root.seed_copy_ttl;
+                autolock_mins: root.autolock_mins;
+                screen_lock_mins: root.screen_lock_mins;
+                assets: root.all_assets;
+                import_words <=> root.import_words;
+                import_valid: root.import_valid;
+                import_filled: root.import_filled;
+                import_edited => { root.import_edited(); }
+                import_submit => { root.import_submit(); }
+                distribute_seed(s) => { root.distribute_seed(s) }
+                import_cell_edited(idx, t, current) => { root.import_cell_edited(idx, t, current) }
+                reveal_seed => { root.reveal_seed(); }
+                hide_seed => { root.hide_seed(); }
+                copy_seed(p) => { root.copy_seed(p); }
+                generate_seed => { root.generate_seed(); }
+                use_seed => { root.use_seed(); }
+                discard_seed => { root.discard_seed(); }
+                import_seed(s) => { root.import_seed(s); }
+                set_password => { root.set_password(); }
+                toggle_asset(id, v) => { root.toggle_asset(id, v); }
+                set_autolock(m) => { root.set_autolock(m); }
+                set_screen_lock(m) => { root.set_screen_lock(m); }
+            }
+            }
+          }
+        }
+    }
+
+    if !root.locked && root.auth_open: AuthModal {
+        width: 100%;
+        height: 100%;
+        mode: root.auth_mode;
+        purpose: root.auth_purpose;
+        title: root.auth_title;
+        subtitle: root.auth_subtitle;
+        show_summary: root.auth_show_summary;
+        swap_in: root.swap_confirm_in;
+        swap_out: root.swap_confirm_out;
+        swap_out_known: root.swap_confirm_out_known;
+        tx_amount: root.tx_amount;
+        tx_to: root.tx_to;
+        tx_in_contacts: root.tx_in_contacts;
+        tx_to_addr_full: root.tx_to_addr_full;
+        tx_fee: root.tx_fee;
+        auth_recipient_state: root.auth_recipient_state;
+        auth_recipient_notice: root.auth_recipient_notice;
+        auth_recipient_ack_label: root.auth_recipient_ack_label;
+        error: root.auth_error;
+        autolock_mins: root.autolock_mins;
+        busy: root.key_busy;
+        send_options_editable: root.auth_send_options_editable;
+        allow_unbounced <=> root.allow_unbounced;
+        pw <=> root.auth_pw;
+        pw2 <=> root.auth_pw2;
+        remember <=> root.auth_remember;
+        submit => { root.auth_submit(); }
+        cancel => { root.auth_cancel(); }
+        set_allow_unbounced(v) => { root.set_allow_unbounced(v); }
+    }
+
+    if !root.locked && root.risk_review_open: RiskModal {
+        width: 100%;
+        height: 100%;
+        details: root.risk_review_details;
+        overlaps: root.risk_overlap_rows;
+        requires_duplicate_confirmation: root.risk_requires_duplicate_confirmation;
+        error: root.error_text;
+        typed_confirmation <=> root.risk_typed_confirmation;
+        acknowledge_both_may_debit <=> root.risk_ack_both_may_debit;
+        acknowledge_duplicate <=> root.risk_ack_duplicate;
+        set_overlap(i, selected) => { root.set_risk_overlap(i, selected); }
+        confirm => { root.confirm_risk_override(); }
+        cancel => { root.cancel_risk_override(); }
+    }
+
+    if root.selecting: WalletPicker {
+        width: 100%;
+        height: 100%;
+        wallets: root.wallet_names;
+        error: root.lock_error;
+        busy: root.key_busy;
+        select(name) => { root.select_wallet(name); }
+        create_new => { root.new_wallet_request(); }
+        delete(name, pw) => { root.delete_wallet_from_picker(name, pw); }
+    }
+
+    if root.locked && !root.selecting: LockScreen {
+        width: 100%;
+        height: 100%;
+        onboarding: root.onboarding;
+        busy: root.key_busy;
+        error: root.lock_error;
+        active_wallet: root.active_wallet;
+        can_back: root.wallet_names.length > 0;
+        name <=> root.lock_name;
+        workchain <=> root.lock_workchain;
+        pw <=> root.lock_pw;
+        pw2 <=> root.lock_pw2;
+        import_words <=> root.import_words;
+        import_valid: root.import_valid;
+        import_filled: root.import_filled;
+        backup_confirmed: root.backup_confirmed;
+        clipboard_notice: root.clipboard_notice;
+        seed_copy_ttl: root.seed_copy_ttl;
+        back => { root.back_to_picker(); }
+        unlock(p) => { root.unlock(p); }
+        create(n, e, w, p, p2) => { root.create_wallet(n, e, w, p, p2); }
+        confirm_backup(v) => { root.confirm_backup(v); }
+        onboard_generate() => { root.onboard_generate() }
+        onboard_stage_from_grid => { root.onboard_stage_from_grid(); }
+        copy_seed_from_grid() => { root.copy_seed_from_grid(); }
+        copy_seed(p) => { root.copy_seed(p); }
+        import_edited => { root.import_edited(); }
+        distribute_seed(s) => { root.distribute_seed(s) }
+        import_cell_edited(idx, t, current) => { root.import_cell_edited(idx, t, current) }
+    }
+}
+
+export component StartupErrorWindow inherits Window {
+    in property <string> message;
+    callback dismiss();
+    title: "CC Wallet";
+    background: Palette.surface_base;
+    preferred-width: 460px;
+    preferred-height: 220px;
+    VerticalLayout {
+        padding: 28px;
+        spacing: 18px;
+        alignment: center;
+        HorizontalLayout {
+            spacing: Space.s_12;
+            alignment: start;
+            VerticalLayout { alignment: start; Icon { source: @image-url("../assets/icons/info.svg"); tint: Palette.negative; width: 22px; height: 22px; } }
+            VerticalLayout {
+                spacing: Space.s_6;
+                Text {
+                    text: "CC Wallet cannot start";
+                    color: Palette.text_primary;
+                    font-family: Fonts.ui;
+                    font-weight: Fonts.semibold;
+                    font-size: Fonts.title;
+                }
+                Text {
+                    text: root.message;
+                    color: Palette.text_secondary;
+                    font-family: Fonts.ui;
+                    font-size: Fonts.body;
+                    wrap: word-wrap;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
+        HorizontalLayout {
+            alignment: end;
+            PrimaryButton {
+                label: "Close";
+                height: 40px;
+                clicked => { root.dismiss(); }
+            }
+        }
+    }
+}

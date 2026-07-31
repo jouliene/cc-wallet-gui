@@ -1,0 +1,43 @@
+[package]
+name = "cc-wallet-ui-slint"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[package.metadata.cargo-shear]
+ignored = ["i-slint-common", "cc-wallet-domain"]
+
+[[bin]]
+name = "cc-wallet-gui"
+path = "src/main.rs"
+
+[dependencies]
+cc-wallet-app = { path = "../cc-wallet-app" }
+chrono = "0.4"
+slint = { version = "1", default-features = false, features = [
+    "std",
+    "compat-1-2",
+    "backend-winit",
+    "renderer-software",
+] }
+zeroize.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+i-slint-common = { version = "=1.17.0", default-features = false, features = ["fontconfig-dlopen"] }
+rustix = { version = "1", features = ["process"] }
+
+[target.'cfg(unix)'.dependencies]
+rlimit = "0.10"
+
+[dev-dependencies]
+cc-wallet-domain = { path = "../cc-wallet-domain", features = ["test-fixtures"] }
+
+[build-dependencies]
+slint-build = "1"
+
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = "warn"

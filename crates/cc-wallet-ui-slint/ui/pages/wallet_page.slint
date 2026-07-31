@@ -1,0 +1,304 @@
+import { Theme } from "../theme.slint";
+import { Space } from "../design_tokens.slint";
+import { UserActivity } from "../widgets.slint";
+import { AssetRow, ContactRow, ActivityRow } from "../models.slint";
+import { WalletSwitcherMenu, TokenPickerMenu, ContactPickerMenu, ActivityTokenMenu, ActivityPartyMenu } from "wallet_menus.slint";
+import { OverviewStrip, AssetsCard, SendCard, ActivityCard } from "wallet_sections.slint";
+
+export component WalletPage inherits VerticalLayout {
+    in property <bool> has_wallet;
+    in property <length> page_height: 400px;
+    in property <string> address;
+    in property <string> wallet_status;
+    in property <string> active_wallet;
+    in property <[string]> wallet_names;
+
+    in property <[AssetRow]> assets;
+    in property <int> asset_count;
+
+    in property <string> sel_symbol;
+    in property <string> sel_initial;
+    in property <color> sel_color;
+
+    in-out property <string> recipient;
+    in property <bool> recipient_valid;
+    in-out property <string> amount;
+    in property <bool> send_enabled;
+    in property <bool> send_form_locked;
+    in property <bool> insufficient_balance;
+    in property <bool> journal_blocking;
+    in property <bool> risk_override_eligible;
+    in property <bool> risk_override_form_ready;
+
+    in property <[ContactRow]> address_book;
+    in property <int> address_book_count;
+    in property <[ActivityRow]> activity;
+    in property <string> af_dir;
+    in property <int> af_token;
+    in property <string> af_token_symbol;
+    in property <string> af_token_mark;
+    in property <color> af_token_color;
+    in property <[AssetRow]> all_assets;
+    in property <string> af_party_addr;
+    in property <string> af_party_label;
+    in property <bool> af_active;
+    in property <int> activity_total;
+    in property <int> activity_shown;
+    in property <string> unlock_hint;
+
+    callback select_asset(int);
+    callback switch_to_wallet(string);
+    callback open_wallets();
+    callback lock_now();
+    callback recipient_edited(string);
+    callback amount_edited(string);
+    callback clear_recipient();
+    callback pick_contact(string);
+    callback select_send_token(int);
+    callback max_amount();
+    callback request_send();
+    callback request_risk_override();
+    callback activity_set_dir(string);
+    callback activity_set_token(int);
+    callback activity_set_party(string);
+    callback activity_clear_filters();
+    callback open_in_explorer(string, string);
+    pure callback contact_matches_search(string, string, string, string) -> bool;
+    pure callback matching_contact_count(string) -> int;
+
+    property <string> book_filter: "";
+
+    property <length> overview_badge: 40px;
+    property <length> overview_h: root.overview_badge + 2 * Space.s_12;
+    property <length> mid_row_h: 320px;
+    property <length> activity_min_h: 110px;
+    height: max(root.page_height, root.overview_h + Space.stack_gap + root.mid_row_h + Space.stack_gap + root.activity_min_h);
+    spacing: Space.stack_gap;
+
+    pure function clamp_len(v: length, lo: length, hi: length) -> length {
+        return max(lo, min(v, hi));
+    }
+
+    property <string> af_party_search: "";
+    property <int> af_party_shown: root.af_party_search == "" ? root.address_book_count : root.matching_contact_count(root.af_party_search);
+    property <int> af_party_extra: (root.af_party_search != "" && root.matching_contact_count(root.af_party_search) == 0) ? 1 : 0;
+    property <length> af_party_list_h: min((root.af_party_shown + root.af_party_extra) * 40px, 160px);
+    property <length> af_party_popup_h: 101px + root.af_party_list_h;
+
+    overview := OverviewStrip {
+        height: root.overview_h;
+        badge: root.overview_badge;
+        active_wallet: root.active_wallet;
+        address: root.address;
+        wallet_status: root.wallet_status;
+        menu_open: wallet_popup.is-open;
+        open_wallet_menu => { UserActivity.ping(); wallet_popup.show(); }
+        lock_now => { root.lock_now(); }
+    }
+
+    HorizontalLayout {
+        height: root.mid_row_h;
+        spacing: Space.stack_gap;
+        Rectangle {
+            width: max(Theme.assets_panel_w, (root.width - Space.stack_gap) * 36%);
+            AssetsCard {
+                assets: root.assets;
+                asset_count: root.asset_count;
+                select_asset(id) => { root.select_asset(id); }
+            }
+        }
+
+        send := SendCard {
+            horizontal-stretch: 1;
+            recipient <=> root.recipient;
+            recipient_valid: root.recipient_valid;
+            amount <=> root.amount;
+            send_enabled: root.send_enabled;
+            form_locked: root.send_form_locked;
+            insufficient_balance: root.insufficient_balance;
+            journal_blocking: root.journal_blocking;
+            risk_override_eligible: root.risk_override_eligible;
+            risk_override_form_ready: root.risk_override_form_ready;
+            unlock_hint: root.unlock_hint;
+            sel_symbol: root.sel_symbol;
+            sel_initial: root.sel_initial;
+            sel_color: root.sel_color;
+            book_open: book_popup.is-open;
+            token_open: token_popup.is-open;
+            recipient_edited(t) => { root.recipient_edited(t); }
+            amount_edited(t) => { root.amount_edited(t); }
+            clear_recipient => { root.clear_recipient(); }
+            max_amount => { root.max_amount(); }
+            request_send => { root.request_send(); }
+            request_risk_override => { root.request_risk_override(); }
+            open_book => { UserActivity.ping(); root.book_filter = ""; book_popup.show(); }
+            open_token => { UserActivity.ping(); token_popup.show(); }
+        }
+    }
+
+    activity_card := ActivityCard {
+        height: max(root.activity_min_h, root.height - root.overview_h - Space.stack_gap - root.mid_row_h - Space.stack_gap);
+        activity: root.activity;
+        af_dir: root.af_dir;
+        af_token: root.af_token;
+        af_token_symbol: root.af_token_symbol;
+        af_token_mark: root.af_token_mark;
+        af_token_color: root.af_token_color;
+        af_party_addr: root.af_party_addr;
+        af_party_label: root.af_party_label;
+        af_active: root.af_active;
+        activity_total: root.activity_total;
+        activity_shown: root.activity_shown;
+        has_wallet: root.has_wallet;
+        set_dir(d) => { root.activity_set_dir(d); }
+        open_token_filter => { UserActivity.ping(); af_token_popup.show(); }
+        clear_token => { root.activity_set_token(-2); }
+        open_party_filter => { UserActivity.ping(); root.af_party_search = ""; af_party_popup.show(); }
+        clear_party => { root.activity_set_party(""); }
+        clear_filters => { root.activity_clear_filters(); }
+        open_in_explorer(address, hash) => { root.open_in_explorer(address, hash); }
+    }
+
+    book_popup := PopupWindow {
+        x: root.clamp_len(
+            send.recip_abs_x + send.recip_w - 320px - root.absolute-position.x,
+            12px,
+            root.width - 320px - 12px);
+        y: root.clamp_len(
+            send.recip_abs_y + send.recip_h + 6px - root.absolute-position.y,
+            12px,
+            root.height - 336px - 12px);
+        width: 320px;
+        close-policy: close-on-click-outside;
+        book_focus := FocusScope {
+            init => { self.focus(); }
+            key-pressed(event) => {
+                if (event.text == Key.Escape) {
+                    book_popup.close();
+                    return accept;
+                }
+                return reject;
+            }
+            ContactPickerMenu {
+                address_book: root.address_book;
+                address_book_count: root.address_book_count;
+                filter <=> root.book_filter;
+                contact_matches_search(n, a, t, q) => { root.contact_matches_search(n, a, t, q) }
+                matching_contact_count(q) => { root.matching_contact_count(q) }
+                pick(a) => { root.pick_contact(a); book_popup.close(); }
+            }
+        }
+    }
+
+    token_popup := PopupWindow {
+        x: root.clamp_len(
+            send.token_abs_x + send.token_w - 180px - root.absolute-position.x,
+            12px,
+            root.width - 180px - 12px);
+        y: root.clamp_len(
+            send.token_abs_y + send.token_h + 6px - root.absolute-position.y,
+            12px,
+            root.height - (root.assets.length * 40px + 16px) - 12px);
+        width: 180px;
+        close-policy: close-on-click-outside;
+        token_focus := FocusScope {
+            init => { self.focus(); }
+            key-pressed(event) => {
+                if (event.text == Key.Escape) {
+                    token_popup.close();
+                    return accept;
+                }
+                return reject;
+            }
+            TokenPickerMenu {
+                assets: root.assets;
+                pick(id) => { root.select_send_token(id); token_popup.close(); }
+            }
+        }
+    }
+
+    wallet_popup := PopupWindow {
+        x: root.clamp_len(
+            overview.switcher_abs_x - root.absolute-position.x,
+            12px,
+            root.width - 244px - 12px);
+        y: root.clamp_len(
+            overview.switcher_abs_y + overview.switcher_h + 6px - root.absolute-position.y,
+            12px,
+            root.height - 220px);
+        width: 244px;
+        close-policy: close-on-click-outside;
+        wallet_focus := FocusScope {
+            init => { self.focus(); }
+            key-pressed(event) => {
+                if (event.text == Key.Escape) {
+                    wallet_popup.close();
+                    return accept;
+                }
+                return reject;
+            }
+            WalletSwitcherMenu {
+                wallet_names: root.wallet_names;
+                active_wallet: root.active_wallet;
+                pick(n) => { root.switch_to_wallet(n); wallet_popup.close(); }
+                choose => { root.open_wallets(); wallet_popup.close(); }
+            }
+        }
+    }
+
+    af_token_popup := PopupWindow {
+        x: root.clamp_len(
+            activity_card.token_pill_abs_x + activity_card.token_pill_w - 200px - root.absolute-position.x,
+            12px,
+            root.width - 200px - 12px);
+        y: root.clamp_len(
+            activity_card.token_pill_abs_y + activity_card.token_pill_h + 6px - root.absolute-position.y,
+            12px,
+            root.height - 214px - 12px);
+        width: 200px;
+        close-policy: close-on-click-outside;
+        FocusScope {
+            init => { self.focus(); }
+            key-pressed(event) => {
+                if (event.text == Key.Escape) { af_token_popup.close(); return accept; }
+                return reject;
+            }
+            ActivityTokenMenu {
+                all_assets: root.all_assets;
+                selected_token: root.af_token;
+                pick(id) => { root.activity_set_token(id); af_token_popup.close(); }
+            }
+        }
+    }
+
+    af_party_popup := PopupWindow {
+        x: root.clamp_len(
+            activity_card.party_pill_abs_x + activity_card.party_pill_w - 300px - root.absolute-position.x,
+            12px,
+            root.width - 300px - 12px);
+        y: root.clamp_len(
+            activity_card.party_pill_abs_y + activity_card.party_pill_h + 6px - root.absolute-position.y,
+            12px,
+            root.height - root.af_party_popup_h - 12px);
+        width: 300px;
+        close-policy: close-on-click-outside;
+        FocusScope {
+            init => { self.focus(); }
+            key-pressed(event) => {
+                if (event.text == Key.Escape) { af_party_popup.close(); return accept; }
+                return reject;
+            }
+            ActivityPartyMenu {
+                address_book: root.address_book;
+                selected_party: root.af_party_addr;
+                search <=> root.af_party_search;
+                list_h: root.af_party_list_h;
+                shown: root.af_party_shown;
+                extra: root.af_party_extra;
+                contact_matches_search(n, a, t, q) => { root.contact_matches_search(n, a, t, q) }
+                matching_contact_count(q) => { root.matching_contact_count(q) }
+                pick(a) => { root.activity_set_party(a); af_party_popup.close(); }
+            }
+        }
+    }
+}

@@ -1,0 +1,1054 @@
+import { Theme, PageScroll, Status } from "../theme.slint";
+import { Palette, Fonts, Fade, Radii, Space, Motion } from "../design_tokens.slint";
+import { Card, CardHeader, MicroLabel, Field, PrimaryButton, GhostButton, IconButton, CopyButton, RefreshButton, Avatar, Icon, StatusDot, EmptyState, Chip, Amount, TableHeader, FieldLabel } from "../widgets.slint";
+import { CurrencyRow, FieldRow, TokenAmount, AccountView, NetworkStatsView, ExplorerTxRow, TracePartyCol, TraceEdgeRow } from "../models.slint";
+import { ActivityMovementAmount, SegBtn } from "wallet_components.slint";
+import { TraceDiagram } from "../components/trace_diagram.slint";
+import { ScrollView } from "std-widgets.slint";
+import { ValidatorClock } from "../components/validator_clock.slint";
+
+component KvRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> value;
+    in property <string> copy_value: root.value;
+    in property <color> value_color: Palette.text_value;
+    in property <bool> mono: false;
+    in property <bool> copyable: false;
+    in property <bool> refreshable: false;
+    in property <bool> refresh_acked: false;
+    callback refresh();
+    height: Theme.account_list_row_h;
+    spacing: Space.s_0;
+    VerticalLayout {
+        alignment: center;
+        width: Theme.account_label_w;
+        FieldLabel {
+            text: root.label;
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        horizontal-stretch: 1;
+        padding-left: Space.s_14;
+        max-width: value_text.preferred-width + 14px;
+        value_text := Text {
+            text: root.value;
+            color: root.value_color;
+            font-family: root.mono ? Fonts.mono : Fonts.ui;
+            font-weight: root.mono ? Fonts.regular : Fonts.semibold;
+            font-size: Fonts.small;
+            overflow: elide;
+        }
+    }
+    if root.copyable: VerticalLayout {
+        alignment: center;
+        padding-left: Space.s_6;
+        CopyButton { value: root.copy_value; }
+    }
+    Rectangle { horizontal-stretch: 1; min-width: 0px; }
+    if root.refreshable: VerticalLayout {
+        alignment: center;
+        padding-left: Space.s_6;
+        RefreshButton { acknowledged: root.refresh_acked; refreshed => { root.refresh(); } }
+    }
+}
+
+component FactDivider inherits VerticalLayout {
+    alignment: center;
+    padding-left: Space.s_6;
+    padding-right: Space.s_6;
+    Rectangle {
+        width: 1px;
+        height: 14px;
+        background: Palette.border_medium;
+    }
+}
+
+component FactsRow inherits HorizontalLayout {
+    height: Theme.account_list_row_h;
+    in property <string> label;
+    in property <string> lead_label;
+    in property <string> lead;
+    in property <length> lead_w: 0px;
+    in property <string> trail_label;
+    in property <string> trail;
+    in property <bool> mono: false;
+    in property <bool> copyable: false;
+    in property <string> copy_value;
+    spacing: Space.s_0;
+    VerticalLayout {
+        alignment: center;
+        width: Theme.account_label_w;
+        FieldLabel {
+            text: root.label;
+        }
+    }
+    HorizontalLayout {
+        alignment: start;
+        spacing: Space.s_8;
+        padding-left: Space.s_14;
+        horizontal-stretch: 0;
+        if root.lead_label != "": Text {
+            text: root.lead_label;
+            color: Palette.text_quiet;
+            font-family: Fonts.ui;
+            font-size: Fonts.small;
+            vertical-alignment: center;
+        }
+        Rectangle {
+            width: root.lead_w > 0px ? root.lead_w : lead_row.preferred-width;
+            lead_row := HorizontalLayout {
+                alignment: start;
+                spacing: Space.s_6;
+                Text {
+                    text: root.lead;
+                    color: Palette.text_value;
+                    font-family: root.mono ? Fonts.mono : Fonts.ui;
+                    font-weight: root.mono ? Fonts.regular : Fonts.semibold;
+                    font-size: Fonts.small;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                if root.copyable: VerticalLayout {
+                    alignment: center;
+                    CopyButton { value: root.copy_value; }
+                }
+                Rectangle { horizontal-stretch: 1; min-width: 0px; }
+            }
+        }
+        FactDivider { }
+        if root.trail_label != "": Text {
+            text: root.trail_label;
+            color: Palette.text_quiet;
+            font-family: Fonts.ui;
+            font-size: Fonts.small;
+            vertical-alignment: center;
+        }
+        Text {
+            text: root.trail;
+            color: Palette.text_value;
+            font-family: Fonts.ui;
+            font-weight: Fonts.semibold;
+            font-size: Fonts.small;
+            vertical-alignment: center;
+        }
+    }
+    Rectangle { horizontal-stretch: 1; min-width: 0px; }
+}
+
+component SectionLabel inherits Rectangle {
+    in property <string> text;
+    height: 22px;
+    VerticalLayout {
+        alignment: end;
+        padding-bottom: Space.s_2;
+        MicroLabel { text: root.text; }
+    }
+}
+
+component SectionRule inherits Rectangle {
+    height: 11px;
+    Rectangle {
+        y: 5px;
+        height: 1px;
+        background: Palette.border_subtle;
+    }
+}
+
+component StatRow inherits HorizontalLayout {
+    in property <string> label;
+    spacing: Space.s_12;
+    VerticalLayout {
+        alignment: center;
+        width: Theme.stat_label_w;
+        FieldLabel {
+            text: root.label;
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        horizontal-stretch: 1;
+        @children
+    }
+}
+
+component StatAmount inherits HorizontalLayout {
+    in property <bool> known;
+    in property <TokenAmount> amount;
+    alignment: start;
+    spacing: Space.s_0;
+    if !root.known: Text {
+        text: "—";
+        color: Palette.text_quiet;
+        font-family: Fonts.ui;
+        font-size: Fonts.body;
+        vertical-alignment: center;
+    }
+    if root.known: Amount {
+        amount: root.amount;
+        tint: Palette.value_neutral;
+        int_weight: Fonts.semibold;
+    }
+}
+
+component StatFigure inherits Text {
+    in property <string> value;
+    property <bool> known: root.value != "—";
+    text: root.value;
+    color: root.known ? Palette.text_secondary : Palette.text_quiet;
+    font-family: Fonts.ui;
+    font-weight: root.known ? Fonts.semibold : Fonts.regular;
+    font-size: Fonts.body;
+    vertical-alignment: center;
+}
+
+component AmountRow inherits HorizontalLayout {
+    height: Theme.account_list_row_h;
+    in property <string> label;
+    in property <TokenAmount> amount;
+    in property <color> amount_color: Palette.text_primary;
+    spacing: Space.s_14;
+    VerticalLayout {
+        alignment: center;
+        width: Theme.account_label_w;
+        FieldLabel {
+            text: root.label;
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        horizontal-stretch: 1;
+        Amount {
+            amount: root.amount;
+            tint: root.amount_color;
+        }
+    }
+}
+
+component CornerText inherits VerticalLayout {
+    in property <string> title;
+    in property <string> value;
+    in property <color> value_color: Palette.text_value;
+    in property <bool> align_right: false;
+    alignment: center;
+    spacing: Space.s_4;
+    Text {
+        text: root.title;
+        color: Palette.text_quiet;
+        font-family: Fonts.ui;
+        font-weight: Fonts.semibold;
+        font-size: Fonts.micro;
+        letter-spacing: Fonts.tracking_caps;
+        horizontal-alignment: root.align_right ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+    }
+    Text {
+        text: root.value;
+        color: root.value_color;
+        font-family: Fonts.mono;
+        font-weight: Fonts.semibold;
+        font-size: Fonts.body;
+        horizontal-alignment: root.align_right ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+        overflow: elide;
+    }
+}
+
+component TxListRow inherits Rectangle {
+    in property <ExplorerTxRow> item;
+    callback clicked();
+    property <color> tone: !root.item.success ? Palette.negative : (root.item.is_in ? Palette.value_in : Palette.value_out);
+    property <int> amount_lines: max(root.item.received.length + root.item.movements.length, 1);
+    height: root.amount_lines * Theme.tx_row_line_h + Theme.tx_row_pad_v * 2;
+    background: row_ta.has-hover ? Palette.hover_row : transparent;
+    Rectangle { y: 0; height: 1px; background: Palette.border_hairline; }
+    row_ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    HorizontalLayout {
+        padding-left: Theme.activity_row_pad;
+        padding-right: Theme.activity_row_pad;
+        spacing: Space.s_0;
+        Text {
+            width: Theme.activity_time_w;
+            text: root.item.time;
+            color: Palette.text_tertiary;
+            font-family: Fonts.ui;
+            font-size: Fonts.small;
+            vertical-alignment: center;
+        }
+        Rectangle {
+            width: Theme.activity_type_w;
+            HorizontalLayout {
+                alignment: start;
+                VerticalLayout {
+                    alignment: center;
+                    Chip {
+                        label: root.item.kind;
+                        min_w: 34px;
+                        fg: root.tone;
+                        bg: !root.item.success ? Palette.negative_quiet : (root.item.is_in ? Palette.positive_quiet : Palette.badge_neutral);
+                        frame: !root.item.success ? Palette.negative_border : (root.item.is_in ? Palette.positive_border : Palette.border_medium);
+                        font_size: Fonts.micro;
+                        weight: 700;
+                    }
+                }
+            }
+        }
+        HorizontalLayout {
+            horizontal-stretch: 1;
+            spacing: Space.s_8;
+            padding-right: Space.s_8;
+            if root.item.party_name != "": Text {
+                text: root.item.party_name;
+                color: Palette.text_secondary;
+                font-family: Fonts.ui;
+                font-weight: Fonts.semibold;
+                font-size: Fonts.small;
+                vertical-alignment: center;
+                overflow: elide;
+                min-width: 0px;
+            }
+            if root.item.party_name == "": Text {
+                text: root.item.party;
+                color: Palette.text_tertiary;
+                font-family: Fonts.mono;
+                font-size: Fonts.micro;
+                vertical-alignment: center;
+                overflow: elide;
+                min-width: 0px;
+            }
+            if root.item.party_extra != "": VerticalLayout {
+                alignment: center;
+                Text {
+                    text: root.item.party_extra;
+                    color: Palette.text_quiet;
+                    font-family: Fonts.ui;
+                    font-size: Fonts.micro;
+                }
+            }
+            if root.item.bounced: VerticalLayout {
+                alignment: center;
+                Chip {
+                    label: "bounced";
+                    fg: Palette.warning;
+                    bg: Palette.warning_quiet;
+                    frame: Palette.border_subtle;
+                    font_size: Fonts.micro;
+                }
+            }
+            Rectangle { horizontal-stretch: 1; min-width: 0px; }
+        }
+        Rectangle {
+            width: Theme.explorer_amount_w;
+            clip: true;
+            VerticalLayout {
+                alignment: center;
+                spacing: Space.s_0;
+                for m in root.item.received: ActivityMovementAmount {
+                    movement: m;
+                    col_w: Theme.explorer_amount_w;
+                    sign: "+";
+                    amount_color: Palette.value_in;
+                }
+                for m in root.item.movements: ActivityMovementAmount {
+                    movement: m;
+                    col_w: Theme.explorer_amount_w;
+                    sign: root.item.received.length > 0
+                        ? "−"
+                        : (!root.item.signed ? "" : (root.item.is_in ? "+" : "−"));
+                    amount_color: root.item.received.length > 0 ? Palette.value_out : root.tone;
+                }
+            }
+        }
+        Text {
+            width: Theme.explorer_fee_w;
+            text: root.item.fee;
+            color: Palette.value_neutral;
+            opacity: Fade.muted;
+            font-family: Fonts.ui;
+            font-size: Fonts.small;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+        }
+        Rectangle {
+            width: Theme.explorer_hash_w - Theme.activity_row_pad;
+            HorizontalLayout {
+                padding-left: Theme.explorer_hash_gap;
+                spacing: Space.s_4;
+                alignment: start;
+                Text {
+                    text: root.item.hash_short;
+                    color: Palette.text_tertiary;
+                    font-family: Fonts.mono;
+                    font-size: Fonts.micro;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                if root.item.hash_short != "": VerticalLayout {
+                    alignment: center;
+                    CopyButton { value: root.item.hash_full; }
+                }
+            }
+        }
+    }
+}
+
+export component ExplorerPage inherits VerticalLayout {
+    in property <length> page_height: 400px;
+
+    in property <angle>  clock_needle_angle: 66deg;
+    in property <float>  clock_elect_start: 0.68;
+    in property <float>  clock_elect_end: 0.85;
+    in property <string> clock_active_round: "BLUE";
+    in property <string> clock_round_ends_in: "2h 13m 46s";
+    in property <string> clock_elections: "Closed";
+    in property <string> clock_elections_countdown: "5h 47m 15s";
+    in property <bool>   clock_elections_open: false;
+    in property <bool>   clock_active_green: false;
+
+    in-out property <string> address_input;
+    property <bool> pasted: false;
+    callback lookup(string);
+
+    property <bool> account_refresh_acked: false;
+    account_refresh_ack := Timer {
+        interval: Motion.ack_dwell;
+        running: false;
+        triggered => { root.account_refresh_acked = false; self.running = false; }
+    }
+
+    in property <bool> loading: false;
+    changed loading => {
+        if (!root.loading && root.account_refresh_acked) {
+            account_refresh_ack.running = false;
+            account_refresh_ack.running = true;
+        }
+    }
+    in property <string> error: "";
+    in property <bool> has_account: false;
+    in property <AccountView> account;
+    in property <[CurrencyRow]> currencies: [];
+    in property <[FieldRow]> contract_fields: [];
+    in property <NetworkStatsView> network;
+
+    in property <[ExplorerTxRow]> txs: [];
+    in property <bool> txs_loading: false;
+    in property <string> txs_error: "";
+    in property <int> txs_skipped: 0;
+
+    in property <bool> trace_open: false;
+    changed trace_open => { if (!root.trace_open) { PageScroll.held = false; } }
+    in property <bool> trace_loading: false;
+    in property <string> trace_error: "";
+    in property <string> trace_hash: "";
+    in property <string> trace_summary: "";
+    in property <[TracePartyCol]> trace_parties: [];
+    in property <[TraceEdgeRow]> trace_edges: [];
+    property <bool> trace_raw_ops: false;
+    callback open_trace(string);
+    callback close_trace();
+
+    property <color> st_fg: Status.account_fg(root.account.status);
+
+    spacing: Space.stack_gap;
+
+    HorizontalLayout {
+        spacing: Space.s_10;
+        Rectangle {
+            horizontal-stretch: 1;
+            height: 50px;
+            border-radius: Radii.md;
+            background: Palette.surface_sunken;
+            border-width: addr_field.has_focus ? 2px : 1px;
+            border-color: addr_field.has_focus ? Palette.focus_ring : Palette.border_medium;
+            HorizontalLayout {
+                padding-left: Space.s_16; padding-right: Space.s_8;
+                spacing: Space.s_12;
+                VerticalLayout {
+                    alignment: center;
+                    Icon { source: @image-url("../../assets/icons/search.svg"); tint: Palette.text_quiet; width: 20px; height: 20px; }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    addr_field := Field {
+                        placeholder: "Enter account address";
+                        font_family: Fonts.mono;
+                        font_size: Fonts.body;
+                        field_bg: transparent;
+                        border_normal: transparent;
+                        show_focus_border: false;
+                        text <=> root.address_input;
+                        accepted => { if (root.address_input != "") { root.lookup(root.address_input); } }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: root.pasted ? @image-url("../../assets/icons/check.svg") : @image-url("../../assets/icons/paste.svg");
+                        tint: root.pasted ? Palette.positive : Palette.text_tertiary;
+                        size: 30px;
+                        icon_size: 16px;
+                        clicked => {
+                            addr_field.paste_replace();
+                            root.pasted = true;
+                            paste_timer.running = true;
+                        }
+                    }
+                }
+            }
+            paste_timer := Timer { interval: Motion.ack_dwell; running: false; triggered => { root.pasted = false; self.running = false; } }
+        }
+        VerticalLayout {
+            alignment: center;
+            PrimaryButton {
+                label: "Scan";
+                height_: 50px;
+                enabled: root.address_input != "";
+                clicked => { root.lookup(root.address_input); }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            GhostButton {
+                label: "Clear";
+                height_: 50px;
+                enabled: root.address_input != "" || root.has_account || root.loading || root.error != "";
+                clicked => { root.address_input = ""; root.lookup(""); }
+            }
+        }
+    }
+
+    HorizontalLayout {
+        spacing: Space.stack_gap;
+
+        Card {
+            horizontal-stretch: 1;
+            VerticalLayout {
+                CardHeader {
+                    icon: @image-url("../../assets/icons/account-state.svg");
+                    title: "Account State";
+                    if root.has_account: HorizontalLayout {
+                        alignment: end;
+                        spacing: Space.s_6;
+                        VerticalLayout { alignment: center; StatusDot { tint: root.st_fg; pulse: false; } }
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: root.account.status;
+                                color: root.st_fg;
+                                font-family: Fonts.ui;
+                                font-weight: Fonts.semibold;
+                                font-size: Fonts.body;
+                            }
+                        }
+                    }
+                }
+                if !root.loading && root.error == "" && !root.has_account: VerticalLayout {
+                    padding-left: Space.s_16; padding-right: Space.s_16;
+                    padding-top: Space.card_pad_v_empty; padding-bottom: Space.card_pad_v_empty;
+                    EmptyState {
+                        icon: @image-url("../../assets/icons/search.svg");
+                        title: "No account selected";
+                        subtitle: "Enter an address above to inspect its on-chain state.";
+                    }
+                }
+                if root.loading: VerticalLayout {
+                    padding-left: Space.s_16; padding-right: Space.s_16;
+                    padding-top: Space.card_pad_v_empty; padding-bottom: Space.card_pad_v_empty;
+                    EmptyState {
+                        icon: @image-url("../../assets/icons/search.svg");
+                        title: "Fetching account state…";
+                        subtitle: "Reading the account from the network.";
+                    }
+                }
+                if !root.loading && root.error != "": VerticalLayout {
+                    padding-left: Space.s_16; padding-right: Space.s_16;
+                    padding-top: Space.card_pad_v_empty; padding-bottom: Space.card_pad_v_empty;
+                    EmptyState {
+                        icon: @image-url("../../assets/icons/search.svg");
+                        title: "Lookup failed";
+                        subtitle: root.error;
+                    }
+                }
+                if !root.loading && root.error == "" && root.has_account: VerticalLayout {
+                    vertical-stretch: 1;
+                    padding-left: Space.s_16; padding-right: Space.s_16;
+                    padding-top: Space.card_pad_v; padding-bottom: Space.card_pad_v;
+                    spacing: Space.s_0;
+
+                    KvRow {
+                        label: "Account";
+                        value: root.account.address;
+                        mono: true;
+                        copyable: true;
+                        refreshable: true;
+                        refresh_acked: root.account_refresh_acked;
+                        refresh => {
+                            root.account_refresh_acked = true;
+                            account_refresh_ack.running = true;
+                            root.lookup(root.account.address);
+                        }
+                    }
+                    AmountRow {
+                        label: "Balance";
+                        amount: root.account.balance;
+                        amount_color: Palette.value_in;
+                    }
+                    if root.account.has_due: AmountRow {
+                        label: "Due payment";
+                        amount: root.account.due_payment;
+                        amount_color: Palette.warning;
+                    }
+                    if root.account.last_paid != "": KvRow { label: "Last paid"; value: root.account.last_paid; }
+
+                    SectionRule { }
+                    SectionLabel { text: "CURRENCY COLLECTION"; }
+                    if root.currencies.length == 0: Rectangle {
+                        height: Theme.account_list_row_h;
+                        Text {
+                            x: 0;
+                            text: "No currency found";
+                            color: Palette.text_quiet;
+                            font-family: Fonts.ui;
+                            font-size: Fonts.small;
+                            vertical-alignment: center;
+                        }
+                    }
+                    if root.currencies.length > 0: ScrollView {
+                        vertical-scrollbar-policy: ScrollBarPolicy.always-off;
+                        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+                        height: min(root.currencies.length, Theme.account_list_max_rows) * Theme.account_list_row_h;
+                        viewport-height: root.currencies.length * Theme.account_list_row_h;
+                        VerticalLayout {
+                            for cc in root.currencies: Rectangle {
+                                height: Theme.account_list_row_h;
+                                AmountRow {
+                                    label: cc.label;
+                                    amount: cc.amount;
+                                    amount_color: Palette.value_in;
+                                }
+                            }
+                        }
+                    }
+
+                    if root.account.exists: SectionRule { }
+                    if root.account.exists: SectionLabel { text: "CODE & DATA"; }
+                    if root.account.exists: FactsRow {
+                        label: "Storage used";
+                        lead_label: "Bits";
+                        lead: root.account.storage_bits;
+                        trail_label: "Cells";
+                        trail: root.account.storage_cells;
+                    }
+                    if root.account.has_code: KvRow { label: "Code hash"; value: root.account.code_hash; mono: true; copyable: true; }
+                    if root.account.has_code: KvRow { label: "Data hash"; value: root.account.data_hash; mono: true; copyable: true; }
+                    if root.account.has_code: FactsRow {
+                        label: "Code";
+                        lead: root.account.code;
+                        lead_w: Theme.account_boc_w;
+                        trail: root.account.code_size;
+                        copy_value: root.account.code_full;
+                        mono: true;
+                        copyable: true;
+                    }
+                    if root.account.has_code: FactsRow {
+                        label: "Data";
+                        lead: root.account.data;
+                        lead_w: Theme.account_boc_w;
+                        trail: root.account.data_size;
+                        copy_value: root.account.data_full;
+                        mono: true;
+                        copyable: true;
+                    }
+
+                    if root.account.contract_kind != "": SectionRule { }
+                    if root.account.contract_kind != "": SectionLabel { text: "DECODED ACCOUNT DATA"; }
+                    if root.account.contract_kind != "": VerticalLayout {
+                        vertical-stretch: root.contract_fields.length > 0 ? 1 : 0;
+                        spacing: Space.s_0;
+                        KvRow { label: "Contract type"; value: root.account.contract_kind; }
+
+                        if root.contract_fields.length > 0: Rectangle {
+                            vertical-stretch: 1;
+                            height: min(root.contract_fields.length, Theme.decoded_list_max_rows) * Theme.account_list_row_h;
+                            TouchArea {
+                                property <bool> has_more: fields_list.viewport-height > fields_list.visible-height;
+                                changed has-hover => { PageScroll.held = self.has-hover && self.has_more; }
+                                moved => { PageScroll.held = self.has_more; }
+                                scroll-event(ev) => {
+                                    PageScroll.held = false;
+                                    return reject;
+                                }
+                                fields_list := ScrollView {
+                                    vertical-scrollbar-policy: ScrollBarPolicy.always-off;
+                                    horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+                                    y: 0;
+                                    width: 100%;
+                                    height: parent.height;
+                                    viewport-height: root.contract_fields.length * Theme.account_list_row_h;
+                                    VerticalLayout {
+                                        for field in root.contract_fields: Rectangle {
+                                            height: Theme.account_list_row_h;
+                                            KvRow {
+                                                label: field.label;
+                                                value: field.value;
+                                                mono: field.mono;
+                                                copyable: field.copyable;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if root.contract_fields.length == 0: Rectangle { vertical-stretch: 1; }
+                }
+            }
+        }
+
+        VerticalLayout {
+            min-width: 400px;
+            max-width: 400px;
+            spacing: Space.stack_gap;
+
+            Card {
+                VerticalLayout {
+                    CardHeader {
+                        icon: @image-url("../../assets/icons/clock.svg");
+                        title: "Validator Clock";
+                    }
+                    Rectangle {
+                        height: 254px;
+                    property <length> fw: 152px;
+                    property <length> fh: 62px;
+                    property <length> cpad: 6px;
+                    property <length> rh: 104px;
+
+                    Rectangle { x: parent.cpad; y: parent.cpad; width: parent.fw; height: parent.fh; border-radius: Radii.md; background: Palette.surface_sunken; border-width: 1px; border-color: Palette.border_subtle; }
+                    Rectangle { x: parent.width - parent.fw - parent.cpad; y: parent.cpad; width: parent.fw; height: parent.fh; border-radius: Radii.md; background: Palette.surface_sunken; border-width: 1px; border-color: Palette.border_subtle; }
+                    Rectangle { x: parent.cpad; y: parent.height - parent.fh - parent.cpad; width: parent.fw; height: parent.fh; border-radius: Radii.md; background: Palette.surface_sunken; border-width: 1px; border-color: Palette.border_subtle; }
+                    Rectangle { x: parent.width - parent.fw - parent.cpad; y: parent.height - parent.fh - parent.cpad; width: parent.fw; height: parent.fh; border-radius: Radii.md; background: Palette.surface_sunken; border-width: 1px; border-color: Palette.border_subtle; }
+
+                    Rectangle {
+                        x: (parent.width - 2 * parent.rh) / 2;
+                        y: (parent.height - 2 * parent.rh) / 2;
+                        width: 2 * parent.rh;
+                        height: 2 * parent.rh;
+                        border-radius: parent.rh;
+                        background: Palette.surface_raised;
+                    }
+
+                    ValidatorClock {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        size: 184px;
+                        needle_angle: root.clock_needle_angle;
+                        elect_frac_start: root.clock_elect_start;
+                        elect_frac_end: root.clock_elect_end;
+                        elections_open: root.clock_elections_open;
+                        active_is_green: root.clock_active_green;
+                    }
+
+                    CornerText {
+                        x: parent.cpad + 13px; y: parent.cpad; width: parent.fw - 26px; height: parent.fh;
+                        title: "ACTIVE ROUND";
+                        value: root.clock_active_round;
+                        value_color: root.clock_active_round == "GREEN" ? Palette.positive : Palette.accent_text;
+                    }
+                    CornerText {
+                        x: parent.width - parent.fw - parent.cpad + 13px; y: parent.cpad; width: parent.fw - 26px; height: parent.fh;
+                        align_right: true;
+                        title: "ELECTION PHASE";
+                        value: root.clock_elections;
+                        value_color: root.clock_elections_open ? Palette.clock_now : Palette.text_primary;
+                    }
+                    CornerText {
+                        x: parent.cpad + 13px; y: parent.height - parent.fh - parent.cpad; width: parent.fw - 26px; height: parent.fh;
+                        title: "ROUND ENDS IN";
+                        value: root.clock_round_ends_in;
+                    }
+                    CornerText {
+                        x: parent.width - parent.fw - parent.cpad + 13px; y: parent.height - parent.fh - parent.cpad; width: parent.fw - 26px; height: parent.fh;
+                        align_right: true;
+                        title: root.clock_elections_open ? "ELECTION ENDS IN" : "NEXT ELECTION IN";
+                        value: root.clock_elections_countdown;
+                        value_color: root.clock_elections_open ? Palette.clock_now : Palette.text_value;
+                    }
+                    }
+                }
+            }
+
+            Card {
+                vertical-stretch: 1;
+                VerticalLayout {
+                    CardHeader {
+                        icon: @image-url("../../assets/icons/stats.svg");
+                        title: "Network Stats";
+                    }
+                    VerticalLayout {
+                        padding-left: Space.s_16; padding-right: Space.s_16;
+                        padding-top: Space.card_pad_v; padding-bottom: Space.card_pad_v;
+                        spacing: Space.s_12;
+                        alignment: start;
+                        StatRow {
+                            label: "Total supply";
+                            StatAmount { known: root.network.has_supply; amount: root.network.total_supply; }
+                        }
+                        StatRow {
+                            label: "Validators";
+                            StatFigure { value: root.network.validators; }
+                        }
+                        StatRow {
+                            label: "Total stake";
+                            StatAmount { known: root.network.has_stake; amount: root.network.total_stake; }
+                        }
+                        StatRow {
+                            label: "% of supply";
+                            StatFigure { value: root.network.stake_ratio; }
+                        }
+                        Rectangle { height: 1px; background: Palette.border_subtle; }
+                        Text {
+                            text: root.network.supply_note;
+                            color: Palette.text_quiet;
+                            font-family: Fonts.ui;
+                            font-size: Fonts.micro;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Card {
+        VerticalLayout {
+            CardHeader {
+                icon: @image-url("../../assets/icons/activity.svg");
+                title: root.trace_open ? "Transaction Trace" : "Transactions";
+                if !root.trace_open && root.txs.length > 0: HorizontalLayout {
+                    alignment: end;
+                    VerticalLayout {
+                        alignment: center;
+                        FieldLabel {
+                            text: root.txs.length == 1 ? "1 transaction" : root.txs.length + " transactions";
+                        }
+                    }
+                }
+            }
+
+            if !root.trace_open && !root.txs_loading && root.txs_error == "" && root.txs.length == 0 && !root.has_account && !root.loading: VerticalLayout {
+                padding-left: Space.s_16; padding-right: Space.s_16;
+                padding-top: Space.card_pad_v_empty; padding-bottom: Space.card_pad_v_empty;
+                EmptyState {
+                    icon: @image-url("../../assets/icons/activity.svg");
+                    title: "No account selected";
+                    subtitle: "Scan an address to see the transactions it has taken part in.";
+                }
+            }
+            if !root.trace_open && root.txs_loading: VerticalLayout {
+                padding-left: Space.s_16; padding-right: Space.s_16;
+                padding-top: Space.card_pad_v_empty; padding-bottom: Space.card_pad_v_empty;
+                EmptyState {
+                    icon: @image-url("../../assets/icons/activity.svg");
+                    title: "Fetching transactions…";
+                    subtitle: "Reading the account's latest transactions from the network.";
+                }
+            }
+            if !root.trace_open && !root.txs_loading && root.txs_error != "": VerticalLayout {
+                padding-left: Space.s_16; padding-right: Space.s_16;
+                padding-top: Space.card_pad_v_empty; padding-bottom: Space.card_pad_v_empty;
+                EmptyState {
+                    icon: @image-url("../../assets/icons/activity.svg");
+                    title: "History unavailable";
+                    subtitle: root.txs_error;
+                }
+            }
+            if !root.trace_open && !root.txs_loading && root.txs_error == "" && root.txs.length == 0 && (root.has_account || root.loading): VerticalLayout {
+                padding-left: Space.s_16; padding-right: Space.s_16;
+                padding-top: Space.card_pad_v_empty; padding-bottom: Space.card_pad_v_empty;
+                EmptyState {
+                    icon: @image-url("../../assets/icons/activity.svg");
+                    title: "No transactions in reach";
+                    subtitle: "This endpoint keeps only recent history, and none of this account's transactions fall inside it.";
+                }
+            }
+
+            if !root.trace_open && root.txs.length > 0: TableHeader {
+                columns: [
+                    { label: "TIME", x: Theme.activity_row_pad, width: Theme.activity_time_w },
+                    {
+                        label: "TYPE",
+                        x: Theme.activity_row_pad + Theme.activity_time_w,
+                        width: Theme.activity_type_w,
+                    },
+                    {
+                        label: "FROM / TO",
+                        x: Theme.activity_row_pad + Theme.activity_time_w + Theme.activity_type_w,
+                        width: self.width - Theme.explorer_hash_w - Theme.explorer_fee_w - Theme.explorer_amount_w - (Theme.activity_row_pad + Theme.activity_time_w + Theme.activity_type_w),
+                    },
+                    {
+                        label: "VALUE",
+                        x: self.width - Theme.explorer_hash_w - Theme.explorer_fee_w - Theme.explorer_amount_w,
+                        width: Theme.explorer_amount_w - (Theme.activity_amount_token_gap_w + Theme.activity_amount_token_avatar_w + Theme.activity_amount_token_symbol_w),
+                        right: true,
+                    },
+                    {
+                        label: "FEE",
+                        x: self.width - Theme.explorer_hash_w - Theme.explorer_fee_w,
+                        width: Theme.explorer_fee_w,
+                        right: true,
+                    },
+                    {
+                        label: "TX HASH",
+                        x: self.width - Theme.explorer_hash_w + Theme.explorer_hash_gap,
+                        width: Theme.explorer_hash_w - Theme.activity_row_pad - Theme.explorer_hash_gap,
+                    },
+                ];
+            }
+            if !root.trace_open && root.txs.length > 0: Rectangle { height: 1px; background: Palette.border_subtle; }
+            if !root.trace_open && root.txs.length > 0: VerticalLayout {
+                for tx in root.txs: VerticalLayout {
+                    if tx.group != "": Rectangle {
+                        height: 26px;
+                        Rectangle {
+                            x: 8px;
+                            width: parent.width - 16px;
+                            height: 20px;
+                            y: (parent.height - self.height) / 2;
+                            background: Palette.surface_overlay;
+                            border-radius: Radii.sm;
+                        }
+                        Text {
+                            width: 100%;
+                            text: tx.group;
+                            color: Palette.text_quiet;
+                            font-family: Fonts.ui;
+                            font-weight: Fonts.bold;
+                            font-size: Fonts.micro;
+                            letter-spacing: Space.s_2;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                    TxListRow {
+                        item: tx;
+                        clicked => { root.open_trace(tx.hash_full); }
+                    }
+                }
+            }
+            if root.trace_open: VerticalLayout {
+                HorizontalLayout {
+                    padding-left: Space.s_16; padding-right: Space.s_16;
+                    padding-top: Space.card_pad_v; padding-bottom: Space.card_pad_v;
+                    spacing: Space.s_12;
+                    VerticalLayout {
+                        alignment: center;
+                        GhostButton {
+                            label: "Back";
+                            height_: 30px;
+                            clicked => { root.close_trace(); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Text {
+                            text: root.trace_hash;
+                            color: Palette.text_tertiary;
+                            font-family: Fonts.mono;
+                            font-size: Fonts.micro;
+                            overflow: elide;
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        CopyButton { value: root.trace_hash; }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    if root.trace_edges.length > 0: VerticalLayout {
+                        alignment: center;
+                        Rectangle {
+                            height: 30px;
+                            background: Palette.surface_inset;
+                            border-radius: 9px;
+                            HorizontalLayout {
+                                padding: Space.s_4;
+                                spacing: Space.s_2;
+                                SegBtn {
+                                    label: "METHOD";
+                                    active: !root.trace_raw_ops;
+                                    clicked => { root.trace_raw_ops = false; }
+                                }
+                                SegBtn {
+                                    label: "RAW OP";
+                                    active: root.trace_raw_ops;
+                                    clicked => { root.trace_raw_ops = true; }
+                                }
+                            }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Text {
+                            text: root.trace_summary;
+                            color: Palette.text_quiet;
+                            font-family: Fonts.ui;
+                            font-size: Fonts.micro;
+                            horizontal-alignment: right;
+                        }
+                    }
+                }
+                Rectangle { height: 1px; background: Palette.border_subtle; }
+
+                if root.trace_loading: VerticalLayout {
+                    padding-left: Space.s_16; padding-right: Space.s_16;
+                    padding-top: Space.card_pad_v_empty; padding-bottom: Space.card_pad_v_empty;
+                    EmptyState {
+                        icon: @image-url("../../assets/icons/activity.svg");
+                        title: "Walking the message tree…";
+                        subtitle: "Following every message this transaction sent, one hop at a time.";
+                    }
+                }
+                if !root.trace_loading && root.trace_error != "": VerticalLayout {
+                    padding-left: Space.s_16; padding-right: Space.s_16;
+                    padding-top: Space.card_pad_v_empty; padding-bottom: Space.card_pad_v_empty;
+                    EmptyState {
+                        icon: @image-url("../../assets/icons/activity.svg");
+                        title: "Trace unavailable";
+                        subtitle: root.trace_error;
+                    }
+                }
+                if !root.trace_loading && root.trace_error == "" && root.trace_edges.length > 0: VerticalLayout {
+                    padding-left: Space.s_16; padding-right: Space.s_16; padding-top: Space.s_4;
+                    TraceDiagram {
+                        parties: root.trace_parties;
+                        edges: root.trace_edges;
+                        raw_ops: root.trace_raw_ops;
+                        viewport_h: min(root.trace_edges.length * 66px, max(330px, root.page_height - 250px));
+                    }
+                }
+                if !root.trace_loading && root.trace_error == "" && root.trace_edges.length > 0: HorizontalLayout {
+                    padding-left: Space.s_16; padding-right: Space.s_16;
+                    padding-top: Space.card_pad_v; padding-bottom: Space.card_pad_v;
+                    Text {
+                        text: "Drag the sheet to move it, or throw it. The wheel pans it, Shift-wheel sideways; the bars and the arrow keys cross it in one go.";
+                        color: Palette.text_quiet;
+                        font-family: Fonts.ui;
+                        font-size: Fonts.micro;
+                    }
+                }
+            }
+
+            if !root.trace_open && root.txs_skipped > 0: VerticalLayout {
+                padding-left: Theme.activity_row_pad; padding-right: Theme.activity_row_pad;
+                padding-top: Space.card_pad_v; padding-bottom: Space.card_pad_v;
+                Text {
+                    text: root.txs_skipped + (root.txs_skipped == 1 ? " transaction could not be decoded and is not shown." : " transactions could not be decoded and are not shown.");
+                    color: Palette.warning;
+                    font-family: Fonts.ui;
+                    font-size: Fonts.micro;
+                }
+            }
+        }
+    }
+}

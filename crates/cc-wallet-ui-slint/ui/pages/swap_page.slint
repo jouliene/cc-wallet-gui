@@ -1,0 +1,665 @@
+import { Theme } from "../theme.slint";
+import { Palette, Fonts, Fade, Motion, Radii, Space } from "../design_tokens.slint";
+import { PrimaryButton, IconButton, CopyButton, Icon, Avatar, Card, CardHeader, MicroLabel, InlineError, NoticeBlock, EmptyState, Field, UserActivity, MaxChip, Amount, FieldLabel } from "../widgets.slint";
+import { AssetRow, TokenAmount } from "../models.slint";
+import { AssetListRow } from "wallet_components.slint";
+import { TokenPickerMenu } from "wallet_menus.slint";
+
+component SwapAmount inherits Rectangle {
+    in property <TokenAmount> amount;
+    in property <string> sign;
+    in property <color> tint: Palette.text_primary;
+    in property <length> font_size: Fonts.body;
+    in property <bool> show_token: true;
+    horizontal-stretch: 0;
+    preferred-width: line.preferred-width;
+    height: line.preferred-height;
+    line := Amount {
+        amount: root.amount;
+        sign: root.sign;
+        tint: root.tint;
+        font_size: root.font_size;
+        show_token: root.show_token;
+    }
+}
+
+component TokenSelector inherits Rectangle {
+    in property <[AssetRow]> assets;
+    in property <string> symbol;
+    in property <string> initial;
+    in property <color> token_color;
+    callback pick(int);
+    width: pill.preferred-width;
+    height: 36px;
+    pill := Rectangle {
+        background: ta.has-hover ? Palette.hover_strong : Palette.surface_inset;
+        border-radius: Radii.md;
+        border-width: 1px;
+        border-color: popup.is-open ? Palette.selected_border : Palette.border_subtle;
+        HorizontalLayout {
+            padding-left: Space.s_6;
+            padding-right: Space.s_8;
+            spacing: Space.s_6;
+            VerticalLayout { alignment: center; Avatar { initial: root.initial; tint: root.token_color; size: 22px; } }
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: root.symbol;
+                    color: Palette.text_primary;
+                    font-family: Fonts.ui;
+                    font-weight: Fonts.semibold;
+                    font-size: Fonts.body;
+                }
+            }
+            VerticalLayout { alignment: center; Icon { source: @image-url("../../assets/icons/chevron-down.svg"); tint: Palette.text_tertiary; width: 13px; height: 13px; } }
+        }
+        ta := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { UserActivity.ping(); popup.show(); }
+        }
+    }
+    popup := PopupWindow {
+        x: 0;
+        y: parent.height + 6px;
+        width: 180px;
+        close-policy: close-on-click-outside;
+        TokenPickerMenu {
+            assets: root.assets;
+            pick(id) => { root.pick(id); popup.close(); }
+        }
+    }
+}
+
+component StepArrow inherits Rectangle {
+    in property <image> icon;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: 28px;
+    height: 28px;
+    border-radius: Radii.sm;
+    border-width: 1px;
+    border-color: root.enabled ? Palette.border_strong : Palette.border_subtle;
+    background: root.enabled && ta.has-hover ? Palette.hover_strong : Palette.surface_inset;
+    animate background { duration: Motion.fast; easing: Motion.curve; }
+    Icon {
+        source: root.icon;
+        tint: root.enabled ? Palette.text_secondary : Palette.text_quiet;
+        width: 14px;
+        height: 14px;
+    }
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+}
+
+component SlippageStepper inherits HorizontalLayout {
+    in-out property <string> value;
+    in property <bool> can_step_down;
+    in property <bool> can_step_up;
+    in property <bool> valid: true;
+    callback step(bool);
+    callback edited(string);
+    spacing: Space.s_6;
+    VerticalLayout {
+        alignment: center;
+        StepArrow {
+            icon: @image-url("../../assets/icons/chevron-left.svg");
+            enabled: root.can_step_down;
+            clicked => { root.step(false); }
+        }
+    }
+    Rectangle {
+        width: 78px;
+        height: 28px;
+        Field {
+            height_: 28px;
+            text <=> root.value;
+            placeholder: "0";
+            font_size: Fonts.small;
+            font_weight: Fonts.semibold;
+            alignment: TextHorizontalAlignment.right;
+            pad_left: 8px;
+            pad_right: 24px;
+            border_normal: root.valid ? Palette.border_medium : Palette.negative_border;
+            edited(t) => { root.edited(t); }
+        }
+        Text {
+            x: parent.width - 18px;
+            width: 12px;
+            height: 28px;
+            text: "%";
+            color: root.valid ? Palette.text_quiet : Palette.negative;
+            font-family: Fonts.ui;
+            font-size: Fonts.small;
+            vertical-alignment: center;
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        StepArrow {
+            icon: @image-url("../../assets/icons/chevron-right.svg");
+            enabled: root.can_step_up;
+            clicked => { root.step(true); }
+        }
+    }
+}
+
+component SwapPanel inherits Rectangle {
+    in property <string> title;
+    in property <bool> editable;
+    in property <TokenAmount> token;
+    in property <TokenAmount> quote;
+    in property <bool> quote_available;
+    in-out property <string> amount;
+    in property <[AssetRow]> assets;
+    callback amount_edited(string);
+    callback max_amount();
+    callback pick(int);
+    background: Palette.surface_sunken;
+    border-radius: Radii.md;
+    border-width: 1px;
+    border-color: Palette.border_subtle;
+    VerticalLayout {
+        padding: Space.s_12;
+        spacing: Space.s_6;
+        HorizontalLayout {
+            spacing: Space.s_6;
+            VerticalLayout { alignment: center; MicroLabel { text: root.title; } }
+            Rectangle { horizontal-stretch: 1; }
+            VerticalLayout {
+                alignment: center;
+                FieldLabel {
+                    text: "Balance";
+                }
+            }
+            SwapAmount {
+                amount: root.token;
+                tint: Palette.text_secondary;
+                font_size: Fonts.small;
+                show_token: false;
+            }
+        }
+        HorizontalLayout {
+            spacing: Space.s_10;
+            Rectangle {
+                horizontal-stretch: 1;
+                preferred-width: 0px;
+                min-width: 90px;
+                height: 40px;
+                clip: true;
+                if root.editable: Field {
+                    width: 100%;
+                    height_: 40px;
+                    text <=> root.amount;
+                    group_digits: true;
+                    placeholder: "0.0";
+                    font_family: Fonts.ui;
+                    font_size: Fonts.hero;
+                    font_weight: Fonts.bold;
+                    pad_left: 0px;
+                    pad_right: 0px;
+                    field_bg: transparent;
+                    border_normal: transparent;
+                    show_focus_border: false;
+                    edited(t) => { root.amount_edited(t); }
+                }
+                if !root.editable: VerticalLayout {
+                    width: 100%;
+                    height: 100%;
+                    alignment: center;
+                    if root.quote_available: SwapAmount {
+                        amount: root.quote;
+                        tint: Palette.text_primary;
+                        font_size: Fonts.hero;
+                        show_token: false;
+                    }
+                    if !root.quote_available: Text {
+                        text: "0.0";
+                        color: Palette.text_placeholder;
+                        font-family: Fonts.ui;
+                        font-weight: Fonts.regular;
+                        font-size: Fonts.hero;
+                    }
+                }
+            }
+            if root.editable: VerticalLayout {
+                alignment: center;
+                MaxChip { clicked => { root.max_amount(); } }
+            }
+            VerticalLayout {
+                alignment: center;
+                TokenSelector {
+                    assets: root.assets;
+                    symbol: root.token.symbol;
+                    initial: root.token.initial;
+                    token_color: root.token.color;
+                    pick(id) => { root.pick(id); }
+                }
+            }
+        }
+    }
+}
+
+component DetailRow inherits Rectangle {
+    in property <string> label;
+    height: 28px;
+    HorizontalLayout {
+        spacing: Space.s_8;
+        MicroLabel {
+            text: root.label;
+            height: root.height;
+            vertical-alignment: center;
+        }
+        Rectangle { horizontal-stretch: 1; }
+        @children
+    }
+}
+
+component DetailValue inherits Text {
+    color: Palette.text_secondary;
+    font-family: Fonts.ui;
+    font-size: Fonts.small;
+    horizontal-alignment: right;
+    vertical-alignment: center;
+    overflow: elide;
+}
+
+component ReceiptRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <TokenAmount> amount;
+    in property <string> sign;
+    in property <color> tint: Palette.text_primary;
+    in property <string> note;
+    spacing: Space.s_12;
+    VerticalLayout {
+        alignment: center;
+        width: 92px;
+        MicroLabel { text: root.label; }
+    }
+    VerticalLayout {
+        alignment: center;
+        horizontal-stretch: 1;
+        SwapAmount {
+            amount: root.amount;
+            sign: root.sign;
+            tint: root.tint;
+        }
+    }
+    if root.note != "": VerticalLayout {
+        alignment: center;
+        Text {
+            text: root.note;
+            color: Palette.text_quiet;
+            font-family: Fonts.ui;
+            font-size: Fonts.micro;
+            vertical-alignment: center;
+        }
+    }
+}
+
+component ReservesCard inherits Card {
+    in property <bool> pool_ready;
+    in property <bool> pool_loading;
+    in property <string> pool_message;
+    in property <bool> paused;
+    in property <string> pool_address;
+    in property <string> pool_short;
+    in property <string> pool_fee;
+    in property <[AssetRow]> reserves;
+    VerticalLayout {
+        CardHeader {
+            icon: @image-url("../../assets/icons/droplet.svg");
+            title: "Pool reserves";
+            meta: root.pool_ready ? "Fee " + root.pool_fee : "";
+        }
+        if !root.pool_ready: VerticalLayout {
+            padding-left: Space.s_16; padding-right: Space.s_16;
+            padding-top: Space.card_pad_v_empty; padding-bottom: Space.card_pad_v_empty;
+            EmptyState {
+                icon: @image-url("../../assets/icons/droplet.svg");
+                title: root.pool_loading ? "Reading the pool…" : "No pool to trade against";
+                subtitle: root.pool_loading ? "Fetching its reserves from the network." : root.pool_message;
+            }
+        }
+        if root.pool_ready: VerticalLayout {
+            padding-left: Space.s_16; padding-right: Space.s_16;
+            padding-top: Space.card_pad_v; padding-bottom: Space.card_pad_v;
+            spacing: Space.s_10;
+            alignment: start;
+
+            HorizontalLayout {
+                spacing: Space.s_8;
+                VerticalLayout { alignment: center; MicroLabel { text: "POOL"; } }
+                Rectangle { }
+                VerticalLayout { alignment: center; CopyButton { value: root.pool_address; } }
+            }
+            Rectangle {
+                border-radius: Radii.sm;
+                background: Palette.surface_sunken;
+                border-width: 1px;
+                border-color: Palette.border_subtle;
+                HorizontalLayout {
+                    padding-left: Space.s_10;
+                    padding-right: Space.s_10;
+                    padding-top: Space.s_6;
+                    padding-bottom: Space.s_6;
+                    Text {
+                        text: root.pool_address;
+                        color: Palette.text_value;
+                        font-family: Fonts.mono;
+                        font-size: Fonts.small;
+                        wrap: char-wrap;
+                        horizontal-stretch: 1;
+                    }
+                }
+            }
+
+            if root.paused: NoticeBlock {
+                lead: "Swaps are paused";
+                body: "The pool's owner has stopped swapping; reserves are shown for reference.";
+            }
+
+            Rectangle { height: 1px; background: Palette.border_subtle; }
+            HorizontalLayout {
+                MicroLabel { text: "RESERVES"; horizontal-stretch: 1; }
+                Text {
+                    text: root.reserves.length == 1 ? "1 token" : root.reserves.length + " tokens";
+                    color: Palette.text_quiet;
+                    font-family: Fonts.ui;
+                    font-size: Fonts.micro;
+                    vertical-alignment: center;
+                }
+            }
+            VerticalLayout {
+                spacing: Space.row_gap;
+                for a in root.reserves: AssetListRow { asset: a; }
+            }
+            if root.reserves.length == 0: Text {
+                text: "This pool holds nothing yet, so there is nothing to swap.";
+                color: Palette.text_quiet;
+                font-family: Fonts.ui;
+                font-size: Fonts.small;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
+export component SwapPage inherits VerticalLayout {
+    in property <length> page_height: 400px;
+    in property <bool> has_wallet;
+
+    in property <bool> pool_ready;
+    in property <bool> pool_loading;
+    in property <string> pool_message;
+    in property <bool> paused;
+    in property <string> pool_address;
+    in property <string> pool_short;
+    in property <string> pool_fee;
+    in property <[AssetRow]> reserves;
+
+    in property <[AssetRow]> from_assets;
+    in property <[AssetRow]> to_assets;
+    in property <TokenAmount> from_token;
+    in property <TokenAmount> to_token;
+
+    in-out property <string> amount;
+    in property <TokenAmount> quote_out;
+    in property <TokenAmount> min_received;
+    in property <bool> quote_available;
+    in property <bool> unsupported;
+    in property <string> rate_text;
+    in property <string> fee_text;
+    in property <int> slippage_bps;
+    in property <int> slippage_max_bps;
+    in-out property <string> slippage_input;
+    in property <bool> slippage_valid: true;
+
+    in property <bool> swap_enabled;
+    in property <bool> swapping;
+
+    in property <bool> receipt_open;
+    in property <string> receipt_state;
+    in property <TokenAmount> receipt_sent;
+    in property <TokenAmount> receipt_received;
+    in property <TokenAmount> receipt_expected;
+    in property <TokenAmount> receipt_fee;
+    in property <string> receipt_time;
+
+    callback select_from(int);
+    callback select_to(int);
+    callback amount_edited(string);
+    callback max_amount();
+    callback flip();
+    callback step_slippage(bool);
+    callback slippage_edited(string);
+    callback request_swap();
+    callback dismiss_receipt();
+
+    height: max(root.page_height, form_column.preferred-height);
+
+    HorizontalLayout {
+        spacing: Space.stack_gap;
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            min-width: Theme.assets_panel_w;
+            alignment: start;
+            ReservesCard {
+                pool_ready: root.pool_ready;
+                pool_loading: root.pool_loading;
+                pool_message: root.pool_message;
+                paused: root.paused;
+                pool_address: root.pool_address;
+                pool_short: root.pool_short;
+                pool_fee: root.pool_fee;
+                reserves: root.reserves;
+            }
+        }
+
+        Rectangle {
+            width: 470px;
+            form_column := VerticalLayout {
+                width: parent.width;
+                        spacing: Space.stack_gap;
+                        alignment: start;
+
+                        Card {
+                            VerticalLayout {
+                                CardHeader {
+                                    icon: @image-url("../../assets/icons/swap.svg");
+                                    title: "Swap";
+                                    meta: root.pool_ready && root.quote_available ? root.rate_text : "";
+                                }
+                                VerticalLayout {
+                                    padding-left: Space.s_16;
+                                    padding-right: Space.s_16;
+                                    padding-top: Space.s_12;
+                                    padding-bottom: Space.s_12;
+                                    spacing: Space.s_10;
+
+                                    if !root.pool_ready: VerticalLayout {
+                                        padding-top: Space.s_12;
+                                        padding-bottom: Space.s_12;
+                                        EmptyState {
+                                            icon: @image-url("../../assets/icons/swap.svg");
+                                            title: root.pool_loading ? "Loading the pool…" : "Swap unavailable";
+                                            subtitle: root.pool_loading ? "" : root.pool_message;
+                                        }
+                                    }
+
+                                    if root.pool_ready: VerticalLayout {
+                                        spacing: Space.s_0;
+                                        SwapPanel {
+                                            title: "YOU SEND";
+                                            editable: true;
+                                            token: root.from_token;
+                                            amount <=> root.amount;
+                                            assets: root.from_assets;
+                                            amount_edited(t) => { root.amount_edited(t); }
+                                            max_amount => { root.max_amount(); }
+                                            pick(id) => { root.select_from(id); }
+                                        }
+
+                                        Rectangle {
+                                            height: 8px;
+                                            z: 2;
+                                            HorizontalLayout {
+                                                alignment: center;
+                                                Rectangle {
+                                                    width: 40px;
+                                                    height: 40px;
+                                                    y: -16px;
+                                                    border-radius: self.height / 2;
+                                                    background: Palette.surface_raised;
+                                                    border-width: 4px;
+                                                    border-color: Palette.surface_raised;
+                                                    Rectangle {
+                                                        border-radius: self.height / 2;
+                                                        background: Palette.surface_inset;
+                                                        border-width: 1px;
+                                                        border-color: Palette.border_medium;
+                                                        IconButton {
+                                                            icon: @image-url("../../assets/icons/swap.svg");
+                                                            tint: Palette.accent_text;
+                                                            size: 34px;
+                                                            icon_size: 16px;
+                                                            clicked => { root.flip(); }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        SwapPanel {
+                                            title: "YOU RECEIVE";
+                                            editable: false;
+                                            token: root.to_token;
+                                            quote: root.quote_out;
+                                            quote_available: root.quote_available;
+                                            assets: root.to_assets;
+                                            pick(id) => { root.select_to(id); }
+                                        }
+                                    }
+
+                                    if root.pool_ready: Rectangle { height: 1px; background: Palette.border_subtle; }
+
+                                    if root.pool_ready: VerticalLayout {
+                                        spacing: Space.s_6;
+
+                                        DetailRow {
+                                            label: root.slippage_valid
+                                                ? "SLIPPAGE"
+                                                : "0–" + (root.slippage_max_bps / 100) + " % ONLY";
+                                            SlippageStepper {
+                                                value <=> root.slippage_input;
+                                                can_step_down: root.slippage_bps > 0;
+                                                can_step_up: root.slippage_bps < root.slippage_max_bps;
+                                                valid: root.slippage_valid;
+                                                step(up) => { root.step_slippage(up); }
+                                                edited(t) => { root.slippage_edited(t); }
+                                            }
+                                        }
+
+                                        DetailRow {
+                                            label: "POOL FEE";
+                                            DetailValue { text: root.fee_text; }
+                                        }
+
+                                        DetailRow {
+                                            label: root.paused || root.unsupported ? "" : "YOU RECEIVE MIN";
+                                            if root.paused: DetailValue {
+                                                text: "Swaps on this pool are paused";
+                                                color: Palette.negative;
+                                                horizontal-alignment: left;
+                                                horizontal-stretch: 1;
+                                            }
+                                            if !root.paused && root.unsupported: DetailValue {
+                                                text: "The pool cannot fill " + root.from_token.symbol + " → " + root.to_token.symbol + " — this swap would be returned";
+                                                color: Palette.negative;
+                                                horizontal-alignment: left;
+                                                horizontal-stretch: 1;
+                                            }
+                                            if !root.paused && !root.unsupported && root.quote_available: SwapAmount {
+                                                amount: root.min_received;
+                                                tint: Palette.text_secondary;
+                                                font_size: Fonts.small;
+                                            }
+                                            if !root.paused && !root.unsupported && !root.quote_available: DetailValue { text: "—"; }
+                                        }
+                                    }
+
+                                    if root.pool_ready: PrimaryButton {
+                                        label: root.swapping ? "Swapping…" : "Swap";
+                                        enabled: root.swap_enabled;
+                                        height_: Theme.send_btn_h;
+                                        clicked => { root.request_swap(); }
+                                    }
+                                }
+                            }
+                        }
+
+                        if root.receipt_open: Card {
+                            VerticalLayout {
+                                CardHeader {
+                                    icon: @image-url("../../assets/icons/activity.svg");
+                                    title: root.receipt_state == "filled"
+                                        ? "Swap filled"
+                                        : (root.receipt_state == "returned" ? "Swap returned" : "Swap sent");
+                                    meta: root.receipt_time;
+                                    IconButton {
+                                        icon: @image-url("../../assets/icons/x.svg");
+                                        tint: Palette.text_quiet;
+                                        size: 26px;
+                                        icon_size: 14px;
+                                        clicked => { root.dismiss_receipt(); }
+                                    }
+                                }
+                                VerticalLayout {
+                                    padding-left: Space.s_16;
+                                    padding-right: Space.s_16;
+                                    padding-top: Space.s_12;
+                                    padding-bottom: Space.s_12;
+                                    spacing: Space.s_8;
+
+                                    ReceiptRow {
+                                        label: "SENT";
+                                        amount: root.receipt_sent;
+                                        sign: "−";
+                                        tint: Palette.text_primary;
+                                    }
+                                    if root.receipt_state == "filled": ReceiptRow {
+                                        label: "RECEIVED";
+                                        amount: root.receipt_received;
+                                        sign: "+";
+                                        tint: Palette.positive;
+                                    }
+                                    if root.receipt_state == "returned": ReceiptRow {
+                                        label: "RETURNED";
+                                        amount: root.receipt_received;
+                                        sign: "+";
+                                        tint: Palette.warning;
+                                        note: "the pool could not fill it";
+                                    }
+                                    if root.receipt_state == "waiting": ReceiptRow {
+                                        label: "EXPECTED";
+                                        amount: root.receipt_expected;
+                                        sign: "≈";
+                                        tint: Palette.text_tertiary;
+                                        note: "waiting for the pool";
+                                    }
+                                    Rectangle { height: 1px; background: Palette.border_subtle; }
+                                    ReceiptRow {
+                                        label: "FEES USED";
+                                        amount: root.receipt_fee;
+                                        tint: Palette.text_secondary;
+                                    }
+                                }
+                            }
+                        }
+            }
+        }
+    }
+}

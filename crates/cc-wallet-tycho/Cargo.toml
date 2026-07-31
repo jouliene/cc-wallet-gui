@@ -1,0 +1,34 @@
+[package]
+name = "cc-wallet-tycho"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+bip39 = { version = "2", default-features = false, features = ["std", "zeroize"] }
+bip32 = { version = "0.5", default-features = false, features = ["secp256k1", "std"] }
+ed25519-dalek = { version = "2", default-features = false, features = ["fast", "rand_core", "zeroize"] }
+hex = "0.4"
+rand_core = { version = "0.6", features = ["getrandom"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "http2", "system-proxy"] }
+serde = { version = "1", features = ["derive"] }
+subtle = "2"
+serde_json = "1"
+tokio = { version = "1", default-features = false, features = ["time"] }
+zeroize = { version = "1.9", features = ["derive"] }
+tycho-types = { version = "=0.3.5", default-features = false, features = ["abi", "serde", "sync"] }
+tycho-vm = "=0.3.6"
+tycho-executor = "=0.3.6"
+
+[dev-dependencies]
+anyhow = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+
+[lints]
+workspace = true

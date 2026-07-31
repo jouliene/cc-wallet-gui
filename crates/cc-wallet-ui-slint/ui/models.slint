@@ -1,0 +1,147 @@
+export struct AssetRow {
+    control_id: int,
+    currency_id: string,
+    sendable: bool,
+    name: string,
+    symbol: string,
+    amount: string,
+    amount_int: string,
+    amount_frac: string,
+    color: color,
+    initial: string,
+    selected: bool,
+    status: string,
+    always: bool,
+    visible: bool,
+}
+
+export struct TokenAmount {
+    amount_int: string,
+    amount_frac: string,
+    symbol: string,
+    initial: string,
+    color: color,
+}
+
+export struct NetworkStatsView {
+    validators: string,
+    has_stake: bool,
+    total_stake: TokenAmount,
+    has_supply: bool,
+    total_supply: TokenAmount,
+    stake_ratio: string,
+    supply_note: string,
+}
+
+export struct FieldRow {
+    label: string,
+    value: string,
+    mono: bool,
+    copyable: bool,
+}
+
+export struct CurrencyRow {
+    label: string,
+    amount: TokenAmount,
+}
+
+export struct AccountView {
+    status: string,
+    address: string,
+    balance: TokenAmount,
+    has_due: bool,
+    due_payment: TokenAmount,
+    last_paid: string,
+    exists: bool,
+    has_code: bool,
+    storage_bits: string,
+    storage_cells: string,
+    code_hash: string,
+    data_hash: string,
+    code: string,
+    code_size: string,
+    code_full: string,
+    data: string,
+    data_size: string,
+    data_full: string,
+    contract_kind: string,
+}
+
+export struct ContactRow {
+    name: string,
+    address: string,
+    short: string,
+    tag: string,
+    color: color,
+    initial: string,
+}
+
+export struct TracePartyCol {
+    label: string,
+    address: string,
+    is_external: bool,
+    named: bool,
+    contract: string,
+}
+
+export struct TraceEdgeRow {
+    hash_short: string,
+    hash_full: string,
+    from: int,
+    to: int,
+    op: string,
+    raw_op: string,
+    comment: string,
+    movements: [TokenAmount],
+    fee: string,
+    executed: bool,
+    ok: bool,
+    failure: string,
+    focus: bool,
+    is_event: bool,
+}
+
+export struct ExplorerTxRow {
+    signed: bool,
+    received: [TokenAmount],
+    time: string,
+    group: string,
+    kind: string,
+    is_in: bool,
+    success: bool,
+    bounced: bool,
+    party: string,
+    party_name: string,
+    party_extra: string,
+    movements: [TokenAmount],
+    fee: string,
+    hash_short: string,
+    hash_full: string,
+    exit_code: int,
+}
+
+export struct ActivityRow {
+    time: string,
+    is_in: bool,
+    kind: string,
+    party_name: string,
+    party_full: string,
+    party_mid: string,
+    movements: [TokenAmount],
+    fee: string,
+    success: bool,
+    bounced: bool,
+    finality: string,
+    pending: bool,
+    tx_hash: string,
+    ext_hash: string,
+    int_hash: string,
+    exit_code: int,
+    group: string,
+    has_party: bool,
+}
+
+export struct RiskOverlapRow {
+    label: string,
+    selected: bool,
+}

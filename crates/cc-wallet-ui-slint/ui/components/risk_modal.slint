@@ -1,0 +1,151 @@
+import { ScrollView } from "std-widgets.slint";
+import { Palette, Fonts, Elevation, Space } from "../design_tokens.slint";
+import { Theme } from "../theme.slint";
+import { RiskOverlapRow } from "../models.slint";
+import { ClipboardBridge, DialogCard, DialogHeader, Field, GhostButton, Icon, PrimaryButton, Checkbox, InlineError, FieldLabel } from "../widgets.slint";
+
+export component RiskModal inherits Rectangle {
+    in property <string> details;
+    in property <[RiskOverlapRow]> overlaps;
+    in property <bool> requires_duplicate_confirmation;
+    in property <string> error;
+    in-out property <string> typed_confirmation;
+    in-out property <bool> acknowledge_both_may_debit;
+    in-out property <bool> acknowledge_duplicate;
+    callback set_overlap(int, bool);
+    callback confirm();
+    callback cancel();
+
+    background: Elevation.scrim;
+    TouchArea { clicked => { root.cancel(); } }
+
+    FocusScope {
+        width: 100%;
+        height: 100%;
+        init => {
+            self.focus();
+        }
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.cancel();
+                return accept;
+            }
+            if event.text == Key.Tab || event.text == Key.Backtab {
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    card := DialogCard {
+        width: min(720px, root.width - 40px);
+        height: min(min(760px, root.height - 40px), body.preferred-height);
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        TouchArea { }
+
+        body := VerticalLayout {
+            padding: 22px;
+            spacing: Space.s_12;
+
+            DialogHeader {
+                icon: @image-url("../../assets/icons/info.svg");
+                title: "This transfer may be sent twice";
+                subtitle: "Elapsed time is not delivery proof. The prior transfer remains unresolved and both transfers may debit.";
+                badge_bg: Palette.negative_quiet;
+                badge_tint: Palette.negative;
+            }
+
+            ScrollView {
+                vertical-stretch: 1;
+                min-height: min(report.preferred-height, 320px);
+                report := Text {
+                    width: parent.width - 14px;
+                    height: max(self.preferred-height, parent.height);
+                    vertical-alignment: top;
+                    text: root.details;
+                    color: Palette.text_secondary;
+                    font-family: Fonts.mono;
+                    font-size: Fonts.micro;
+                    wrap: word-wrap;
+                }
+            }
+
+            if root.overlaps.length > 0: VerticalLayout {
+                spacing: Space.s_6;
+                Text {
+                    text: "Transfers that may still be pending — unchecked rows stay reserved";
+                    color: Palette.warning;
+                    font-family: Fonts.ui;
+                    font-weight: Fonts.semibold;
+                    font-size: Fonts.small;
+                }
+                ScrollView {
+                    height: min(168px, root.overlaps.length * 56px);
+                    VerticalLayout {
+                        spacing: Space.s_6;
+                        for row[i] in root.overlaps: HorizontalLayout {
+                            height: 50px;
+                            spacing: Space.s_8;
+                            Checkbox {
+                                checked: row.selected;
+                                active_color: Palette.warning;
+                                toggled(v) => { root.set_overlap(i, v); }
+                            }
+                            Text {
+                                text: row.label;
+                                color: Palette.text_secondary;
+                                font-family: Fonts.mono;
+                                font-size: Fonts.micro;
+                                vertical-alignment: center;
+                                wrap: word-wrap;
+                                horizontal-stretch: 1;
+                            }
+                        }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                height: 26px;
+                spacing: Space.s_8;
+                Checkbox {
+                    checked: root.acknowledge_both_may_debit;
+                    active_color: Palette.accent_fill;
+                    toggled(v) => { root.acknowledge_both_may_debit = v; }
+                }
+                Text { text: "I understand both transfers may debit and native fees may burn."; color: Palette.text_secondary; font-family: Fonts.ui; font-size: Fonts.small; vertical-alignment: center; }
+            }
+
+            if root.requires_duplicate_confirmation: HorizontalLayout {
+                height: 26px;
+                spacing: Space.s_8;
+                Checkbox {
+                    checked: root.acknowledge_duplicate;
+                    active_color: Palette.accent_fill;
+                    toggled(v) => { root.acknowledge_duplicate = v; }
+                }
+                Text { text: "I confirm this is the same payee and asset as an unresolved transfer."; color: Palette.text_secondary; font-family: Fonts.ui; font-size: Fonts.small; vertical-alignment: center; }
+            }
+
+            if root.error != "": InlineError { text: root.error; }
+
+            HorizontalLayout {
+                spacing: Space.s_10;
+                GhostButton { label: "Cancel"; clicked => { root.cancel(); } }
+                GhostButton {
+                    label: "Copy exact details";
+                    clicked => { ClipboardBridge.copy_text(root.details); }
+                }
+                Rectangle { }
+                PrimaryButton {
+                    label: "Send anyway — may debit twice";
+                    bg: Palette.negative_fill;
+                    enabled: root.acknowledge_both_may_debit
+                        && (!root.requires_duplicate_confirmation || root.acknowledge_duplicate);
+                    clicked => { root.confirm(); }
+                }
+            }
+        }
+    }
+}

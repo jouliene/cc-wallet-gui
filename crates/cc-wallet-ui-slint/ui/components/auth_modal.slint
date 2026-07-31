@@ -1,0 +1,371 @@
+import { Theme } from "../theme.slint";
+import { Palette, Fonts, Elevation, Fade, Space, Radii } from "../design_tokens.slint";
+import { Icon, Avatar, MicroLabel, PrimaryButton, GhostButton, IconButton, Field, DialogCard, DialogHeader, Checkbox, InlineError, NoticeBlock, Amount } from "../widgets.slint";
+import { TokenAmount } from "../models.slint";
+
+component SwapLine inherits HorizontalLayout {
+    in property <string> label;
+    in property <TokenAmount> amount;
+    in property <string> sign;
+    spacing: Space.s_10;
+    VerticalLayout {
+        alignment: center;
+        width: 62px;
+        MicroLabel { text: root.label; }
+    }
+    Amount {
+        horizontal-stretch: 1;
+        amount: root.amount;
+        sign: root.sign;
+        tint: Palette.text_primary;
+        font_size: Fonts.display;
+    }
+}
+
+export component AuthModal inherits Rectangle {
+    in property <string> mode;
+    in property <string> purpose;
+    in property <string> title;
+    in property <string> subtitle;
+    in property <bool> show_summary;
+    in property <TokenAmount> swap_in;
+    in property <TokenAmount> swap_out;
+    in property <bool> swap_out_known;
+    in property <TokenAmount> tx_amount;
+    in property <string> tx_to;
+    in property <bool> tx_in_contacts;
+    in property <string> tx_to_addr_full;
+    in property <string> tx_fee;
+    in property <string> auth_recipient_state: "pending";
+    in property <string> auth_recipient_notice;
+    in property <string> auth_recipient_ack_label;
+    in property <string> error;
+    in property <int> autolock_mins;
+    in property <bool> busy;
+    in property <bool> send_options_editable;
+    in-out property <bool> allow_unbounced;
+    in-out property <string> pw;
+    in-out property <string> pw2;
+    in-out property <bool> remember;
+    callback submit();
+    callback cancel();
+    callback set_allow_unbounced(bool);
+
+    property <string> cta:
+        root.mode == "create" ? "Create & continue"
+        : (root.mode == "confirm" ? (root.purpose == "swap" ? "Confirm & swap" : "Confirm & send")
+        : (root.purpose == "swap" ? "Sign & swap"
+        : (root.purpose == "send" ? "Sign & send"
+        : (root.purpose == "changepassword" ? "Continue"
+        : (root.purpose == "deletewallet" ? "Delete wallet"
+        : (root.purpose == "revealseed" ? "Reveal"
+        : (root.purpose == "changesetting" ? "Confirm" : "Unlock")))))));
+    property <bool> pw_visible: false;
+    property <bool> recipient_needs_ack: root.auth_recipient_ack_label != "";
+    property <bool> can_submit: !root.busy
+        && (!root.send_options_editable
+            || root.auth_recipient_state == "active"
+            || root.auth_recipient_state == "pending"
+            || (root.recipient_needs_ack && root.allow_unbounced));
+
+    background: Elevation.scrim;
+    TouchArea { clicked => { if (root.purpose != "seedsetup") { root.cancel(); } } }
+
+    keys := FocusScope {
+        width: 100%;
+        height: 100%;
+        init => { if (root.mode == "confirm") { self.focus(); } }
+        key-pressed(event) => {
+            if (event.text == Key.Escape && root.purpose != "seedsetup") {
+                root.cancel();
+                return accept;
+            }
+            if (event.text == Key.Tab || event.text == Key.Backtab) {
+                return accept;
+            }
+            return reject;
+        }
+
+    DialogCard {
+        width: 430px;
+        height: card_layout.preferred-height;
+        TouchArea { }
+
+        card_layout := VerticalLayout {
+            padding: Space.s_24;
+            spacing: Space.s_16;
+
+            DialogHeader {
+                icon: @image-url("../../assets/icons/lock.svg");
+                title: root.title;
+                subtitle: root.subtitle;
+            }
+
+            if root.purpose == "swap": Rectangle {
+                border-radius: Radii.md;
+                background: Palette.surface_sunken;
+                border-width: 1px;
+                border-color: Palette.border_subtle;
+                VerticalLayout {
+                    padding: Space.s_16;
+                    spacing: Space.s_10;
+                    MicroLabel { text: "SWAP"; }
+                    SwapLine { label: "SEND"; amount: root.swap_in; sign: "−"; }
+                    if root.swap_out_known: SwapLine { label: "RECEIVE"; amount: root.swap_out; sign: "≈"; }
+                    if !root.swap_out_known: InlineError {
+                        text: "The pool has no price for this pair — it would return your input.";
+                    }
+                }
+            }
+
+            if root.show_summary: Rectangle {
+                border-radius: Radii.md;
+                background: Palette.surface_sunken;
+                border-width: 1px;
+                border-color: Palette.border_subtle;
+                VerticalLayout {
+                    padding: Space.s_16;
+                    spacing: Space.s_14;
+
+                    VerticalLayout {
+                        spacing: Space.s_6;
+                        MicroLabel { text: "AMOUNT"; }
+                        HorizontalLayout {
+                            spacing: Space.s_10;
+                            Amount {
+                                horizontal-stretch: 0;
+                                amount: root.tx_amount;
+                                sign: "−";
+                                tint: Palette.text_primary;
+                                font_size: Fonts.display;
+                                show_token: false;
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                Rectangle {
+                                    horizontal-stretch: 0;
+                                    border-radius: Radii.sm;
+                                    background: Palette.surface_inset;
+                                    border-width: 1px;
+                                    border-color: Palette.border_subtle;
+                                    HorizontalLayout {
+                                        padding-left: Space.s_4;
+                                        padding-right: Space.s_8;
+                                        padding-top: Space.s_4;
+                                        padding-bottom: Space.s_4;
+                                        spacing: Space.s_6;
+                                        VerticalLayout { alignment: center; Avatar { initial: root.tx_amount.initial; tint: root.tx_amount.color; size: 16px; } }
+                                        Text {
+                                            text: root.tx_amount.symbol;
+                                            color: Palette.text_value;
+                                            font-family: Fonts.ui;
+                                            font-weight: Fonts.semibold;
+                                            font-size: Fonts.small;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+                            }
+                            Rectangle { }
+                        }
+                    }
+
+                    Rectangle { height: 1px; background: Palette.border_subtle; }
+
+                    VerticalLayout {
+                        spacing: Space.s_6;
+                        MicroLabel { text: "RECIPIENT"; }
+                        Text {
+                            text: root.tx_to;
+                            color: root.tx_in_contacts ? Palette.positive : Palette.warning;
+                            font-family: Fonts.ui;
+                            font-weight: Fonts.semibold;
+                            font-size: Fonts.body;
+                            overflow: elide;
+                        }
+                        recipient_box := Rectangle {
+                            property <bool> needs_ack: root.recipient_needs_ack
+                                && root.send_options_editable;
+                            border-radius: Radii.sm;
+                            background: Palette.surface_inset;
+                            border-width: 1px;
+                            border-color: Palette.border_subtle;
+                            HorizontalLayout {
+                                padding-left: Space.s_10;
+                                padding-right: Space.s_10;
+                                padding-top: Space.s_8;
+                                padding-bottom: Space.s_8;
+                                spacing: Space.s_8;
+                                if recipient_box.needs_ack: VerticalLayout {
+                                    alignment: start;
+                                    Icon {
+                                        source: @image-url("../../assets/icons/alert.svg");
+                                        tint: Palette.warning;
+                                        width: 14px;
+                                        height: 14px;
+                                    }
+                                }
+                                Text {
+                                    text: root.tx_to_addr_full;
+                                    color: recipient_box.needs_ack
+                                        ? Palette.warning
+                                        : Palette.text_value;
+                                    font-family: Fonts.mono;
+                                    font-size: Fonts.small;
+                                    wrap: char-wrap;
+                                    horizontal-stretch: 1;
+                                }
+                            }
+                        }
+                        if root.auth_recipient_state == "failed": NoticeBlock {
+                            body: root.auth_recipient_notice;
+                            tint: Palette.negative;
+                            fill: Palette.negative_quiet;
+                            frame: Palette.negative_border;
+                            icon: @image-url("../../assets/icons/info.svg");
+                        }
+                        if root.send_options_editable
+                            && root.auth_recipient_state != "failed"
+                            && root.auth_recipient_notice != "": NoticeBlock {
+                            body: root.auth_recipient_notice;
+                            tint: Palette.info;
+                            fill: Palette.info_quiet;
+                            frame: Palette.info_border;
+                        }
+                        if root.send_options_editable && root.recipient_needs_ack: HorizontalLayout {
+                            spacing: Space.s_10;
+                            alignment: start;
+                            Checkbox {
+                                checked: root.allow_unbounced;
+                                active_color: Palette.warning;
+                                enabled: !root.busy;
+                                toggled(v) => { root.set_allow_unbounced(v); }
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                Text {
+                                    text: root.auth_recipient_ack_label;
+                                    color: Palette.warning;
+                                    font-family: Fonts.ui;
+                                    font-weight: Fonts.semibold;
+                                    font-size: Fonts.small;
+                                }
+                            }
+                            Rectangle { }
+                        }
+                    }
+
+                    Rectangle { height: 1px; background: Palette.border_subtle; }
+
+                    HorizontalLayout {
+                        spacing: Space.s_8;
+                        VerticalLayout { alignment: center; MicroLabel { text: "NETWORK FEE"; } }
+                        Rectangle { }
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: root.tx_fee;
+                                color: Palette.text_secondary;
+                                font-family: Fonts.ui;
+                                font-size: Fonts.small;
+                                horizontal-alignment: right;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if root.mode != "confirm": VerticalLayout {
+                spacing: Space.s_8;
+                MicroLabel { text: root.mode == "create" ? "NEW PASSWORD" : "WALLET PASSWORD"; }
+                Rectangle {
+                    height: Theme.pw_field_h;
+                    Field {
+                        text <=> root.pw;
+                        height_: Theme.pw_field_h;
+                        input_type: root.pw_visible ? InputType.text : InputType.password;
+                        is_secret: true;
+                        placeholder: "••••••••";
+                        pad_right: 38px;
+                        init => { self.focus(); }
+                        handles_escape: true;
+                        escape_pressed => { if (root.purpose != "seedsetup") { root.cancel(); } }
+                        accepted => { if (root.can_submit) { root.submit(); } }
+                    }
+                    IconButton {
+                        x: parent.width - self.width - 6px;
+                        y: (parent.height - self.height) / 2;
+                        size: 26px;
+                        icon_size: 16px;
+                        icon: root.pw_visible ? @image-url("../../assets/icons/eye-off.svg") : @image-url("../../assets/icons/eye.svg");
+                        tint: Palette.text_tertiary;
+                        clicked => { root.pw_visible = !root.pw_visible; }
+                    }
+                }
+            }
+            if root.mode == "create": VerticalLayout {
+                spacing: Space.s_8;
+                MicroLabel { text: "CONFIRM PASSWORD"; }
+                Rectangle {
+                    height: Theme.pw_field_h;
+                    Field {
+                        text <=> root.pw2;
+                        height_: Theme.pw_field_h;
+                        input_type: root.pw_visible ? InputType.text : InputType.password;
+                        is_secret: true;
+                        placeholder: "••••••••";
+                        pad_right: 38px;
+                        handles_escape: true;
+                        escape_pressed => { if (root.purpose != "seedsetup") { root.cancel(); } }
+                        accepted => { if (root.can_submit) { root.submit(); } }
+                    }
+                    IconButton {
+                        x: parent.width - self.width - 6px;
+                        y: (parent.height - self.height) / 2;
+                        size: 26px;
+                        icon_size: 16px;
+                        icon: root.pw_visible ? @image-url("../../assets/icons/eye-off.svg") : @image-url("../../assets/icons/eye.svg");
+                        tint: Palette.text_tertiary;
+                        clicked => { root.pw_visible = !root.pw_visible; }
+                    }
+                }
+            }
+
+            if root.error != "": InlineError { text: root.error; }
+
+            if (root.purpose == "send" || root.purpose == "swap") && root.mode != "confirm": HorizontalLayout {
+                spacing: Space.s_10;
+                Checkbox {
+                    checked: root.remember;
+                    active_color: Palette.accent_fill;
+                    enabled: !root.busy;
+                    toggled(v) => { root.remember = v; }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: "Stay unlocked for " + root.autolock_mins + " min";
+                        color: Palette.text_secondary; font-family: Fonts.ui; font-size: Fonts.small;
+                    }
+                }
+                Rectangle { }
+            }
+
+            HorizontalLayout {
+                spacing: Space.s_10;
+                GhostButton {
+                    label: "Cancel";
+                    clicked => { root.cancel(); }
+                }
+                Rectangle { }
+                PrimaryButton {
+                    label: root.busy ? "Verifying…" : root.cta;
+                    height: 40px;
+                    enabled: root.can_submit;
+                    clicked => { root.submit(); }
+                }
+            }
+        }
+    }
+    }
+}

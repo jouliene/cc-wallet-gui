@@ -1,0 +1,437 @@
+import { Theme } from "../theme.slint";
+import { Palette, Fonts, Radii, Space, Motion, Elevation } from "../design_tokens.slint";
+import { Icon, Avatar, Card, CardHeader, MicroLabel, PrimaryButton, GhostButton, IconButton, Field, InlineError, NoticeBlock, StatusBar } from "../widgets.slint";
+import { AssetRow } from "../models.slint";
+import { ScrollView } from "std-widgets.slint";
+import { SegChoice, SeedChip, EditableSeedChip } from "settings_components.slint";
+
+export component SettingsPage inherits VerticalLayout {
+    in property <string> workchain;
+    in property <string> global_id;
+    in property <string> network_name;
+    in property <[string]> endpoints;
+    in property <int> selected_endpoint;
+    in property <string> endpoint_test_result;
+    in property <[string]> seed_words;
+    in property <string> seed_text;
+    in property <string> clipboard_notice: "";
+    in property <bool> seed_saved;
+    in property <bool> seed_revealed;
+    in property <bool> seed_unsaved;
+    in property <int> autolock_mins;
+    in property <int> screen_lock_mins;
+    in property <[AssetRow]> assets;
+
+    callback reveal_seed();
+    callback hide_seed();
+    callback copy_seed(string);
+    callback generate_seed();
+    callback use_seed();
+    callback discard_seed();
+    callback import_seed(string);
+    callback set_password();
+    callback toggle_asset(int, bool);
+    callback set_autolock(int);
+    callback set_screen_lock(int);
+    callback select_endpoint(int);
+    callback remove_endpoint(string);
+    callback add_endpoint(string);
+    callback test_endpoint(string);
+    property <string> new_endpoint: "";
+    callback import_edited();
+    callback import_submit();
+    callback distribute_seed(string) -> [string];
+    callback import_cell_edited(int, string, [string]) -> [string];
+
+    in-out property <[string]> import_words: ["", "", "", "", "", "", "", "", "", "", "", ""];
+    property <int> import_gen: 0;
+    in property <bool> import_valid: false;
+    in property <bool> import_filled: false;
+    property <string> seed_mode: "view";
+    in property <int> seed_copy_ttl: 0;
+    property <int> pending_import_index: -1;
+    property <bool> paste_via_button: false;
+
+    spacing: Space.stack_gap;
+
+    Card {
+        VerticalLayout {
+            CardHeader {
+                icon: @image-url("../../assets/icons/activity.svg");
+                title: "Network";
+                subtitle: root.network_name + "  ·  id " + root.global_id;
+            }
+            VerticalLayout {
+                padding-left: Space.s_16; padding-right: Space.s_16; padding-top: Space.card_pad_v; padding-bottom: Space.card_pad_v;
+                spacing: Space.s_10;
+                MicroLabel { text: "RPC ENDPOINTS"; }
+
+                for url[i] in root.endpoints : Rectangle {
+                    height: 40px;
+                    border-radius: Radii.md;
+                    background: i == root.selected_endpoint ? Palette.surface_sunken : (touch.has-hover ? Palette.hover_strong : transparent);
+                    border-width: i == root.selected_endpoint ? 1px : 0px;
+                    border-color: Palette.selected_border;
+                    touch := TouchArea { mouse-cursor: pointer; clicked => { root.select_endpoint(i); } }
+                    HorizontalLayout {
+                        padding-left: Space.s_10; padding-right: Space.s_6; spacing: Space.s_10;
+                        VerticalLayout {
+                            alignment: center;
+                            Rectangle {
+                                width: 12px; height: 12px; border-radius: self.height / 2;
+                                border-width: 1px;
+                                border-color: i == root.selected_endpoint ? Palette.accent_text : Palette.border_strong;
+                                Rectangle {
+                                    width: 6px; height: 6px; border-radius: self.height / 2;
+                                    background: Palette.accent_text;
+                                    visible: i == root.selected_endpoint;
+                                }
+                            }
+                        }
+                        Text {
+                            horizontal-stretch: 1;
+                            text: url;
+                            color: i == root.selected_endpoint ? Palette.text_primary : Palette.text_secondary;
+                            font-family: Fonts.mono; font-size: Fonts.body;
+                            vertical-alignment: center; overflow: elide;
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            IconButton {
+                                visible: i > 0;
+                                icon: @image-url("../../assets/icons/x.svg");
+                                size: 26px;
+                                icon_size: 14px;
+                                tint: Palette.text_quiet;
+                                clicked => { root.remove_endpoint(url); }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle { height: 1px; background: Palette.border_subtle; }
+
+                HorizontalLayout {
+                    spacing: Space.s_8;
+                    Field {
+                        horizontal-stretch: 1;
+                        placeholder: "Add new endpoint";
+                        text <=> root.new_endpoint;
+                        accepted => { if (root.new_endpoint != "") { root.add_endpoint(root.new_endpoint); root.new_endpoint = ""; } }
+                    }
+                    GhostButton { label: "Test"; height_: Theme.field_h; radius: Radii.md; pad_h: 18px; enabled: root.new_endpoint != ""; clicked => { root.test_endpoint(root.new_endpoint); } }
+                    PrimaryButton { label: "Add"; height_: Theme.field_h; enabled: root.new_endpoint != ""; clicked => { root.add_endpoint(root.new_endpoint); root.new_endpoint = ""; } }
+                }
+                if root.endpoint_test_result != "" : Text {
+                    text: root.endpoint_test_result;
+                    color: Palette.text_tertiary; font-family: Fonts.ui; font-size: Fonts.small; wrap: word-wrap;
+                }
+            }
+        }
+    }
+
+    Card {
+        VerticalLayout {
+            CardHeader {
+                icon: @image-url("../../assets/icons/lock.svg");
+                title: "Wallet password";
+                subtitle: "Encrypts your seed on disk and signs every transfer. It can't be recovered.";
+                VerticalLayout { alignment: center; GhostButton { label: "Change"; clicked => { root.set_password(); } } }
+            }
+            VerticalLayout {
+                padding-left: Space.s_16; padding-right: Space.s_16; padding-top: Space.card_pad_v; padding-bottom: Space.card_pad_v;
+                spacing: Space.s_16;
+            HorizontalLayout {
+                spacing: Space.s_12;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: Space.s_4;
+                    Text { text: "Auto-sign"; color: Palette.text_secondary; font-family: Fonts.ui; font-weight: Fonts.semibold; font-size: Fonts.body; }
+                    Text { text: "After unlocking, sign sends without re-entering the password for this long."; color: Palette.text_tertiary; font-family: Fonts.ui; font-size: Fonts.small; }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        height: 36px;
+                        border-radius: Radii.md;
+                        background: Palette.surface_inset;
+                        border-width: 1px;
+                        border-color: Palette.border_subtle;
+                        HorizontalLayout {
+                            padding: Space.s_4; spacing: Space.s_4;
+                            SegChoice { label: "5 min"; active: root.autolock_mins == 5; clicked => { root.set_autolock(5); } }
+                            SegChoice { label: "10 min"; active: root.autolock_mins == 10; clicked => { root.set_autolock(10); } }
+                            SegChoice { label: "30 min"; active: root.autolock_mins == 30; clicked => { root.set_autolock(30); } }
+                            SegChoice { label: "60 min"; active: root.autolock_mins == 60; clicked => { root.set_autolock(60); } }
+                        }
+                    }
+                }
+            }
+            Rectangle { height: 1px; background: Palette.border_subtle; }
+            HorizontalLayout {
+                spacing: Space.s_12;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: Space.s_4;
+                    Text { text: "Screen auto-lock"; color: Palette.text_secondary; font-family: Fonts.ui; font-weight: Fonts.semibold; font-size: Fonts.body; }
+                    Text { text: "Re-lock and wipe keys from memory after this much inactivity."; color: Palette.text_tertiary; font-family: Fonts.ui; font-size: Fonts.small; }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        height: 36px;
+                        border-radius: Radii.md;
+                        background: Palette.surface_inset;
+                        border-width: 1px;
+                        border-color: Palette.border_subtle;
+                        HorizontalLayout {
+                            padding: Space.s_4; spacing: Space.s_4;
+                            SegChoice { label: "5 min"; active: root.screen_lock_mins == 5; clicked => { root.set_screen_lock(5); } }
+                            SegChoice { label: "10 min"; active: root.screen_lock_mins == 10; clicked => { root.set_screen_lock(10); } }
+                            SegChoice { label: "30 min"; active: root.screen_lock_mins == 30; clicked => { root.set_screen_lock(30); } }
+                            SegChoice { label: "60 min"; active: root.screen_lock_mins == 60; clicked => { root.set_screen_lock(60); } }
+                        }
+                    }
+                }
+            }
+            }
+        }
+    }
+
+    Card {
+        VerticalLayout {
+            CardHeader {
+                icon: @image-url("../../assets/icons/seed.svg");
+                title: "Seed phrase";
+                subtitle: "Your recovery seed phrase is the only way to restore this wallet.";
+                if root.seed_mode == "view" && root.seed_saved: HorizontalLayout {
+                    horizontal-stretch: 0;
+                    spacing: Space.s_8;
+                    GhostButton {
+                        label: root.seed_revealed ? "Hide" : "Reveal";
+                        clicked => { if (root.seed_revealed) { root.hide_seed(); } else { root.reveal_seed(); } }
+                    }
+                    if root.seed_revealed: GhostButton {
+                        width: 64px;
+                        label: root.seed_copy_ttl > 0 ? (root.seed_copy_ttl + "s") : "Copy";
+                        clicked => { root.copy_seed(root.seed_text); }
+                    }
+                }
+            }
+            VerticalLayout {
+                padding-left: Space.s_16; padding-right: Space.s_16; padding-top: Space.card_pad_v; padding-bottom: Space.card_pad_v;
+                spacing: Space.s_14;
+
+            if root.seed_revealed || root.seed_unsaved: NoticeBlock {
+                lead: "Never share this phrase.";
+                body: "Anyone who knows it controls the wallet. Anything you copy is readable by other apps and clipboard history.";
+            }
+            if root.clipboard_notice != "": InlineError { text: root.clipboard_notice; }
+
+            if root.seed_mode == "view" && (root.seed_saved || root.seed_unsaved): Rectangle {
+                VerticalLayout {
+                    spacing: Space.field_gap;
+                    for rowidx in 4: chiprow := HorizontalLayout {
+                        spacing: Space.field_gap;
+                        for col in 3: SeedChip {
+                            width: (chiprow.width - 2 * Space.field_gap) / 3;
+                            number: rowidx * 3 + col + 1;
+                            word: root.seed_words[rowidx * 3 + col];
+                            revealed: root.seed_revealed;
+                        }
+                    }
+                }
+                if !root.seed_revealed: Rectangle {
+                    width: 100%;
+                    height: 100%;
+                    background: Elevation.cover;
+                    border-radius: Radii.md;
+                    HorizontalLayout {
+                        alignment: center;
+                        VerticalLayout {
+                            alignment: center;
+                            spacing: Space.s_6;
+                            HorizontalLayout { alignment: center; Icon { source: @image-url("../../assets/icons/lock.svg"); tint: Palette.text_secondary; width: 20px; height: 20px; } }
+                            Text { text: "Phrase hidden"; color: Palette.text_secondary; font-family: Fonts.ui; font-weight: Fonts.semibold; font-size: Fonts.body; horizontal-alignment: center; }
+                            Text { text: "Use Reveal above to show your recovery phrase."; color: Palette.text_quiet; font-family: Fonts.ui; font-size: Fonts.small; horizontal-alignment: center; }
+                        }
+                    }
+                }
+            }
+
+            if root.seed_mode == "view" && root.seed_unsaved: VerticalLayout {
+                spacing: Space.s_12;
+                NoticeBlock {
+                    body: "This is a brand-new phrase. Write it down and store it safely. Using it replaces your current wallet.";
+                    tint: Palette.info;
+                    fill: Palette.info_quiet;
+                    frame: Palette.info_border;
+                }
+                HorizontalLayout {
+                    HorizontalLayout {
+                        horizontal-stretch: 0;
+                        spacing: Space.s_8;
+                        GhostButton {
+                            label: "Regenerate";
+                            clicked => { root.generate_seed(); }
+                        }
+                        GhostButton {
+                            width: 64px;
+                            label: root.seed_copy_ttl > 0 ? (root.seed_copy_ttl + "s") : "Copy";
+                            clicked => { root.copy_seed(root.seed_text); }
+                        }
+                    }
+                    Rectangle { }
+                    HorizontalLayout {
+                        spacing: Space.s_8;
+                        GhostButton { label: "Cancel"; clicked => { root.discard_seed(); } }
+                        PrimaryButton { label: "Use this phrase"; height: 34px; clicked => { root.use_seed(); } }
+                    }
+                }
+            }
+
+            if !root.seed_saved && !root.seed_unsaved && root.seed_mode == "view": VerticalLayout {
+                spacing: Space.s_10;
+                Text { text: "No wallet yet. Generate a new phrase or import an existing one."; color: Palette.text_tertiary; font-family: Fonts.ui; font-size: Fonts.body; }
+            }
+
+            if root.seed_mode == "import": VerticalLayout {
+                spacing: Space.s_12;
+                HorizontalLayout {
+                    VerticalLayout { alignment: center; Text { text: "Enter your 12-word recovery phrase"; color: Palette.text_secondary; font-family: Fonts.ui; font-weight: Fonts.semibold; font-size: Fonts.body; } }
+                    Rectangle { }
+                    GhostButton {
+                        label: "Paste phrase";
+                        clicked => {
+                            root.paste_via_button = true;
+                            import_paste.paste_replace();
+                        }
+                    }
+                }
+                VerticalLayout {
+                    spacing: Space.field_gap;
+                    for rowidx in 4: irow := HorizontalLayout {
+                        spacing: Space.field_gap;
+                        for col in 3: EditableSeedChip {
+                            width: (irow.width - 2 * Space.field_gap) / 3;
+                            number: rowidx * 3 + col + 1;
+                            word: root.import_words[rowidx * 3 + col];
+                            resync_gen: root.import_gen;
+                            edited(t) => {
+                                root.import_words = root.import_cell_edited(rowidx * 3 + col, t, root.import_words);
+                                root.import_gen += 1;
+                                root.import_edited();
+                            }
+                            paste_requested => {
+                                root.paste_via_button = false;
+                                root.pending_import_index = rowidx * 3 + col;
+                                import_paste.paste_replace();
+                            }
+                        }
+                    }
+                }
+                StatusBar {
+                    label: !root.import_filled
+                        ? "Enter all 12 words"
+                        : (root.import_valid ? "Valid recovery phrase" : "Not a valid recovery phrase");
+                    tint: root.import_valid ? Palette.positive : (!root.import_filled ? Palette.text_quiet : Palette.warning);
+                    fill: root.import_valid ? Palette.positive_quiet : (!root.import_filled ? Palette.surface_sunken : Palette.warning_quiet);
+                    frame: root.import_valid ? Palette.positive_border : (!root.import_filled ? Palette.border_subtle : Palette.border_subtle);
+                    icon: root.import_valid ? @image-url("../../assets/icons/check.svg") : @image-url("../../assets/icons/alert.svg");
+                    show_icon: root.import_filled;
+                }
+                HorizontalLayout {
+                    Rectangle { }
+                    HorizontalLayout {
+                        spacing: Space.s_8;
+                        GhostButton {
+                            label: "Cancel";
+                            clicked => {
+                                root.import_words = root.distribute_seed(""); root.import_gen += 1; root.import_edited(); root.seed_mode = "view";
+                            }
+                        }
+                        PrimaryButton {
+                            label: "Import phrase";
+                            height: 34px;
+                            enabled: root.import_valid;
+                            clicked => { root.import_submit(); root.seed_mode = "view"; }
+                        }
+                    }
+                }
+            }
+
+            if root.seed_mode == "view" && !root.seed_unsaved: HorizontalLayout {
+                spacing: Space.s_8;
+                if !root.seed_saved: GhostButton { label: "Import"; clicked => { root.import_words = root.distribute_seed(""); root.import_gen += 1; root.import_edited(); root.seed_mode = "import"; } }
+                if !root.seed_saved: GhostButton { label: "Generate"; clicked => { root.generate_seed(); } }
+                if root.seed_saved: VerticalLayout {
+                    alignment: center;
+                    Text { text: "To use a different phrase, create a new wallet from Choose wallet."; color: Palette.text_quiet; font-family: Fonts.ui; font-size: Fonts.small; }
+                }
+                Rectangle { }
+            }
+            }
+        }
+
+        import_paste := Field {
+            visible: false;
+            width: 0px;
+            height: 0px;
+            is_secret: true;
+            edited(t) => {
+                root.import_words = root.paste_via_button
+                    ? root.distribute_seed(t)
+                    : root.import_cell_edited(root.pending_import_index, t, root.import_words);
+                root.import_gen += 1;
+                root.import_edited();
+                import_paste.set_text("");
+            }
+        }
+    }
+
+    Card {
+        VerticalLayout {
+            CardHeader {
+                icon: @image-url("../../assets/icons/assets.svg");
+                title: "Assets";
+                subtitle: "Choose which tokens show in your wallet.";
+            }
+            VerticalLayout {
+                padding-left: Space.s_16; padding-right: Space.s_16; padding-top: Space.card_pad_v; padding-bottom: Space.card_pad_v;
+                spacing: Space.s_8;
+                for a in root.assets: Rectangle {
+                    height: 44px;
+                        HorizontalLayout {
+                            spacing: Space.s_12;
+                            VerticalLayout { alignment: center; Avatar { initial: a.initial; tint: a.color; size: 34px; } }
+                            VerticalLayout {
+                                alignment: center; spacing: Space.s_2;
+                                Text { text: a.name; color: Palette.text_primary; font-family: Fonts.ui; font-weight: Fonts.semibold; font-size: Fonts.body; }
+                                Text { text: a.symbol; color: Palette.text_quiet; font-family: Fonts.ui; font-size: Fonts.micro; }
+                            }
+                            Rectangle { }
+                            VerticalLayout {
+                                alignment: center;
+                                if a.always: Text { text: "Always visible"; color: Palette.accent_text; font-family: Fonts.ui; font-weight: Fonts.semibold; font-size: Fonts.body; }
+                                if !a.always: Rectangle {
+                                    width: 46px; height: 26px;
+                                    border-radius: self.height / 2;
+                                    background: a.visible ? Palette.accent : Palette.surface_inset;
+                                    border-width: 1px;
+                                    border-color: a.visible ? Palette.accent : Palette.border_strong;
+                                    Rectangle {
+                                        width: 20px; height: 20px; border-radius: 10px;
+                                        x: a.visible ? parent.width - 23px : 3px;
+                                        y: (parent.height - self.height) / 2;
+                                        background: Palette.text_on_fill;
+                                        animate x { duration: Motion.fast; easing: Motion.curve; }
+                                    }
+                                    TouchArea { mouse-cursor: pointer; clicked => { root.toggle_asset(a.control_id, !a.visible); } }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+}

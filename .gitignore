@@ -1,0 +1,10 @@
+/target/
+*.ccwallet
+*.ccwallet.*
+.ccwallet.lock
+.ccwallet-storage-probe-*
+cc-wallet-profile*
+
+# Local-only audit reports (kept out of the repo)
+REVIEW_REPORT.md
+REVIEW_REPORT_ru.md

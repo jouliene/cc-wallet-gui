@@ -1,0 +1,92 @@
+import { Theme } from "../theme.slint";
+import { Palette, Fonts, Space, Radii } from "../design_tokens.slint";
+import { Field } from "../widgets.slint";
+
+export component SegChoice inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    callback clicked();
+    border-radius: Radii.sm;
+    border-width: fs.has-focus ? 2px : 0px;
+    border-color: Palette.focus_ring;
+    fs := FocusScope {
+        enabled: true;
+        key-pressed(e) => {
+            if (e.text == " " || e.text == "\n") {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+    background: root.active ? Palette.accent_quiet : (seg_ta.has-hover ? Palette.hover_strong : transparent);
+    HorizontalLayout {
+        padding-left: Space.s_14; padding-right: Space.s_14; padding-top: Space.s_6; padding-bottom: Space.s_6;
+        alignment: center;
+        Text {
+            text: root.label;
+            color: root.active ? Palette.accent_text : Palette.text_tertiary;
+            font-family: Fonts.ui; font-weight: Fonts.semibold; font-size: Fonts.small;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+    seg_ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+export component SeedChip inherits Rectangle {
+    in property <int> number;
+    in property <string> word;
+    in property <bool> revealed;
+    height: 40px;
+    border-radius: 9px;
+    border-width: 1px;
+    border-color: Palette.border_subtle;
+    background: Palette.surface_sunken;
+    HorizontalLayout {
+        padding-left: Space.s_12; padding-right: Space.s_12; spacing: Space.s_8;
+        VerticalLayout { alignment: center; Text { text: root.number; color: Palette.accent_text; font-family: Fonts.ui; font-weight: Fonts.bold; font-size: Fonts.micro; } }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: root.revealed ? root.word : "••••••";
+                color: Palette.text_primary; font-family: Fonts.ui; font-weight: Fonts.medium; font-size: Fonts.body;
+                horizontal-alignment: center; overflow: elide;
+            }
+        }
+    }
+}
+
+export component EditableSeedChip inherits Rectangle {
+    in property <int> number;
+    in property <string> word;
+    in property <int> resync_gen: 0;
+    callback edited(string);
+    callback paste_requested();
+    height: 40px;
+    border-radius: 9px;
+    border-width: 1px;
+    border-color: fld.has_focus ? Palette.focus_ring : Palette.border_subtle;
+    background: Palette.surface_sunken;
+    changed word => { fld.set_text(root.word); }
+    changed resync_gen => { fld.set_text(root.word); }
+    HorizontalLayout {
+        padding-left: Space.s_12; padding-right: Space.s_10; spacing: Space.s_8;
+        VerticalLayout { alignment: center; Text { text: root.number; color: Palette.accent_text; font-family: Fonts.ui; font-weight: Fonts.bold; font-size: Fonts.micro; } }
+        fld := Field {
+            horizontal-stretch: 1;
+            text: root.word;
+            is_secret: true;
+            field_bg: transparent;
+            border_normal: transparent;
+            show_focus_border: false;
+            pad_left: 0px; pad_right: 0px;
+            alignment: TextHorizontalAlignment.center;
+            font_size: Fonts.body;
+            intercept_paste: true;
+            edited(t) => { root.edited(t); }
+            paste_requested => { root.paste_requested(); }
+        }
+    }
+}
