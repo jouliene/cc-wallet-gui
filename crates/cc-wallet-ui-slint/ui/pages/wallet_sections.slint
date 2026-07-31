@@ -18,13 +18,14 @@ export component OverviewStrip inherits Card {
     out property <length> switcher_h: wallet_switcher.height;
     property <bool> copied: false;
     HorizontalLayout {
-        padding-top: Space.s_12;
-        padding-bottom: Space.s_12;
+        padding-top: Space.s_16;
+        padding-bottom: Space.s_16;
         padding-left: Space.s_16;
-        padding-right: Space.s_20;
-        spacing: 18px;
+        padding-right: Space.s_16;
+        spacing: Space.s_16;
         wallet_switcher := Rectangle {
-            width: 248px;
+            horizontal-stretch: 1;
+            min-width: 0px;
             border-radius: Radii.md;
             border-width: root.menu_open ? 1px : 0px;
             border-color: Palette.focus_border;
@@ -77,7 +78,7 @@ export component OverviewStrip inherits Card {
         }
         Rectangle { width: 1px; background: Palette.border_subtle; }
         VerticalLayout {
-            horizontal-stretch: 1;
+            width: Theme.strip_address_w;
             alignment: center;
             spacing: Space.s_4;
             MicroLabel { text: "ADDRESS"; }
