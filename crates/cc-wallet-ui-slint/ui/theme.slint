@@ -1,4 +1,4 @@
-import { Palette } from "design_tokens.slint";
+import { Palette, Fonts, Sizes, Space } from "design_tokens.slint";
 
 export global Theme {
 
@@ -25,17 +25,23 @@ export global Theme {
     out property <length> send_form_col_w: 462px;
     out property <length> menu_overhang: 4px;
 
-    out property <length> activity_time_w: 72px;
-    out property <length> activity_type_w: 52px;
-    out property <length> activity_amount_w: 246px;
-    out property <length> activity_amount_token_gap_w: 9px;
+    out property <length> activity_col_gap: Space.s_12;
+    out property <length> activity_row_pad: Space.s_16;
+    out property <length> mono_char: Fonts.small * 0.6;
+    out property <length> mono_group: Fonts.small / 3;
+
+    out property <length> activity_time_w: 8 * root.mono_char;
+    out property <length> activity_type_w: 40px;
+    out property <length> activity_amount_value_w: 22 * root.mono_char + 2 * root.mono_group;
+    out property <length> activity_amount_token_gap_w: Space.s_8;
     out property <length> activity_amount_token_avatar_w: 18px;
     out property <length> activity_amount_token_symbol_w: 44px;
-    out property <length> activity_money_gap: 12px;
-    out property <length> activity_fee_w: 106px;
-    out property <length> activity_fee_gap: 6px;
-    out property <length> activity_final_w: 72px;
-    out property <length> activity_row_pad: 16px;
+    out property <length> activity_amount_w: root.activity_amount_value_w
+        + root.activity_amount_token_gap_w
+        + root.activity_amount_token_avatar_w
+        + root.activity_amount_token_symbol_w;
+    out property <length> activity_fee_w: 12 * root.mono_char + 2 * root.mono_group;
+    out property <length> activity_final_w: 52px + Space.s_6 + Sizes.icon_sm;
     out property <length> explorer_amount_w: 226px;
     out property <length> explorer_fee_w: 112px;
     out property <length> explorer_hash_w: 168px;

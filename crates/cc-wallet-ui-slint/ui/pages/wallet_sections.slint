@@ -592,34 +592,41 @@ export component ActivityCard inherits Card {
                 }
         }
         if root.activity_shown > 0: TableHeader {
+            property <length> right_block: Theme.activity_row_pad
+                + Theme.activity_final_w + Theme.activity_col_gap
+                + Theme.activity_fee_w + Theme.activity_col_gap
+                + Theme.activity_amount_w;
+            property <length> left_block: Theme.activity_row_pad
+                + Theme.activity_time_w + Theme.activity_col_gap
+                + Theme.activity_type_w + Theme.activity_col_gap;
             columns: [
                 { label: "TIME", x: Theme.activity_row_pad, width: Theme.activity_time_w },
                 {
                     label: "TYPE",
-                    x: Theme.activity_row_pad + Theme.activity_time_w,
+                    x: Theme.activity_row_pad + Theme.activity_time_w + Theme.activity_col_gap,
                     width: Theme.activity_type_w,
                 },
                 {
                     label: "TO / FROM",
-                    x: Theme.activity_row_pad + Theme.activity_time_w + Theme.activity_type_w,
-                    width: self.width - Theme.activity_row_pad - Theme.activity_final_w - Theme.activity_fee_gap - Theme.activity_fee_w - Theme.activity_money_gap - Theme.activity_amount_w - (Theme.activity_row_pad + Theme.activity_time_w + Theme.activity_type_w),
+                    x: self.left_block,
+                    width: self.width - self.right_block - self.left_block - Theme.activity_col_gap,
                 },
                 {
                     label: "AMOUNT",
-                    x: self.width - Theme.activity_row_pad - Theme.activity_final_w - Theme.activity_fee_gap - Theme.activity_fee_w - Theme.activity_money_gap - Theme.activity_amount_w,
-                    width: Theme.activity_amount_w - (Theme.activity_amount_token_gap_w + Theme.activity_amount_token_avatar_w + Theme.activity_amount_token_symbol_w),
+                    x: self.width - self.right_block,
+                    width: Theme.activity_amount_value_w,
                     right: true,
                 },
                 {
                     label: "FEE",
-                    x: self.width - Theme.activity_row_pad - Theme.activity_final_w - Theme.activity_fee_gap - Theme.activity_fee_w,
+                    x: self.width - Theme.activity_row_pad - Theme.activity_final_w
+                        - Theme.activity_col_gap - Theme.activity_fee_w,
                     width: Theme.activity_fee_w,
                 },
                 {
                     label: "FINALITY",
                     x: self.width - Theme.activity_row_pad - Theme.activity_final_w,
                     width: Theme.activity_final_w,
-                    right: true,
                 },
             ];
         }

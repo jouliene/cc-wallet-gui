@@ -1041,17 +1041,20 @@ mod helper_tests {
         assert!(summary.contains("in property <length> col_w: Theme.activity_amount_w;"));
         assert!(summary.contains("width: root.col_w;"));
         assert!(summary.contains(&format!("width: {COLUMN_WIDTH};")));
-        assert!(header.contains(&format!("width: {VALUE_WIDTH},")));
+        assert!(header.contains("width: Theme.activity_amount_value_w,"));
         assert!(
-            theme.contains("activity_amount_w: 246px;"),
-            "the amount column is the value plus its token block: 175 for              +100'000'000.999 999 999, which needs 166, and 71 for the badge and ticker"
+            theme.contains("activity_amount_value_w: 22 * root.mono_char + 2 * root.mono_group;"),
+            "the amount column is derived from its longest figure, not fitted: \
+             +100'000'000.999 999 999 is 22 monospaced characters and two group spaces"
         );
-        assert!(theme.contains("activity_amount_token_gap_w: 9px;"));
+        assert!(theme.contains("activity_amount_w: root.activity_amount_value_w"));
         assert!(theme.contains("activity_amount_token_avatar_w: 18px;"));
         assert!(theme.contains("activity_amount_token_symbol_w: 44px;"));
-        assert!(theme.contains("activity_money_gap: 12px;"));
-        assert!(rows.contains("Rectangle { width: Theme.activity_money_gap; }"));
-        assert_eq!(header.matches("Theme.activity_money_gap").count(), 2);
+        assert!(
+            !theme.contains("activity_money_gap") && !theme.contains("activity_fee_gap"),
+            "one gutter separates every column; a per-pair gap is a fitted number"
+        );
+        assert!(rows.contains("spacing: Theme.activity_col_gap;"));
         assert!(summary.contains("ActivityAmountValue {"));
 
         let value_column = summary

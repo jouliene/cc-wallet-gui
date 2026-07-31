@@ -153,7 +153,7 @@ export component ActivityListRow inherits Rectangle {
             HorizontalLayout {
                 padding-left: Theme.activity_row_pad;
                 padding-right: Theme.activity_row_pad;
-                spacing: Space.s_0;
+                spacing: Theme.activity_col_gap;
                 Text { width: Theme.activity_time_w; text: root.item.time; color: Palette.text_tertiary; font-family: Fonts.mono; font-size: Fonts.small; vertical-alignment: center; }
                 Rectangle {
                     width: Theme.activity_type_w;
@@ -223,7 +223,6 @@ export component ActivityListRow inherits Rectangle {
                         }
                     }
                 }
-                Rectangle { width: Theme.activity_money_gap; }
                 Rectangle {
                     width: Theme.activity_fee_w;
                     clip: true;
@@ -237,11 +236,10 @@ export component ActivityListRow inherits Rectangle {
                         show_token: false;
                     }
                 }
-                Rectangle { width: Theme.activity_fee_gap; }
                 Rectangle {
                     width: Theme.activity_final_w;
                     HorizontalLayout {
-                        alignment: end;
+                        alignment: start;
                         spacing: Space.s_6;
                         VerticalLayout {
                             alignment: center;
@@ -250,7 +248,6 @@ export component ActivityListRow inherits Rectangle {
                                 color: root.item.pending ? Palette.warning : (!root.item.success ? Palette.negative : (root.item.finality == "" ? Palette.text_quiet : Palette.text_secondary));
                                 font-family: Fonts.ui;
                                 font-size: Fonts.micro;
-                                horizontal-alignment: right;
                                 vertical-alignment: center;
                             }
                         }
