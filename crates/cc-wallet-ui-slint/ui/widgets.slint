@@ -72,6 +72,9 @@ export component Avatar inherits Rectangle {
     in property <color> tint: Palette.accent;
     in property <length> size: 38px;
     in property <length> font_size: max(9px, root.size * 0.44);
+    property <length> cap_h: root.font_size * 0.72;
+    property <length> baseline: root.font_size * 1.066;
+    property <length> optical_x: root.font_size * 0.09;
     width: root.size;
     height: root.size;
     border-radius: root.size * 0.3;
@@ -82,8 +85,10 @@ export component Avatar inherits Rectangle {
         font-family: Fonts.ui;
         font-weight: Fonts.bold;
         font-size: root.font_size;
+        x: root.optical_x;
+        y: (root.size + root.cap_h) / 2 - root.baseline;
+        width: root.size;
         horizontal-alignment: center;
-        vertical-alignment: center;
     }
 }
 
