@@ -12,8 +12,8 @@ pub use cc_wallet_chain::{
 };
 pub use cc_wallet_domain::{
     ActivityDirection, ActivityEvent, AddressBookEntry, AssetAmount, AssetId, AssetMeta,
-    AssetMovement, AssetTone, CcAmount, Digest32, MAX_SLIPPAGE_BPS, SeedPhrase, SendToken,
-    WalletSnapshot, all_supported_assets, asset_meta, canonicalize_recipient,
+    AssetMovement, AssetTone, CcAmount, Digest32, MAX_COMMENT_BYTES, MAX_SLIPPAGE_BPS, SeedPhrase,
+    SendToken, WalletSnapshot, all_supported_assets, asset_meta, canonicalize_recipient,
     contact_address_is_valid, fmt_duration, format_base_units, format_fixed9_amount,
     format_native_fixed9, format_slippage_percent, known_cc_assets, parse_send_amount,
 };

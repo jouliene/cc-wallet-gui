@@ -147,6 +147,7 @@ pub enum AppCommand {
     SelectAsset(AssetId),
     SetSendDestination(String),
     SetSendAmount(String),
+    SetSendComment(String),
     SetMaxAmount,
     SetAllowUnbounced(bool),
     RequestSend,
@@ -211,6 +212,7 @@ impl AppCommand {
             | Self::SelectAsset(_)
             | Self::SetSendDestination(_)
             | Self::SetSendAmount(_)
+            | Self::SetSendComment(_)
             | Self::SetMaxAmount
             | Self::SetAllowUnbounced(_)
             | Self::SetSwapFromToken(_)
@@ -299,6 +301,7 @@ impl AppCommand {
             | Self::SelectAsset(_)
             | Self::SetSendDestination(_)
             | Self::SetSendAmount(_)
+            | Self::SetSendComment(_)
             | Self::SetMaxAmount
             | Self::SetAllowUnbounced(_)
             | Self::RequestSend

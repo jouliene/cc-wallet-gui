@@ -24,11 +24,32 @@ impl SendToken {
     }
 }
 
+pub const COMMENT_ROOT_BYTES: usize = 123;
+
+pub const COMMENT_CELL_BYTES: usize = 127;
+
+pub const COMMENT_CELLS: usize = 4;
+
+pub const MAX_COMMENT_BYTES: usize = COMMENT_ROOT_BYTES + COMMENT_CELLS * COMMENT_CELL_BYTES;
+
+pub fn truncate_comment(text: &str) -> &str {
+    if text.len() <= MAX_COMMENT_BYTES {
+        return text;
+    }
+    let mut end = MAX_COMMENT_BYTES;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SendForm {
     pub token: SendToken,
     pub destination: String,
     pub amount: String,
+    #[serde(default)]
+    pub comment: String,
 }
 
 impl Default for SendForm {
@@ -37,6 +58,7 @@ impl Default for SendForm {
             token: SendToken::Native,
             destination: String::new(),
             amount: String::new(),
+            comment: String::new(),
         }
     }
 }
@@ -45,6 +67,7 @@ impl SendForm {
     pub fn request(&self) -> WalletResult<SendRequest> {
         let value = parse_send_amount(self.token.asset_id(), &self.amount)?;
         SendRequest::new(self.destination.clone(), value)
+            .map(|request| request.with_comment(&self.comment))
     }
 }
 
@@ -52,6 +75,8 @@ impl SendForm {
 pub struct SendRequest {
     destination: String,
     value: AssetAmount,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    comment: String,
 }
 
 #[derive(Deserialize)]
@@ -59,12 +84,16 @@ pub struct SendRequest {
 struct SendRequestWire {
     destination: String,
     value: AssetAmount,
+    #[serde(default)]
+    comment: String,
 }
 
 impl<'de> Deserialize<'de> for SendRequest {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let wire = SendRequestWire::deserialize(deserializer)?;
-        Self::new(wire.destination, wire.value).map_err(serde::de::Error::custom)
+        Self::new(wire.destination, wire.value)
+            .map(|request| request.with_comment(&wire.comment))
+            .map_err(serde::de::Error::custom)
     }
 }
 
@@ -82,7 +111,21 @@ impl SendRequest {
                 "only currency-collection ids 1, 2, and 3 can be sent",
             ));
         }
-        Ok(Self { destination, value })
+        Ok(Self {
+            destination,
+            value,
+            comment: String::new(),
+        })
+    }
+
+    #[must_use]
+    pub fn with_comment(mut self, comment: &str) -> Self {
+        self.comment = truncate_comment(comment.trim()).to_owned();
+        self
+    }
+
+    pub fn comment(&self) -> &str {
+        &self.comment
     }
 
     pub fn native(destination: impl Into<String>, units: u128) -> WalletResult<Self> {
@@ -196,10 +239,38 @@ mod tests {
             token: SendToken::Native,
             destination: DEST.to_owned(),
             amount: "1.2".to_owned(),
+            comment: String::new(),
         };
         let request = form.request().unwrap();
         assert_eq!(request.asset_id(), AssetId::Native);
         assert_eq!(request.value().native_units(), Some(1_200_000_000));
+    }
+
+    #[test]
+    fn a_comment_is_measured_in_bytes_and_cut_on_a_character_boundary() {
+        assert_eq!(MAX_COMMENT_BYTES, 631);
+
+        let ascii = "x".repeat(MAX_COMMENT_BYTES + 10);
+        assert_eq!(truncate_comment(&ascii).len(), MAX_COMMENT_BYTES);
+
+        let cyrillic = "я".repeat(400);
+        let cut = truncate_comment(&cyrillic);
+        assert!(cut.len() <= MAX_COMMENT_BYTES);
+        assert_eq!(
+            cut.chars().count(),
+            MAX_COMMENT_BYTES / 2,
+            "a Cyrillic letter spends two bytes, so 631 bytes is 315 of them and the \
+             odd byte is left rather than splitting one in half"
+        );
+        assert!(cut.chars().all(|c| c == 'я'));
+
+        let form = SendForm {
+            token: SendToken::Native,
+            destination: DEST.to_owned(),
+            amount: "1".to_owned(),
+            comment: format!("  {}  ", "e".repeat(MAX_COMMENT_BYTES + 5)),
+        };
+        assert_eq!(form.request().unwrap().comment().len(), MAX_COMMENT_BYTES);
     }
 
     #[test]
@@ -208,6 +279,7 @@ mod tests {
             token: SendToken::Cc(2),
             destination: DEST.to_owned(),
             amount: "340282366920938463463374607431.768211456".to_owned(),
+            comment: String::new(),
         };
         let request = form.request().unwrap();
         assert_eq!(request.asset_id(), AssetId::CurrencyCollection(2));

@@ -206,6 +206,9 @@ export component SendCard inherits Card {
     in-out property <string> recipient;
     in property <bool> recipient_valid;
     in-out property <string> amount;
+    in-out property <string> comment;
+    in property <int> comment_bytes;
+    in property <int> comment_limit;
     in property <bool> send_enabled;
     in property <bool> form_locked;
     in property <bool> insufficient_balance;
@@ -220,6 +223,7 @@ export component SendCard inherits Card {
     in property <bool> token_open;
     callback recipient_edited(string);
     callback amount_edited(string);
+    callback comment_edited(string);
     callback clear_recipient();
     callback max_amount();
     callback request_send();
@@ -318,79 +322,131 @@ export component SendCard inherits Card {
                 }
             }
 
-            VerticalLayout {
-                spacing: Space.s_8;
-                HorizontalLayout {
-                    height: Sizes.label_row_h;
+            HorizontalLayout {
+                spacing: Space.s_16;
+                VerticalLayout {
+                    width: Theme.send_form_col_w;
                     spacing: Space.s_8;
-                    alignment: start;
-                    VerticalLayout { alignment: center; MicroLabel { text: "AMOUNT"; } }
-                    if root.insufficient_balance: VerticalLayout {
-                        alignment: center;
-                        horizontal-stretch: 1;
-                        InlineError { text: "Insufficient balance for this amount plus the fee"; }
-                    }
-                }
-                HorizontalLayout {
-                    spacing: Space.s_10;
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        height: Theme.amount_h;
-                        amount_field := Field {
-                            text <=> root.amount;
-                            enabled: !root.form_locked;
-                            group_digits: true;
-                            placeholder: "0.0";
-                            height_: Theme.amount_h;
-                            font_family: Fonts.mono;
-                            font_size: root.amount.character-count > 19
-                                ? Fonts.amount_tightest
-                                : (root.amount.character-count > 16 ? Fonts.amount_tight : Fonts.amount);
-                            font_weight: Fonts.regular;
-                            text_opacity: Fade.muted;
-                            money_int: AmountFormat.int_part(root.amount);
-                            pad_right: 62px;
-                            edited(t) => { root.amount_edited(t); }
-                        }
-                        MaxChip {
-                            x: parent.width - 52px;
-                            y: (Theme.amount_h - 24px) / 2;
-                            enabled_: !root.form_locked;
-                            clicked => { root.max_amount(); }
+                    HorizontalLayout {
+                        height: Sizes.label_row_h;
+                        spacing: Space.s_8;
+                        alignment: start;
+                        VerticalLayout { alignment: center; MicroLabel { text: "AMOUNT"; } }
+                        if root.insufficient_balance: VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 1;
+                            InlineError { text: "Insufficient balance for this amount plus the fee"; }
                         }
                     }
-                    token_selector := Rectangle {
-                        width: Theme.token_selector_w;
-                        height: Theme.amount_h;
-                        border-radius: Radii.md;
-                        border-width: 1px;
-                        border-color: root.token_open ? Palette.focus_border : Palette.border_strong;
-                        background: Palette.surface_sunken;
-                        HorizontalLayout {
-                            padding-left: Space.s_10;
-                            padding-right: Space.s_12;
-                            spacing: Space.s_8;
-                            VerticalLayout { alignment: center; Avatar { initial: root.sel_initial; tint: root.sel_color; size: 22px; } }
-                            VerticalLayout { alignment: center; Text { text: root.sel_symbol; color: Palette.text_primary; font-family: Fonts.ui; font-weight: Fonts.semibold; font-size: Fonts.body; } }
-                            Rectangle { }
-                            VerticalLayout {
-                                alignment: center;
-                                Icon {
-                                    source: @image-url("../../assets/icons/chevron-down.svg");
-                                    tint: Palette.text_tertiary; width: 13px; height: 13px;
+                    HorizontalLayout {
+                        spacing: Space.s_10;
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            height: Theme.amount_h;
+                            amount_field := Field {
+                                text <=> root.amount;
+                                enabled: !root.form_locked;
+                                group_digits: true;
+                                placeholder: "0.0";
+                                height_: Theme.amount_h;
+                                font_family: Fonts.mono;
+                                font_size: root.amount.character-count > 19
+                                    ? Fonts.amount_tightest
+                                    : (root.amount.character-count > 16 ? Fonts.amount_tight : Fonts.amount);
+                                font_weight: Fonts.regular;
+                                text_opacity: Fade.muted;
+                                money_int: AmountFormat.int_part(root.amount);
+                                pad_right: 108px;
+                                edited(t) => { root.amount_edited(t); }
+                            }
+                            HorizontalLayout {
+                                x: parent.width - 102px;
+                                width: 96px;
+                                height: Theme.amount_h;
+                                alignment: end;
+                                spacing: Space.s_4;
+                                VerticalLayout {
+                                    alignment: center;
+                                    if root.amount != "": IconButton {
+                                        icon: @image-url("../../assets/icons/x.svg");
+                                        size: Sizes.control_dense; icon_size: 13px;
+                                        enabled: !root.form_locked;
+                                        clicked => { root.amount = ""; root.amount_edited(""); }
+                                    }
+                                }
+                                VerticalLayout {
+                                    alignment: center;
+                                    MaxChip {
+                                        enabled_: !root.form_locked;
+                                        clicked => { root.max_amount(); }
+                                    }
                                 }
                             }
                         }
-                        TouchArea { enabled: !root.form_locked; mouse-cursor: pointer; clicked => { root.open_token(); } }
+                        token_selector := Rectangle {
+                            width: Theme.token_selector_w;
+                            height: Theme.amount_h;
+                            border-radius: Radii.md;
+                            border-width: 1px;
+                            border-color: root.token_open ? Palette.focus_border : Palette.border_strong;
+                            background: Palette.surface_sunken;
+                            HorizontalLayout {
+                                padding-left: Space.s_10;
+                                padding-right: Space.s_12;
+                                spacing: Space.s_8;
+                                VerticalLayout { alignment: center; Avatar { initial: root.sel_initial; tint: root.sel_color; size: 22px; } }
+                                VerticalLayout { alignment: center; Text { text: root.sel_symbol; color: Palette.text_primary; font-family: Fonts.ui; font-weight: Fonts.semibold; font-size: Fonts.body; } }
+                                Rectangle { }
+                                VerticalLayout {
+                                    alignment: center;
+                                    Icon {
+                                        source: @image-url("../../assets/icons/chevron-down.svg");
+                                        tint: Palette.text_tertiary; width: Sizes.icon_sm; height: Sizes.icon_sm;
+                                    }
+                                }
+                            }
+                            TouchArea { enabled: !root.form_locked; mouse-cursor: pointer; clicked => { root.open_token(); } }
+                        }
+                    }
+
+                    PrimaryButton {
+                        height_: Theme.send_btn_h;
+                        label: "Send " + root.sel_symbol;
+                        enabled: root.send_enabled;
+                        clicked => { root.request_send(); }
                     }
                 }
-            }
 
-            PrimaryButton {
-                height_: Theme.send_btn_h;
-                label: "Send " + root.sel_symbol;
-                enabled: root.send_enabled;
-                clicked => { root.request_send(); }
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: Space.s_8;
+                    HorizontalLayout {
+                        height: Sizes.label_row_h;
+                        spacing: Space.s_8;
+                        alignment: start;
+                        VerticalLayout { alignment: center; MicroLabel { text: "COMMENT"; } }
+                        Rectangle { horizontal-stretch: 1; }
+                        if root.comment != "": VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: root.comment_bytes + " / " + root.comment_limit;
+                                color: root.comment_bytes >= root.comment_limit ? Palette.warning : Palette.text_quiet;
+                                font-family: Fonts.mono;
+                                font-size: Fonts.micro;
+                            }
+                        }
+                    }
+                    Field {
+                        vertical-stretch: 1;
+                        text <=> root.comment;
+                        enabled: !root.form_locked;
+                        multiline: true;
+                        placeholder: "Optional note sent with the transfer";
+                        height_: Theme.amount_h + Space.s_8 + Theme.send_btn_h;
+                        font_size: Fonts.small;
+                        edited(t) => { root.comment_edited(t); }
+                    }
+                }
             }
 
             if root.journal_blocking && root.risk_override_eligible: Rectangle {

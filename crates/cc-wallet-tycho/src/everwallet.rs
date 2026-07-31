@@ -2,7 +2,7 @@ use crate::contracts::{
     ContractAt, ContractSpec, DecodedContract, DecodedField, decode_contract_data,
 };
 use crate::{AccountState, KeyPair, ObservedAccountState, ObservedNetworkTime};
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use ed25519_dalek::VerifyingKey;
 use std::collections::BTreeMap;
 use std::str::FromStr;
@@ -37,6 +37,51 @@ pub fn ever_wallet_code_hash() -> String {
 
 static EMPTY_PAYLOAD: LazyLock<Cell> =
     LazyLock::new(|| CellBuilder::new().build().expect("empty cell must build"));
+
+pub const COMMENT_OP: u32 = 0;
+
+pub const COMMENT_ROOT_BYTES: usize = 123;
+
+pub const COMMENT_CELL_BYTES: usize = 127;
+
+pub const COMMENT_CELLS: usize = 4;
+
+pub const MAX_COMMENT_BYTES: usize = COMMENT_ROOT_BYTES + COMMENT_CELLS * COMMENT_CELL_BYTES;
+
+pub fn comment_payload(text: &str) -> Result<Cell> {
+    let bytes = text.as_bytes();
+    ensure!(
+        bytes.len() <= MAX_COMMENT_BYTES,
+        "a comment of {} bytes exceeds the {MAX_COMMENT_BYTES}-byte budget",
+        bytes.len()
+    );
+
+    let (head, mut rest) = bytes.split_at(bytes.len().min(COMMENT_ROOT_BYTES));
+    let mut tail: Vec<&[u8]> = Vec::new();
+    while !rest.is_empty() {
+        let (chunk, remainder) = rest.split_at(rest.len().min(COMMENT_CELL_BYTES));
+        tail.push(chunk);
+        rest = remainder;
+    }
+
+    let mut cell: Option<Cell> = None;
+    for chunk in tail.iter().rev() {
+        let mut builder = CellBuilder::new();
+        builder.store_raw(chunk, (chunk.len() * 8) as u16)?;
+        if let Some(next) = cell.take() {
+            builder.store_reference(next)?;
+        }
+        cell = Some(builder.build()?);
+    }
+
+    let mut root = CellBuilder::new();
+    root.store_u32(COMMENT_OP)?;
+    root.store_raw(head, (head.len() * 8) as u16)?;
+    if let Some(next) = cell {
+        root.store_reference(next)?;
+    }
+    root.build().context("failed to build the comment payload")
+}
 
 pub trait IntoStdAddr {
     fn into_std_addr(self) -> Result<StdAddr>;
@@ -697,6 +742,51 @@ impl IntoTupleResult for tycho_types::abi::AbiValue {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_comment_fills_the_root_cell_then_chains_up_to_four_more() {
+        let short = comment_payload("rent").unwrap();
+        assert_eq!(short.reference_count(), 0);
+        let mut slice = short.as_slice().unwrap();
+        assert_eq!(slice.load_u32().unwrap(), COMMENT_OP);
+        assert_eq!(slice.size_bits(), 4 * 8);
+
+        let exactly_root = "x".repeat(COMMENT_ROOT_BYTES);
+        assert_eq!(comment_payload(&exactly_root).unwrap().reference_count(), 0);
+
+        let one_over = "x".repeat(COMMENT_ROOT_BYTES + 1);
+        let chained = comment_payload(&one_over).unwrap();
+        assert_eq!(chained.reference_count(), 1);
+
+        let full = "x".repeat(MAX_COMMENT_BYTES);
+        let deep = comment_payload(&full).unwrap();
+        let mut depth = 0;
+        let mut cell = deep.clone();
+        while cell.reference_count() == 1 {
+            depth += 1;
+            cell = cell.reference_cloned(0).unwrap();
+        }
+        assert_eq!(
+            depth, COMMENT_CELLS,
+            "123 bytes in the root and 127 in each of four references is the whole budget"
+        );
+
+        assert!(
+            comment_payload(&"x".repeat(MAX_COMMENT_BYTES + 1)).is_err(),
+            "the builder refuses what the budget cannot hold; the caller truncates first"
+        );
+    }
+
+    #[test]
+    fn a_multibyte_comment_keeps_its_bytes() {
+        let text = "аренда за июль";
+        let payload = comment_payload(text).unwrap();
+        let mut slice = payload.as_slice().unwrap();
+        assert_eq!(slice.load_u32().unwrap(), COMMENT_OP);
+        let mut bytes = vec![0u8; text.len()];
+        slice.load_raw(&mut bytes, (text.len() * 8) as u16).unwrap();
+        assert_eq!(String::from_utf8(bytes).unwrap(), text);
+    }
     use super::*;
     use std::time::Instant;
     use tycho_types::models::Message;

@@ -770,6 +770,7 @@ export component Field inherits Rectangle {
     in property <bool> group_digits: false;
     in property <string> money_int;
     in property <float> text_opacity: 1.0;
+    in property <bool> multiline: false;
     property <EditFmt> pending_fmt;
     out property <bool> has_focus <=> input.has-focus;
     in property <bool> show_focus_border: true;
@@ -825,16 +826,18 @@ export component Field inherits Rectangle {
         read-only: root.read_only;
         input-type: root.input_type;
         x: root.pad_left;
+        y: root.multiline ? root.pad_left : 0px;
         width: max(1px, parent.width - root.pad_left - root.pad_right);
-        height: 100%;
+        height: root.multiline ? parent.height - 2 * root.pad_left : parent.height;
         color: Palette.text_primary;
         opacity: root.text_opacity;
         font-family: root.font_family;
         font-size: root.font_size;
         font-weight: root.font_weight;
         horizontal-alignment: root.alignment;
-        vertical-alignment: center;
-        single-line: true;
+        vertical-alignment: root.multiline ? top : center;
+        single-line: !root.multiline;
+        wrap: root.multiline ? word-wrap : no-wrap;
         selection-background-color: Palette.selection_bg;
         selection-foreground-color: Palette.text_on_fill;
         edited => {
@@ -893,14 +896,16 @@ export component Field inherits Rectangle {
         visible: root.text == "";
         text: root.placeholder;
         x: root.pad_left;
+        y: root.multiline ? root.pad_left : 0px;
         width: max(1px, parent.width - root.pad_left - root.pad_right);
-        height: 100%;
+        height: root.multiline ? parent.height - 2 * root.pad_left : parent.height;
         color: Palette.text_placeholder;
         font-family: Fonts.ui;
         font-weight: Fonts.regular;
         font-size: root.font_size;
         horizontal-alignment: root.alignment;
-        vertical-alignment: center;
+        vertical-alignment: root.multiline ? top : center;
+        wrap: root.multiline ? word-wrap : no-wrap;
         accessible-role: none;
     }
 

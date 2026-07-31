@@ -51,7 +51,10 @@ pub use profile::{
 };
 pub use risk::RISK_WARNING_VERSION;
 pub use risk::{RiskGrant, RiskGrantConsumption};
-pub use send::{SendAuthorization, SendForm, SendRequest, SendToken};
+pub use send::{
+    COMMENT_CELL_BYTES, COMMENT_CELLS, COMMENT_ROOT_BYTES, MAX_COMMENT_BYTES, SendAuthorization,
+    SendForm, SendRequest, SendToken, truncate_comment,
+};
 pub use strict::{
     Classified, EnvelopeSchemaV1, SchemaChecked, SchemaPolicy, StrictError, StrictObject,
     StrictSlot,

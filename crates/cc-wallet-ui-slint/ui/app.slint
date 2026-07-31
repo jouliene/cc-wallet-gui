@@ -64,6 +64,9 @@ export component AppWindow inherits Window {
     in-out property <string> recipient: "";
     in property <bool> recipient_valid: false;
     in-out property <string> amount: "";
+    in-out property <string> comment: "";
+    in property <int> comment_bytes;
+    in property <int> comment_limit: 631;
     in property <bool> send_enabled: false;
     in property <bool> send_form_locked: false;
     in property <bool> insufficient_balance: false;
@@ -229,6 +232,7 @@ export component AppWindow inherits Window {
     callback pick_contact(string);
     callback select_send_token(int);
     callback max_amount();
+    callback comment_edited(string);
     callback set_allow_unbounced(bool);
     callback request_send();
     callback request_risk_override();
@@ -368,6 +372,9 @@ export component AppWindow inherits Window {
                 recipient <=> root.recipient;
                 recipient_valid: root.recipient_valid;
                 amount <=> root.amount;
+                comment <=> root.comment;
+                comment_bytes: root.comment_bytes;
+                comment_limit: root.comment_limit;
                 send_enabled: root.send_enabled;
                 send_form_locked: root.send_form_locked;
                 insufficient_balance: root.insufficient_balance;
@@ -400,6 +407,7 @@ export component AppWindow inherits Window {
                 lock_now => { root.lock_now(); }
                 recipient_edited(t) => { root.recipient_edited(t); }
                 amount_edited(t) => { root.amount_edited(t); }
+                comment_edited(t) => { root.comment_edited(t); }
                 clear_recipient => { root.clear_recipient(); }
                 pick_contact(a) => { root.pick_contact(a); }
                 select_send_token(id) => { root.select_send_token(id); }

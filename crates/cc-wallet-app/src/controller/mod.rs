@@ -20,7 +20,7 @@ use cc_wallet_chain::{AccountTrace, ChainService, TychoWalletService};
 use cc_wallet_domain::{
     ActivityEvent, Digest32, EndpointAddressInputs, EndpointTransactionEvidence, JournalEnvelope,
     NetworkRegistry, RecordId, Reservation, RiskGrantConsumption, SeedPhrase, SendAuthorization,
-    SendRequest, WalletProfile,
+    SendRequest, WalletProfile, truncate_comment,
 };
 use cc_wallet_storage::{
     DEFAULT_WALLET_NAME, InstanceLock, LockOutcome, SelectedCandidate, StartupCwd, VaultStore,
@@ -684,6 +684,11 @@ impl AppController {
                 self.state.clear_send_form_error();
                 self.state.send_form.amount = amount;
                 self.max_filled = false;
+                self.schedule_fee_reestimate();
+            }
+            AppCommand::SetSendComment(comment) => {
+                self.state.clear_send_form_error();
+                self.state.send_form.comment = truncate_comment(&comment).to_owned();
                 self.schedule_fee_reestimate();
             }
             AppCommand::SetMaxAmount => self.set_max_amount(),

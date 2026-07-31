@@ -3,9 +3,9 @@ use std::rc::Rc;
 use cc_wallet_app::{
     AccountInspection, AccountTrace, ActivityEvent, AppPhase, AppState, AppTab, AssetAmount,
     AssetId, AuthMode, AuthPurpose, CcAmount, CoinSupply, DecodedContract, DecodedValue,
-    DestinationAccountStatus, LiveStatus, MAX_SLIPPAGE_BPS, NetworkStats, RecipientCheck,
-    all_supported_assets, asset_meta, canonicalize_recipient, fmt_duration, format_fixed9_amount,
-    format_native_fixed9, known_cc_assets,
+    DestinationAccountStatus, LiveStatus, MAX_COMMENT_BYTES, MAX_SLIPPAGE_BPS, NetworkStats,
+    RecipientCheck, all_supported_assets, asset_meta, canonicalize_recipient, fmt_duration,
+    format_fixed9_amount, format_native_fixed9, known_cc_assets,
 };
 use slint::{ModelRc, SharedString, VecModel};
 
@@ -546,6 +546,11 @@ pub(super) fn sync_ui(ui: &AppWindow, state: &AppState, form_locked: bool, cache
     if ui.get_amount().as_str() != desired_amount {
         ui.set_amount(desired_amount.into());
     }
+    if ui.get_comment().as_str() != state.send_form.comment {
+        ui.set_comment(state.send_form.comment.clone().into());
+    }
+    ui.set_comment_bytes(state.send_form.comment.len() as i32);
+    ui.set_comment_limit(MAX_COMMENT_BYTES as i32);
     ui.set_recipient_valid(state.recipient_valid());
     ui.set_send_enabled(state.send_enabled());
     ui.set_insufficient_balance(state.amount_exceeds_balance());

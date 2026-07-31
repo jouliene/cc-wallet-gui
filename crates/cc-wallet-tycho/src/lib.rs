@@ -28,9 +28,9 @@ pub use emulator::{
     validate_emulation_input_sizes,
 };
 pub use everwallet::{
-    AccountInspection, CLOCK_SKEW_MARGIN_SECS, DEFAULT_SEND_FLAGS, DEFAULT_TTL_SECS,
+    AccountInspection, CLOCK_SKEW_MARGIN_SECS, COMMENT_OP, DEFAULT_SEND_FLAGS, DEFAULT_TTL_SECS,
     DEFAULT_WORKCHAIN, EVER_WALLET_CODE_BOC, EVER_WALLET_CONTRACT, EverTransfer, EverWallet,
-    IntoStdAddr, MAX_EVER_EXTRA_CURRENCY_ID, PreparedMessage, WalletState,
+    IntoStdAddr, MAX_EVER_EXTRA_CURRENCY_ID, PreparedMessage, WalletState, comment_payload,
     ensure_supported_extra_currency_id as ensure_supported_ever_extra_currency_id,
     ever_wallet_code_hash, make_wallet_state_init, parse_std_addr,
 };

@@ -23,6 +23,9 @@ export component WalletPage inherits VerticalLayout {
     in-out property <string> recipient;
     in property <bool> recipient_valid;
     in-out property <string> amount;
+    in-out property <string> comment;
+    in property <int> comment_bytes;
+    in property <int> comment_limit;
     in property <bool> send_enabled;
     in property <bool> send_form_locked;
     in property <bool> insufficient_balance;
@@ -52,6 +55,7 @@ export component WalletPage inherits VerticalLayout {
     callback lock_now();
     callback recipient_edited(string);
     callback amount_edited(string);
+    callback comment_edited(string);
     callback clear_recipient();
     callback pick_contact(string);
     callback select_send_token(int);
@@ -114,6 +118,9 @@ export component WalletPage inherits VerticalLayout {
             recipient <=> root.recipient;
             recipient_valid: root.recipient_valid;
             amount <=> root.amount;
+            comment <=> root.comment;
+            comment_bytes: root.comment_bytes;
+            comment_limit: root.comment_limit;
             send_enabled: root.send_enabled;
             form_locked: root.send_form_locked;
             insufficient_balance: root.insufficient_balance;
@@ -128,6 +135,7 @@ export component WalletPage inherits VerticalLayout {
             token_open: token_popup.is-open;
             recipient_edited(t) => { root.recipient_edited(t); }
             amount_edited(t) => { root.amount_edited(t); }
+            comment_edited(t) => { root.comment_edited(t); }
             clear_recipient => { root.clear_recipient(); }
             max_amount => { root.max_amount(); }
             request_send => { root.request_send(); }
@@ -193,7 +201,7 @@ export component WalletPage inherits VerticalLayout {
 
     token_popup := PopupWindow {
         x: root.clamp_len(
-            send.token_abs_x + send.token_w - 180px - root.absolute-position.x,
+            send.token_abs_x + send.token_w + Theme.menu_overhang - 180px - root.absolute-position.x,
             12px,
             root.width - 180px - 12px);
         y: root.clamp_len(

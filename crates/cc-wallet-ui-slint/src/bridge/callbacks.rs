@@ -92,6 +92,11 @@ pub(super) fn connect_callbacks(
         t,
         AppCommand::SetSendAmount(ungroup_amount(&t))
     );
+    on1!(
+        on_comment_edited,
+        t,
+        AppCommand::SetSendComment(t.to_string())
+    );
     ui.global::<AmountFormat>()
         .on_int_part(|text| match text.as_str().split_once('.') {
             Some((int, _)) => int.into(),

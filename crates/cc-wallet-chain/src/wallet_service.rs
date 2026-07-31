@@ -25,8 +25,8 @@ use cc_wallet_tycho::{
     AccountInspection, AccountState, AccountStatus, BlockchainConfigState, CcdexAsset,
     ChainTransaction, CoinSupply, EmulationConfig, EverTransfer, EverWallet, KeyPair, LocalReason,
     MsgKind, ResponseKind, Seed, SendAttemptOutcome, SubscriptionEvent, Transport, WalletState,
-    account_subscription_loop, elector_election_stake, emulate_external_message, key_block_supply,
-    parse_transaction, pool_storage_from_account, prepare_emulation_config,
+    account_subscription_loop, comment_payload, elector_election_stake, emulate_external_message,
+    key_block_supply, parse_transaction, pool_storage_from_account, prepare_emulation_config,
     shard_account_for_emulation, swap_body, validate_emulation_input_sizes,
 };
 use sha2::{Digest, Sha256};
@@ -2001,10 +2001,16 @@ fn fee_within_bounds(fee: u128) -> bool {
 }
 
 fn build_transfer(request: &SendRequest, bounce: bool) -> ChainResult<EverTransfer> {
-    let transfer = EverTransfer::new(request.destination())
+    let mut transfer = EverTransfer::new(request.destination())
         .map_err(ChainError::invalid_input)?
         .bounce(bounce)
         .flags(SAFE_SEND_FLAGS);
+    if !request.comment().is_empty() {
+        transfer = transfer.payload(
+            comment_payload(request.comment())
+                .map_err(|error| ChainError::invalid_input(error.to_string()))?,
+        );
+    }
     match request.value().asset_id() {
         AssetId::Native => transfer
             .native(
