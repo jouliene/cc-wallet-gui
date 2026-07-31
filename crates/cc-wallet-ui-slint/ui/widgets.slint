@@ -9,6 +9,7 @@ export struct EditFmt {
 
 export global AmountFormat {
     callback regroup(text: string, cursor: int) -> EditFmt;
+    pure callback int_part(string) -> string;
 }
 
 export global ClipboardBridge {
@@ -767,6 +768,8 @@ export component Field inherits Rectangle {
     in property <bool> editing_border: false;
     in property <bool> intercept_paste: false;
     in property <bool> group_digits: false;
+    in property <string> money_int;
+    in property <float> text_opacity: 1.0;
     property <EditFmt> pending_fmt;
     out property <bool> has_focus <=> input.has-focus;
     in property <bool> show_focus_border: true;
@@ -825,6 +828,7 @@ export component Field inherits Rectangle {
         width: max(1px, parent.width - root.pad_left - root.pad_right);
         height: 100%;
         color: Palette.text_primary;
+        opacity: root.text_opacity;
         font-family: root.font_family;
         font-size: root.font_size;
         font-weight: root.font_weight;
@@ -870,6 +874,19 @@ export component Field inherits Rectangle {
             }
             return reject;
         }
+    }
+
+    if root.money_int != "": Text {
+        text: root.money_int;
+        x: root.pad_left;
+        height: 100%;
+        color: Palette.text_primary;
+        font-family: root.font_family;
+        font-size: root.font_size;
+        font-weight: Fonts.semibold;
+        horizontal-alignment: root.alignment;
+        vertical-alignment: center;
+        accessible-role: none;
     }
 
     Text {

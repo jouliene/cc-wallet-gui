@@ -168,7 +168,7 @@ fn initials(name: &str) -> String {
     if out.is_empty() { "C".to_owned() } else { out }
 }
 
-pub(super) const INT_GROUP: &str = "'";
+pub(super) const INT_GROUP: &str = "\u{2019}";
 
 pub(super) const FRAC_GROUP: &str = "\u{2004}";
 
@@ -695,7 +695,7 @@ mod number_grouping_tests {
     fn groups_both_sides_of_the_point() {
         assert_eq!(
             group_digits("999999999999.999999999"),
-            "999'999'999'999.999\u{2004}999\u{2004}999"
+            "999\u{2019}999\u{2019}999\u{2019}999.999\u{2004}999\u{2004}999"
         );
     }
 
@@ -706,7 +706,7 @@ mod number_grouping_tests {
 
         let typed = "1023.565656565";
         let shown = regroup_amount(typed, typed.len() as i32).text;
-        assert_eq!(shown, "1'023.565\u{2004}656\u{2004}565");
+        assert_eq!(shown, "1\u{2019}023.565\u{2004}656\u{2004}565");
         assert_eq!(
             ungroup_amount(&shown),
             typed,
@@ -719,7 +719,7 @@ mod number_grouping_tests {
     #[test]
     fn the_two_sides_of_the_point_are_separated_by_different_marks() {
         use super::{FRAC_GROUP, INT_GROUP};
-        assert_eq!(INT_GROUP, "'");
+        assert_eq!(INT_GROUP, "\u{2019}");
         assert_eq!(
             FRAC_GROUP, "\u{2004}",
             "a fraction is grouped by a third-em space, not by the integer's apostrophe: \
@@ -754,10 +754,10 @@ mod number_grouping_tests {
     #[test]
     fn editable_groups_integer_even_without_a_point() {
         use super::group_editable;
-        assert_eq!(group_editable("1000000"), "1'000'000");
-        assert_eq!(group_editable("1000000.5"), "1'000'000.5");
+        assert_eq!(group_editable("1000000"), "1\u{2019}000\u{2019}000");
+        assert_eq!(group_editable("1000000.5"), "1\u{2019}000\u{2019}000.5");
         assert_eq!(group_editable("1.000000000"), "1.000\u{2004}000\u{2004}000");
-        assert_eq!(group_editable("1000."), "1'000.");
+        assert_eq!(group_editable("1000."), "1\u{2019}000.");
         assert_eq!(group_editable(".5"), ".5");
         assert_eq!(group_editable(""), "");
         assert_eq!(group_editable("abc"), "abc");
@@ -767,23 +767,23 @@ mod number_grouping_tests {
     #[test]
     fn regroup_amount_keeps_caret_next_to_the_typed_digit() {
         use super::regroup_amount;
-        let f = regroup_amount("1'2345", 6);
-        assert_eq!(f.text, "12'345");
+        let f = regroup_amount("1\u{2019}2345", 6);
+        assert_eq!(f.text, "12\u{2019}345");
         assert_eq!(f.cursor, 6);
 
-        let f = regroup_amount("912'345", 1);
-        assert_eq!(f.text, "912'345");
+        let f = regroup_amount("912\u{2019}345", 1);
+        assert_eq!(f.text, "912\u{2019}345");
         assert_eq!(f.cursor, 1);
 
         let f = regroup_amount("1234", 4);
-        assert_eq!(f.text, "1'234");
-        assert_eq!(f.cursor, 5);
+        assert_eq!(f.text, "1\u{2019}234");
+        assert_eq!(f.cursor, 7);
 
         let f = regroup_amount("1000.123456", 11);
-        assert_eq!(f.text, "1'000.123\u{2004}456");
+        assert_eq!(f.text, "1\u{2019}000.123\u{2004}456");
         assert_eq!(
-            f.cursor, 15,
-            "the caret is a byte offset and the fraction separator is three bytes wide"
+            f.cursor, 17,
+            "the caret is a byte offset and both separators are three bytes wide"
         );
     }
 
@@ -791,11 +791,15 @@ mod number_grouping_tests {
     fn regroup_amount_leaves_the_caret_mid_string() {
         use super::regroup_amount;
         let f = regroup_amount("1234", 1);
-        assert_eq!(f.text, "1'234");
+        assert_eq!(f.text, "1\u{2019}234");
         assert_eq!(f.cursor, 1);
         let f = regroup_amount("1234", 2);
-        assert_eq!(f.text, "1'234");
-        assert_eq!(f.cursor, 3);
+        assert_eq!(f.text, "1\u{2019}234");
+        assert_eq!(
+            f.cursor, 5,
+            "one digit, then a three-byte separator, then the caret: byte offsets, not \
+             character counts"
+        );
     }
 
     #[test]
@@ -854,7 +858,7 @@ mod number_grouping_tests {
         );
         assert_eq!(
             display_send_amount(AssetId::Native, "1000000049.5"),
-            "1'000'000'049.500\u{2004}000\u{2004}000"
+            "1\u{2019}000\u{2019}000\u{2019}049.500\u{2004}000\u{2004}000"
         );
         assert_eq!(
             display_send_amount(AssetId::Native, "0.000000001"),
@@ -1110,7 +1114,7 @@ mod helper_tests {
         assert_eq!(row.symbol.as_str(), "#77");
         assert_eq!(
             row.amount.as_str(),
-            "452'312'848'583'266'388'373'324'160'190'187'140'051'835'877'600'158'453'279'131'187'530.910\u{2004}662\u{2004}655"
+            "452\u{2019}312\u{2019}848\u{2019}583\u{2019}266\u{2019}388\u{2019}373\u{2019}324\u{2019}160\u{2019}190\u{2019}187\u{2019}140\u{2019}051\u{2019}835\u{2019}877\u{2019}600\u{2019}158\u{2019}453\u{2019}279\u{2019}131\u{2019}187\u{2019}530.910\u{2004}662\u{2004}655"
         );
         assert_eq!(row.status.as_str(), "Read-only");
         assert!(!row.selected, "an unknown CC cannot become the send asset");
@@ -1169,7 +1173,10 @@ mod helper_tests {
 
         let row = activity_row(&event, "0:me", &[]);
         let movement = row.movements.row_data(0).expect("one movement row");
-        assert_eq!(movement.amount_int.as_str(), "1'000'000'000");
+        assert_eq!(
+            movement.amount_int.as_str(),
+            "1\u{2019}000\u{2019}000\u{2019}000"
+        );
         assert_eq!(movement.amount_frac.as_str(), ".000\u{2004}000\u{2004}000");
         assert!(row.movements.row_data(1).is_none());
     }
@@ -1190,7 +1197,7 @@ mod helper_tests {
             ..ActivityEvent::test_stub(1, 1)
         };
         let row = activity_row(&whole, "0:me", &[]);
-        assert_eq!(row.fee.amount_int.as_str(), "1'234");
+        assert_eq!(row.fee.amount_int.as_str(), "1\u{2019}234");
         assert_eq!(
             row.fee.amount_frac.as_str(),
             ".567\u{2004}890\u{2004}123",

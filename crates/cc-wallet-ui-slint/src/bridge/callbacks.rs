@@ -92,6 +92,11 @@ pub(super) fn connect_callbacks(
         t,
         AppCommand::SetSendAmount(ungroup_amount(&t))
     );
+    ui.global::<AmountFormat>()
+        .on_int_part(|text| match text.as_str().split_once('.') {
+            Some((int, _)) => int.into(),
+            None => text,
+        });
     ui.global::<AmountFormat>().on_regroup(|text, cursor| {
         let f = regroup_amount(text.as_str(), cursor);
         EditFmt {

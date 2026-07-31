@@ -1114,7 +1114,7 @@ mod explorer_tests {
     #[test]
     fn a_balance_splits_into_a_grouped_integer_and_a_fraction_with_its_coin_badge() {
         let view = account_view(&inspection(1_980_000_000_000, &[]), "-1:00");
-        assert_eq!(view.balance.amount_int, "1'980");
+        assert_eq!(view.balance.amount_int, "1\u{2019}980");
         assert_eq!(view.balance.amount_frac, ".000\u{2004}000\u{2004}000");
         assert_eq!(view.balance.symbol, "COIN");
         assert_eq!(view.balance.initial, "C");
@@ -1129,7 +1129,7 @@ mod explorer_tests {
         assert_eq!(known.initial, "1");
 
         let unknown = currency_amount(77, "1000000000000");
-        assert_eq!(unknown.amount_int, "1'000");
+        assert_eq!(unknown.amount_int, "1\u{2019}000");
         assert_eq!(unknown.amount_frac, ".000\u{2004}000\u{2004}000");
         assert_eq!(unknown.symbol, "#77");
         assert_eq!(unknown.initial, "77");
@@ -1156,7 +1156,7 @@ mod explorer_tests {
             "the size is a fact of its own, split off by the row's divider"
         );
         assert_eq!(view.code_full, "te6ccgEBAQEATgABABBhbGwgb2YgdGhlIGNvZGU=");
-        assert_eq!(view.storage_bits, "1'629");
+        assert_eq!(view.storage_bits, "1\u{2019}629");
         assert_eq!(view.storage_cells, "9");
     }
 
@@ -1257,10 +1257,13 @@ mod explorer_tests {
         let view = super::network_stats_view(Some(&full), 1_784_777_441 + 5_030);
         assert_eq!(view.validators, "17");
         assert!(view.has_stake);
-        assert_eq!(view.total_stake.amount_int, "9'532'221");
+        assert_eq!(view.total_stake.amount_int, "9\u{2019}532\u{2019}221");
         assert_eq!(view.total_stake.symbol, "COIN");
         assert!(view.has_supply);
-        assert_eq!(view.total_supply.amount_int, "7'074'806'721");
+        assert_eq!(
+            view.total_supply.amount_int,
+            "7\u{2019}074\u{2019}806\u{2019}721"
+        );
         assert_eq!(view.total_supply.amount_frac, ".778\u{2004}674\u{2004}964");
         assert_eq!(view.stake_ratio, "0.1347%");
         assert_eq!(
@@ -1972,7 +1975,7 @@ mod explorer_tests {
         let view = account_view(&inspection(u128::MAX, &[]), "-1:00");
         assert_eq!(
             view.balance.amount_int,
-            "340'282'366'920'938'463'463'374'607'431'768'211'455"
+            "340\u{2019}282\u{2019}366\u{2019}920\u{2019}938\u{2019}463\u{2019}463\u{2019}374\u{2019}607\u{2019}431\u{2019}768\u{2019}211\u{2019}455"
         );
         assert_eq!(view.balance.amount_frac, "");
         assert_eq!(view.balance.symbol, "COIN");

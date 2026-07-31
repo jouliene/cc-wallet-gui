@@ -1,6 +1,6 @@
 import { Theme, Status } from "../theme.slint";
-import { Palette, Fonts, Radii, Sizes, Space, Motion } from "../design_tokens.slint";
-import { Icon, Avatar, Card, CardHeader, MicroLabel, IconButton, Field, StatusDot, GhostButton, EmptyState, ClipboardBridge, UserActivity, MaxChip, TableHeader, PrimaryButton, InlineError } from "../widgets.slint";
+import { Palette, Fade, Fonts, Radii, Sizes, Space, Motion } from "../design_tokens.slint";
+import { AmountFormat, Icon, Avatar, Card, CardHeader, MicroLabel, IconButton, Field, StatusDot, GhostButton, EmptyState, ClipboardBridge, UserActivity, MaxChip, TableHeader, PrimaryButton, InlineError } from "../widgets.slint";
 import { AssetRow, ActivityRow } from "../models.slint";
 import { AssetListRow, ActivityListRow, SegBtn } from "wallet_components.slint";
 import { ScrollView } from "std-widgets.slint";
@@ -334,7 +334,9 @@ export component SendCard inherits Card {
                             font_size: root.amount.character-count > 19
                                 ? Fonts.amount_tightest
                                 : (root.amount.character-count > 16 ? Fonts.amount_tight : Fonts.amount);
-                            font_weight: 600;
+                            font_weight: Fonts.regular;
+                            text_opacity: Fade.muted;
+                            money_int: AmountFormat.int_part(root.amount);
                             pad_right: 62px;
                             edited(t) => { root.amount_edited(t); }
                         }
