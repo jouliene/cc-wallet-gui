@@ -1680,6 +1680,44 @@ mod helper_tests {
     }
 
     #[test]
+    fn a_balance_gives_up_its_fraction_before_a_digit_of_the_integer() {
+        let widgets = include_str!("../../ui/widgets.slint");
+        let rows = include_str!("../../ui/pages/wallet_components.slint");
+
+        let amount = widgets
+            .split_once("export component Amount inherits HorizontalLayout")
+            .expect("the shared Amount component exists")
+            .1
+            .split_once("export component MaxChip")
+            .expect("Amount ends before MaxChip")
+            .0;
+        let (integer, fraction) = amount
+            .split_once("text: root.amount.amount_frac;")
+            .expect("the fraction run follows the integer run");
+        assert!(
+            !integer.contains("overflow:"),
+            "the integer run must never elide — a balance that loses a digit before the \
+             point is a different number"
+        );
+        assert!(fraction.contains("overflow: root.elide_fraction ? elide : clip;"));
+        assert!(fraction.contains("min-width: root.elide_fraction ? 0px : self.preferred-width;"));
+
+        let asset_row = rows
+            .split_once("export component AssetListRow")
+            .expect("the asset row exists")
+            .1
+            .split_once("component ActivityAmountValue")
+            .expect("the asset row ends before the activity amount")
+            .0;
+        assert!(asset_row.contains("elide_fraction: true;"));
+        assert!(
+            asset_row.contains("min-width: 0px;"),
+            "the name column has to be allowed to shrink, or the row pushes the balance out"
+        );
+        assert!(asset_row.contains("font_size: Fonts.balance;"));
+    }
+
+    #[test]
     fn an_address_on_screen_can_always_be_opened_in_the_explorer() {
         let sources = ui_sources();
         let src_of = |name: &str| {
