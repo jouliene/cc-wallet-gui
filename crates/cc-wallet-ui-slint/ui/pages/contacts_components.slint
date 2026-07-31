@@ -156,6 +156,8 @@ export component ContactEditRow inherits Rectangle {
             handles_escape: true;
             escape_pressed => { root.cancel(); }
             text <=> root.draft_addr;
+            font_family: Fonts.mono;
+            font_size: Fonts.address;
             placeholder: "Contact address";
             edited(t) => { root.addr_edited(t); }
         }
