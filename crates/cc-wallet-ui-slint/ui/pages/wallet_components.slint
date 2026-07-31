@@ -158,12 +158,12 @@ export component ActivityListRow inherits Rectangle {
                 Rectangle {
                     width: Theme.activity_type_w;
                     HorizontalLayout {
-                        alignment: center;
+                        alignment: start;
                         VerticalLayout {
                             alignment: center;
                             Chip {
                                 label: root.item.kind;
-                                min_w: 34px;
+                                min_w: Theme.activity_type_chip_w;
                                 fg: !root.item.success ? Palette.negative : (root.item.is_in ? Palette.value_in : Palette.value_out);
                                 bg: !root.item.success ? Palette.negative_quiet : (root.item.is_in ? Palette.positive_quiet : Palette.badge_neutral);
                                 frame: !root.item.success ? Palette.negative_border : (root.item.is_in ? Palette.positive_border : Palette.border_subtle);

@@ -14,11 +14,11 @@ use cc_wallet_chain::{
 use cc_wallet_domain::{
     ActivityDirection, ActivityEvent, AddressBookEntry, AssetAmount, AssetId, AssetMovement,
     BlockerRow, CcAmount, DEFAULT_ENDPOINT, DEFAULT_SLIPPAGE_BPS, DeliveryEvidence, Digest32,
-    EndpointAddressInputs, EndpointTransactionEvidence, EvidenceTag, ObservedNetworkTime,
-    PrepareProvenance, PreparedRecord, RISK_WARNING_VERSION, RecordId, Reservation,
-    ReservationKind, RiskGrant, RiskGrantConsumption, RiskNonce, SeedPhrase, SendAuthorization,
-    SendRequest, SendTicket, TerminalOutcome, WalletInputs, WalletProfile, WalletSnapshot,
-    blocker_set_digest, overlap_set_digest, reservation_set_digest,
+    EndpointAddressInputs, EndpointTransactionEvidence, EvidenceTag, LOCAL_SEND_FEE_HEADROOM_NANOS,
+    ObservedNetworkTime, PrepareProvenance, PreparedRecord, RISK_WARNING_VERSION, RecordId,
+    Reservation, ReservationKind, RiskGrant, RiskGrantConsumption, RiskNonce, SeedPhrase,
+    SendAuthorization, SendRequest, SendTicket, TerminalOutcome, WalletInputs, WalletProfile,
+    WalletSnapshot, blocker_set_digest, overlap_set_digest, reservation_set_digest,
 };
 use cc_wallet_vault::{KdfParams, Vault};
 
@@ -11315,12 +11315,19 @@ fn the_send_button_settles_once_instead_of_blinking_while_the_fee_lands() {
         "an edited form has no fee of its own yet"
     );
     assert!(
-        !c.state().send_ready(),
-        "the button stays off while the number under it is still the previous form's"
+        c.state().fee_estimate_stale,
+        "the form was edited, so no estimate of its own has landed yet"
     );
     assert!(
-        c.state().send_enabled(),
-        "the send itself is not blocked — a debounced form keeps the last estimate"
+        c.state().send_ready(),
+        "the button lights as soon as the form is complete — it does not wait 600ms for \
+         a debounced estimate, it judges the amount against a fee bound the real one is \
+         not expected to beat, so the verdict does not change when it lands"
+    );
+    assert_eq!(
+        c.state().pending_send_fee_bound(),
+        crate::state::HARDCODED_SEND_FEE_NANOS + LOCAL_SEND_FEE_HEADROOM_NANOS,
+        "with no estimate yet the bound is the app's own default fee plus its headroom"
     );
 
     c.estimate_fee();

@@ -4,7 +4,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use cc_wallet_chain::{
     AccountInspection, AccountTrace, AccountTx, DestinationAccountStatus, FeeEstimate,
-    LOCAL_SEND_FEE_CEILING_NANOS, NetworkStats, PoolSnapshot,
+    LOCAL_SEND_FEE_CEILING_NANOS, LOCAL_SEND_FEE_HEADROOM_NANOS, NetworkStats, PoolSnapshot,
 };
 use cc_wallet_domain::{
     ActivityEvent, AddressBookEntry, AssetAmount, AssetId, CcAmount, DEFAULT_NETWORK_ID,
@@ -795,6 +795,12 @@ impl AppState {
             .unwrap_or(HARDCODED_SEND_FEE_NANOS)
     }
 
+    pub(crate) fn pending_send_fee_bound(&self) -> u128 {
+        self.effective_send_fee()
+            .max(HARDCODED_SEND_FEE_NANOS)
+            .saturating_add(LOCAL_SEND_FEE_HEADROOM_NANOS)
+    }
+
     fn affordable_send_fee(&self) -> Option<u128> {
         let fee = self.effective_send_fee();
         (fee <= LOCAL_SEND_FEE_CEILING_NANOS).then_some(fee)
@@ -817,10 +823,19 @@ impl AppState {
     }
 
     fn can_afford_amount(&self, amount: &AssetAmount, overlap: &[Reservation]) -> bool {
-        let Some(wallet) = self.wallet.as_ref() else {
+        let Some(fee_units) = self.affordable_send_fee() else {
             return false;
         };
-        let Some(fee_units) = self.affordable_send_fee() else {
+        self.can_afford_amount_at_fee(amount, overlap, fee_units)
+    }
+
+    fn can_afford_amount_at_fee(
+        &self,
+        amount: &AssetAmount,
+        overlap: &[Reservation],
+        fee_units: u128,
+    ) -> bool {
+        let Some(wallet) = self.wallet.as_ref() else {
             return false;
         };
         let Ok(fee) = AssetAmount::native(fee_units) else {
@@ -861,7 +876,19 @@ impl AppState {
     }
 
     pub fn send_ready(&self) -> bool {
-        self.send_enabled() && !self.fee_estimate_stale
+        if !self.fee_estimate_stale {
+            return self.send_enabled();
+        }
+        let Ok(amount) = parse_send_amount(self.send_form.token.asset_id(), &self.send_form.amount)
+        else {
+            return false;
+        };
+        self.send_safety_block_reason().is_none()
+            && !self.busy
+            && !self.sending
+            && !self.max_refining
+            && self.recipient_valid()
+            && self.can_afford_amount_at_fee(&amount, &[], self.pending_send_fee_bound())
     }
 
     pub fn delete_contact(&mut self, index: usize) {
