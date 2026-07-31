@@ -168,8 +168,16 @@ fn initials(name: &str) -> String {
     if out.is_empty() { "C".to_owned() } else { out }
 }
 
+pub(super) const INT_GROUP: &str = "'";
+
+pub(super) const FRAC_GROUP: &str = "\u{2004}";
+
 pub(super) fn group_digits(amount: &str) -> String {
     group_editable(amount)
+}
+
+pub(super) fn ungroup_amount(text: &str) -> String {
+    text.replace(INT_GROUP, "").replace(FRAC_GROUP, "")
 }
 
 pub(super) fn group_editable(amount: &str) -> String {
@@ -192,7 +200,7 @@ pub(super) fn group_editable(amount: &str) -> String {
         } else {
             bytes.chunks(3).map(to_str).collect()
         };
-        chunks.join("'")
+        chunks.join(if from_right { INT_GROUP } else { FRAC_GROUP })
     };
     match amount.split_once('.') {
         Some((int, frac)) => format!("{}.{}", group(int, true), group(frac, false)),
@@ -687,14 +695,47 @@ mod number_grouping_tests {
     fn groups_both_sides_of_the_point() {
         assert_eq!(
             group_digits("999999999999.999999999"),
-            "999'999'999'999.999'999'999"
+            "999'999'999'999.999\u{2004}999\u{2004}999"
         );
     }
 
     #[test]
+    fn what_the_amount_field_shows_still_parses_as_an_amount() {
+        use super::{parse_send_amount, regroup_amount, ungroup_amount};
+        use cc_wallet_app::AssetId;
+
+        let typed = "1023.565656565";
+        let shown = regroup_amount(typed, typed.len() as i32).text;
+        assert_eq!(shown, "1'023.565\u{2004}656\u{2004}565");
+        assert_eq!(
+            ungroup_amount(&shown),
+            typed,
+            "both separators have to come back off before the domain sees the amount, \
+             not just the integer's apostrophe"
+        );
+        assert!(parse_send_amount(AssetId::Native, &ungroup_amount(&shown)).is_ok());
+    }
+
+    #[test]
+    fn the_two_sides_of_the_point_are_separated_by_different_marks() {
+        use super::{FRAC_GROUP, INT_GROUP};
+        assert_eq!(INT_GROUP, "'");
+        assert_eq!(
+            FRAC_GROUP, "\u{2004}",
+            "a fraction is grouped by a third-em space, not by the integer's apostrophe: \
+             the two runs read as one number otherwise. Every bundled face carries this \
+             glyph — see assets/fonts/README.md before re-subsetting one"
+        );
+
+        let grouped = group_digits("1000.123456789");
+        assert_eq!(grouped.matches(INT_GROUP).count(), 1);
+        assert_eq!(grouped.matches(FRAC_GROUP).count(), 2);
+    }
+
+    #[test]
     fn small_values_get_no_stray_separators() {
-        assert_eq!(group_digits("0.000000007"), "0.000'000'007");
-        assert_eq!(group_digits("94.774302911"), "94.774'302'911");
+        assert_eq!(group_digits("0.000000007"), "0.000\u{2004}000\u{2004}007");
+        assert_eq!(group_digits("94.774302911"), "94.774\u{2004}302\u{2004}911");
     }
 
     #[test]
@@ -715,7 +756,7 @@ mod number_grouping_tests {
         use super::group_editable;
         assert_eq!(group_editable("1000000"), "1'000'000");
         assert_eq!(group_editable("1000000.5"), "1'000'000.5");
-        assert_eq!(group_editable("1.000000000"), "1.000'000'000");
+        assert_eq!(group_editable("1.000000000"), "1.000\u{2004}000\u{2004}000");
         assert_eq!(group_editable("1000."), "1'000.");
         assert_eq!(group_editable(".5"), ".5");
         assert_eq!(group_editable(""), "");
@@ -739,8 +780,11 @@ mod number_grouping_tests {
         assert_eq!(f.cursor, 5);
 
         let f = regroup_amount("1000.123456", 11);
-        assert_eq!(f.text, "1'000.123'456");
-        assert_eq!(f.cursor, 13);
+        assert_eq!(f.text, "1'000.123\u{2004}456");
+        assert_eq!(
+            f.cursor, 15,
+            "the caret is a byte offset and the fraction separator is three bytes wide"
+        );
     }
 
     #[test]
@@ -760,7 +804,7 @@ mod number_grouping_tests {
         let typed = |text: &str| regroup_amount(text, text.len() as i32).text;
 
         assert_eq!(typed("12ab"), "12", "letters never enter the field");
-        assert_eq!(typed("0.000000dsdssdsdsds00"), "0.000'000'00");
+        assert_eq!(typed("0.000000dsdssdsdsds00"), "0.000\u{2004}000\u{2004}00");
         assert_eq!(typed("-1"), "1", "a sign is not part of an amount");
         assert_eq!(typed("1,5"), "15");
         assert_eq!(typed("1.2.3"), "1.23", "the second point is dropped");
@@ -768,15 +812,16 @@ mod number_grouping_tests {
         assert_eq!(typed("abc"), "");
         assert_eq!(typed(""), "");
 
-        assert_eq!(typed("0.1234567891"), "0.123'456'789");
+        assert_eq!(typed("0.1234567891"), "0.123\u{2004}456\u{2004}789");
         let long = format!("1.{}", "1".repeat(20));
         assert_eq!(
             typed(&long)
                 .split_once('.')
                 .unwrap()
                 .1
-                .replace('\'', "")
-                .len(),
+                .chars()
+                .filter(char::is_ascii_digit)
+                .count(),
             AMOUNT_MAX_FRAC_DIGITS
         );
 
@@ -805,17 +850,20 @@ mod number_grouping_tests {
         use super::display_send_amount;
         assert_eq!(
             display_send_amount(AssetId::Native, "49.5"),
-            "49.500'000'000"
+            "49.500\u{2004}000\u{2004}000"
         );
         assert_eq!(
             display_send_amount(AssetId::Native, "1000000049.5"),
-            "1'000'000'049.500'000'000"
+            "1'000'000'049.500\u{2004}000\u{2004}000"
         );
         assert_eq!(
             display_send_amount(AssetId::Native, "0.000000001"),
-            "0.000'000'001"
+            "0.000\u{2004}000\u{2004}001"
         );
-        assert_eq!(display_send_amount(AssetId::Native, "1"), "1.000'000'000");
+        assert_eq!(
+            display_send_amount(AssetId::Native, "1"),
+            "1.000\u{2004}000\u{2004}000"
+        );
         assert_eq!(display_send_amount(AssetId::Native, ""), "");
     }
 }
@@ -1062,7 +1110,7 @@ mod helper_tests {
         assert_eq!(row.symbol.as_str(), "#77");
         assert_eq!(
             row.amount.as_str(),
-            "452'312'848'583'266'388'373'324'160'190'187'140'051'835'877'600'158'453'279'131'187'530.910'662'655"
+            "452'312'848'583'266'388'373'324'160'190'187'140'051'835'877'600'158'453'279'131'187'530.910\u{2004}662\u{2004}655"
         );
         assert_eq!(row.status.as_str(), "Read-only");
         assert!(!row.selected, "an unknown CC cannot become the send asset");
@@ -1122,7 +1170,7 @@ mod helper_tests {
         let row = activity_row(&event, "0:me", &[]);
         let movement = row.movements.row_data(0).expect("one movement row");
         assert_eq!(movement.amount_int.as_str(), "1'000'000'000");
-        assert_eq!(movement.amount_frac.as_str(), ".000'000'000");
+        assert_eq!(movement.amount_frac.as_str(), ".000\u{2004}000\u{2004}000");
         assert!(row.movements.row_data(1).is_none());
     }
 
@@ -1135,7 +1183,7 @@ mod helper_tests {
 
         let row = activity_row(&event, "0:me", &[]);
         assert_eq!(row.fee.amount_int.as_str(), "0");
-        assert_eq!(row.fee.amount_frac.as_str(), ".002'804'671");
+        assert_eq!(row.fee.amount_frac.as_str(), ".002\u{2004}804\u{2004}671");
 
         let whole = ActivityEvent {
             fee_native: 1_234_567_890_123,
@@ -1145,7 +1193,7 @@ mod helper_tests {
         assert_eq!(row.fee.amount_int.as_str(), "1'234");
         assert_eq!(
             row.fee.amount_frac.as_str(),
-            ".567'890'123",
+            ".567\u{2004}890\u{2004}123",
             "a fee carries the same nine decimals as the amount beside it, grouped the \
              same way; shown to six it reads as a different kind of number"
         );
@@ -1158,7 +1206,7 @@ mod helper_tests {
         assert_eq!(row.symbol.as_str(), "TWO");
         assert_eq!(row.initial.as_str(), "2");
         assert_eq!(row.amount_int.as_str(), "107");
-        assert_eq!(row.amount_frac.as_str(), ".251'702'625");
+        assert_eq!(row.amount_frac.as_str(), ".251\u{2004}702\u{2004}625");
         assert!(
             !row.sendable && !row.selected,
             "a reserve is a fact about the pool, not a choice"
@@ -1168,7 +1216,7 @@ mod helper_tests {
         assert_eq!(native.control_id, -1);
         assert_eq!(native.symbol.as_str(), "COIN");
         assert_eq!(native.amount_int.as_str(), "216");
-        assert_eq!(native.amount_frac.as_str(), ".000'000'000");
+        assert_eq!(native.amount_frac.as_str(), ".000\u{2004}000\u{2004}000");
     }
 
     #[test]
@@ -1181,7 +1229,7 @@ mod helper_tests {
         );
         let token = token_units(AssetId::CurrencyCollection(1), 9_066_108_938);
         assert_eq!(token.amount_int.as_str(), "9");
-        assert_eq!(token.amount_frac.as_str(), ".066'108'938");
+        assert_eq!(token.amount_frac.as_str(), ".066\u{2004}108\u{2004}938");
         assert_eq!(token.symbol.as_str(), "ONE");
     }
 
@@ -1796,7 +1844,7 @@ mod helper_tests {
         }
         assert_eq!(
             readers,
-            vec!["render.rs:360"],
+            vec!["render.rs:368"],
             "the wall clock is read once per sync pass and threaded down; these read it \
              directly, so their output depends on when they ran"
         );

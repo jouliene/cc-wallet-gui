@@ -1115,7 +1115,7 @@ mod explorer_tests {
     fn a_balance_splits_into_a_grouped_integer_and_a_fraction_with_its_coin_badge() {
         let view = account_view(&inspection(1_980_000_000_000, &[]), "-1:00");
         assert_eq!(view.balance.amount_int, "1'980");
-        assert_eq!(view.balance.amount_frac, ".000'000'000");
+        assert_eq!(view.balance.amount_frac, ".000\u{2004}000\u{2004}000");
         assert_eq!(view.balance.symbol, "COIN");
         assert_eq!(view.balance.initial, "C");
     }
@@ -1124,13 +1124,13 @@ mod explorer_tests {
     fn currency_holdings_use_the_wallet_fixed9_display_and_the_token_badge() {
         let known = currency_amount(1, "1234500000");
         assert_eq!(known.amount_int, "1");
-        assert_eq!(known.amount_frac, ".234'500'000");
+        assert_eq!(known.amount_frac, ".234\u{2004}500\u{2004}000");
         assert_eq!(known.symbol, "ONE");
         assert_eq!(known.initial, "1");
 
         let unknown = currency_amount(77, "1000000000000");
         assert_eq!(unknown.amount_int, "1'000");
-        assert_eq!(unknown.amount_frac, ".000'000'000");
+        assert_eq!(unknown.amount_frac, ".000\u{2004}000\u{2004}000");
         assert_eq!(unknown.symbol, "#77");
         assert_eq!(unknown.initial, "77");
     }
@@ -1179,7 +1179,7 @@ mod explorer_tests {
         );
         assert!(owing.has_due);
         assert_eq!(owing.due_payment.amount_int, "0");
-        assert_eq!(owing.due_payment.amount_frac, ".012'500'000");
+        assert_eq!(owing.due_payment.amount_frac, ".012\u{2004}500\u{2004}000");
         assert_eq!(owing.due_payment.symbol, "COIN");
     }
 
@@ -1261,7 +1261,7 @@ mod explorer_tests {
         assert_eq!(view.total_stake.symbol, "COIN");
         assert!(view.has_supply);
         assert_eq!(view.total_supply.amount_int, "7'074'806'721");
-        assert_eq!(view.total_supply.amount_frac, ".778'674'964");
+        assert_eq!(view.total_supply.amount_frac, ".778\u{2004}674\u{2004}964");
         assert_eq!(view.stake_ratio, "0.1347%");
         assert_eq!(
             view.supply_note,
@@ -1468,7 +1468,7 @@ mod explorer_tests {
             "an address we have no name for shows no name"
         );
         assert_eq!(row.movements.row_count(), 1);
-        assert_eq!(row.fee, "0.007'400'000");
+        assert_eq!(row.fee, "0.007\u{2004}400\u{2004}000");
         assert_eq!(row.hash_full, HASH64, "the copy button gets the whole hash");
         assert!(
             row.hash_short.len() < row.hash_full.len() && row.hash_short.contains('…'),
@@ -1608,7 +1608,7 @@ mod explorer_tests {
                 carried.amount_frac.as_str(),
                 carried.symbol.as_str()
             ),
-            ("2", ".500'000'000", "COIN"),
+            ("2", ".500\u{2004}000\u{2004}000", "COIN"),
             "the arrow's amount is split for the app's own typography"
         );
         assert!(
@@ -1635,7 +1635,7 @@ mod explorer_tests {
 
         assert!(rows[0].executed && !rows[0].ok);
         assert_eq!(rows[0].failure, "exit 37");
-        assert_eq!(rows[0].fee, "0.007'400'000");
+        assert_eq!(rows[0].fee, "0.007\u{2004}400\u{2004}000");
     }
 
     #[test]

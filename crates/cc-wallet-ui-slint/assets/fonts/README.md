@@ -14,3 +14,9 @@ The bundled files are modified: the upstream variable font was instanced at
 weight 400 and 600, then subset to Latin-1 plus the punctuation the wallet
 shows (…, ·, –, —, quotes, −). That is what takes each file from ~180 KB to
 16 KB, which matters for a single-file portable build.
+
+Every bundled face — Manrope too — then gained one glyph the subset had
+dropped: U+2004 THREE-PER-EM SPACE, blank, advance one third of the em. It is
+the separator inside a fraction (`0.002 451 000`), where an apostrophe reads
+as noise next to the apostrophes grouping the integer. A face re-subset from
+upstream without it will draw a missing-glyph box in every amount.
