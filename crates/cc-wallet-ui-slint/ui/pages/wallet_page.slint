@@ -94,6 +94,7 @@ export component WalletPage inherits VerticalLayout {
         menu_open: wallet_popup.is-open;
         open_wallet_menu => { UserActivity.ping(); wallet_popup.show(); }
         lock_now => { root.lock_now(); }
+        open_in_explorer(address, hash) => { root.open_in_explorer(address, hash); }
     }
 
     HorizontalLayout {

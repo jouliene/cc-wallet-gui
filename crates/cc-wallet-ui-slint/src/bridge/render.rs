@@ -1674,6 +1674,40 @@ mod helper_tests {
     }
 
     #[test]
+    fn an_address_on_screen_can_always_be_opened_in_the_explorer() {
+        let sources = ui_sources();
+        let src_of = |name: &str| {
+            sources
+                .iter()
+                .find(|(n, _)| *n == name)
+                .unwrap_or_else(|| panic!("{name} is not in ui_sources()"))
+                .1
+        };
+
+        for (name, needle) in [
+            (
+                "pages/wallet_sections.slint",
+                "root.open_in_explorer(root.address, \"\")",
+            ),
+            ("pages/contacts_components.slint", "root.open_in_explorer()"),
+        ] {
+            assert!(
+                src_of(name).contains(needle),
+                "{name} draws an address without a way into the Explorer"
+            );
+        }
+
+        let activity = src_of("pages/wallet_components.slint");
+        assert!(
+            !activity.contains("has_party && root.item.tx_hash != \"\""),
+            "the jump is gated on a transaction hash again — a pending transfer has no \
+             hash yet, but the account on the other side is already on chain, so the \
+             button stays and only its destination changes"
+        );
+        assert!(activity.contains("if root.item.has_party: VerticalLayout"));
+    }
+
+    #[test]
     fn a_money_figure_reads_a_money_role_not_the_prose_tone() {
         let money: &[(&str, &str)] = &[
             (

@@ -12,6 +12,7 @@ export component ContactsPage inherits VerticalLayout {
     callback save_contact(int, string, string, string);
     callback delete_contact(int);
     callback quick_send(string);
+    callback open_in_explorer(string, string);
     callback contact_address_is_valid(string) -> bool;
     callback contact_conflict(int, string, string) -> string;
     pure callback contact_matches_search(string, string, string, string) -> bool;
@@ -270,6 +271,7 @@ export component ContactsPage inherits VerticalLayout {
                                 can_drag: root.search == "" && root.editing == -1;
                                 dragging: root.drag_index == i;
                                 quick_send => { root.quick_send(c.address); }
+                                open_in_explorer => { root.open_in_explorer(c.address, ""); }
                                 edit => { root.start_edit(i); }
                                 drag_pressed => { root.start_drag(i); }
                                 drag_moved(dy) => { root.update_drag(dy); }

@@ -196,7 +196,7 @@ export component ActivityListRow inherits Rectangle {
                         alignment: center;
                         CopyButton { value: root.item.party_full; }
                     }
-                    if root.item.has_party && root.item.tx_hash != "": VerticalLayout {
+                    if root.item.has_party: VerticalLayout {
                         alignment: center;
                         IconButton {
                             icon: @image-url("../../assets/icons/external-link.svg");

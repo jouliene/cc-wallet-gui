@@ -13,6 +13,7 @@ export component OverviewStrip inherits Card {
     in property <bool> menu_open;
     callback open_wallet_menu();
     callback lock_now();
+    callback open_in_explorer(string, string);
     out property <length> switcher_abs_x: wallet_switcher.absolute-position.x;
     out property <length> switcher_abs_y: wallet_switcher.absolute-position.y;
     out property <length> switcher_h: wallet_switcher.height;
@@ -94,16 +95,27 @@ export component OverviewStrip inherits Card {
                     overflow: elide;
                     vertical-alignment: center;
                 }
-                IconButton {
-                    icon: root.copied ? @image-url("../../assets/icons/check.svg") : @image-url("../../assets/icons/copy.svg");
-                    tint: root.copied ? Palette.positive : Palette.text_quiet;
-                    size: Sizes.control_dense;
-                    icon_size: Sizes.icon_sm;
-                    enabled: root.address != "";
-                    clicked => {
-                        ClipboardBridge.copy_text(root.address);
-                        root.copied = true;
-                        copy_timer.running = true;
+                HorizontalLayout {
+                    spacing: Space.s_0;
+                    IconButton {
+                        icon: root.copied ? @image-url("../../assets/icons/check.svg") : @image-url("../../assets/icons/copy.svg");
+                        tint: root.copied ? Palette.positive : Palette.text_quiet;
+                        size: Sizes.control_dense;
+                        icon_size: Sizes.icon_sm;
+                        enabled: root.address != "";
+                        clicked => {
+                            ClipboardBridge.copy_text(root.address);
+                            root.copied = true;
+                            copy_timer.running = true;
+                        }
+                    }
+                    IconButton {
+                        icon: @image-url("../../assets/icons/external-link.svg");
+                        tint: Palette.text_quiet;
+                        size: Sizes.control_dense;
+                        icon_size: Sizes.icon_sm;
+                        enabled: root.address != "";
+                        clicked => { root.open_in_explorer(root.address, ""); }
                     }
                 }
             }

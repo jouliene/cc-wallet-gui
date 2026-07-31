@@ -464,6 +464,7 @@ export component AppWindow inherits Window {
                 delete_contact(i) => { root.delete_contact(i); }
                 reorder_contacts(from, to) => { root.reorder_contacts(from, to); }
                 quick_send(a) => { root.quick_send(a); }
+                open_in_explorer(address, hash) => { root.open_in_explorer(address, hash); }
                 contact_address_is_valid(a) => { root.contact_address_is_valid(a) }
                 contact_conflict(idx, n, a) => { root.contact_conflict(idx, n, a) }
                 contact_matches_search(n, a, t, q) => { root.contact_matches_search(n, a, t, q) }
