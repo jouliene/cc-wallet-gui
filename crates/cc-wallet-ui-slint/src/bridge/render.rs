@@ -1042,8 +1042,14 @@ mod helper_tests {
         assert!(summary.contains("width: root.col_w;"));
         assert!(summary.contains(&format!("width: {COLUMN_WIDTH};")));
         assert!(header.contains(&format!("width: {VALUE_WIDTH},")));
-        assert!(theme.contains("activity_amount_w: 220px;"));
-        assert!(theme.contains("activity_money_gap: 36px;"));
+        assert!(
+            theme.contains("activity_amount_w: 246px;"),
+            "the amount column is the value plus its token block: 175 for              +100'000'000.999 999 999, which needs 166, and 71 for the badge and ticker"
+        );
+        assert!(theme.contains("activity_amount_token_gap_w: 9px;"));
+        assert!(theme.contains("activity_amount_token_avatar_w: 18px;"));
+        assert!(theme.contains("activity_amount_token_symbol_w: 44px;"));
+        assert!(theme.contains("activity_money_gap: 12px;"));
         assert!(rows.contains("Rectangle { width: Theme.activity_money_gap; }"));
         assert_eq!(header.matches("Theme.activity_money_gap").count(), 2);
         assert!(summary.contains("ActivityAmountValue {"));

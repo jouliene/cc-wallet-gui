@@ -235,23 +235,27 @@ export component ActivityListRow inherits Rectangle {
                         show_token: false;
                     }
                 }
-                Text {
-                    width: Theme.activity_final_w;
-                    text: root.item.pending ? "sending…" : (!root.item.success ? "failed" : (root.item.finality == "" ? "—" : root.item.finality));
-                    color: root.item.pending ? Palette.warning : (!root.item.success ? Palette.negative : (root.item.finality == "" ? Palette.text_quiet : Palette.text_secondary));
-                    font-family: Fonts.ui;
-                    font-size: Fonts.micro;
-                    horizontal-alignment: right;
-                    vertical-alignment: center;
-                }
+                Rectangle { width: Theme.activity_fee_gap; }
                 Rectangle {
-                    width: Theme.activity_action_w;
+                    width: Theme.activity_final_w;
                     HorizontalLayout {
                         alignment: end;
+                        spacing: Space.s_6;
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: root.item.pending ? "sending…" : (!root.item.success ? "failed" : (root.item.finality == "" ? "—" : root.item.finality));
+                                color: root.item.pending ? Palette.warning : (!root.item.success ? Palette.negative : (root.item.finality == "" ? Palette.text_quiet : Palette.text_secondary));
+                                font-family: Fonts.ui;
+                                font-size: Fonts.micro;
+                                horizontal-alignment: right;
+                                vertical-alignment: center;
+                            }
+                        }
                         VerticalLayout {
                             alignment: center;
                             if root.item.pending: Rectangle {
-                                width: 14px; height: 14px;
+                                width: Sizes.icon_sm; height: Sizes.icon_sm;
                                 for i in 8: Rectangle {
                                     property <angle> a: i * 45deg;
                                     width: 2.6px; height: 2.6px;
@@ -265,7 +269,7 @@ export component ActivityListRow inherits Rectangle {
                             if !root.item.pending: Icon {
                                 source: root.item.success ? @image-url("../../assets/icons/check.svg") : @image-url("../../assets/icons/x.svg");
                                 tint: root.item.success ? Palette.positive : Palette.negative;
-                                width: 14px; height: 14px;
+                                width: Sizes.icon_sm; height: Sizes.icon_sm;
                             }
                         }
                     }
