@@ -1,6 +1,6 @@
 import { Theme } from "theme.slint";
 import { TokenAmount } from "models.slint";
-import { Palette, Fonts, Elevation, Motion, Radii, Space, Fade } from "design_tokens.slint";
+import { Palette, Fonts, Elevation, Motion, Radii, Sizes, Space, Fade } from "design_tokens.slint";
 
 export struct EditFmt {
     text: string,
@@ -294,7 +294,7 @@ export component MicroLabel inherits Text {
     font-family: Fonts.ui;
     font-weight: Fonts.bold;
     font-size: Fonts.micro;
-    letter-spacing: Space.s_2;
+    letter-spacing: Fonts.tracking_caps;
 }
 
 export struct TableColumn {
@@ -492,8 +492,8 @@ export component CopyButton inherits IconButton {
     property <bool> copied: false;
     icon: root.copied ? @image-url("../assets/icons/check.svg") : @image-url("../assets/icons/copy.svg");
     tint: root.copied ? Palette.positive : root.idle_tint;
-    size: 24px;
-    icon_size: 16px;
+    size: Sizes.control_dense;
+    icon_size: Sizes.icon_sm;
     clicked => {
         ClipboardBridge.copy_text(root.value);
         root.copied = true;
@@ -510,8 +510,8 @@ export component RefreshButton inherits IconButton {
     callback refreshed();
     icon: root.ticked ? @image-url("../assets/icons/check.svg") : @image-url("../assets/icons/refresh.svg");
     tint: root.ticked ? Palette.positive : root.idle_tint;
-    size: 24px;
-    icon_size: 14px;
+    size: Sizes.control_dense;
+    icon_size: Sizes.icon_sm;
     clicked => {
         root.refreshed();
         root.asked = true;
@@ -564,7 +564,7 @@ export component Amount inherits HorizontalLayout {
     Text {
         text: root.sign + root.amount.amount_int;
         color: root.tint;
-        font-family: Fonts.ui;
+        font-family: Fonts.mono;
         font-weight: root.int_weight;
         font-size: root.font_size;
         vertical-alignment: center;
@@ -573,7 +573,7 @@ export component Amount inherits HorizontalLayout {
         text: root.amount.amount_frac;
         color: root.tint;
         opacity: Fade.muted;
-        font-family: Fonts.ui;
+        font-family: Fonts.mono;
         font-weight: Fonts.regular;
         font-size: root.font_size;
         vertical-alignment: center;
@@ -776,15 +776,27 @@ export component Field inherits Rectangle {
     callback escape_pressed();
     in property <bool> handles_escape: false;
 
+    property <bool> lit: (input.has-focus || root.editing_border) && root.show_focus_border;
+
     height: root.height_;
     border-radius: Radii.md;
     border-width: 1px;
     border-color: !root.enabled
         ? Palette.border_subtle
-        : ((input.has-focus || root.editing_border) && root.show_focus_border ? Palette.focus_ring : root.border_normal);
+        : (root.lit ? Palette.focus_border : root.border_normal);
     background: root.enabled ? root.field_bg : Palette.surface_disabled;
     clip: true;
     forward-focus: input;
+
+    if root.enabled && root.lit: Rectangle {
+        x: 1px;
+        y: 1px;
+        width: parent.width - 2px;
+        height: parent.height - 2px;
+        border-radius: parent.border-radius - 1px;
+        border-width: 1px;
+        border-color: Palette.focus_glow;
+    }
 
     public function paste() { input.paste(); }
     public function set_text(t: string) { input.text = t; }
@@ -819,7 +831,7 @@ export component Field inherits Rectangle {
         horizontal-alignment: root.alignment;
         vertical-alignment: center;
         single-line: true;
-        selection-background-color: Palette.accent;
+        selection-background-color: Palette.selection_bg;
         selection-foreground-color: Palette.text_on_fill;
         edited => {
             UserActivity.ping();

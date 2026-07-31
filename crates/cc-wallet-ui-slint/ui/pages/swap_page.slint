@@ -122,7 +122,7 @@ component SlippageStepper inherits HorizontalLayout {
             alignment: TextHorizontalAlignment.right;
             pad_left: 8px;
             pad_right: 24px;
-            border_normal: root.valid ? Palette.border_medium : Palette.negative_border;
+            border_normal: root.valid ? Palette.border_strong : Palette.negative_border;
             edited(t) => { root.edited(t); }
         }
         Text {
@@ -520,7 +520,7 @@ export component SwapPage inherits VerticalLayout {
                                                         border-radius: self.height / 2;
                                                         background: Palette.surface_inset;
                                                         border-width: 1px;
-                                                        border-color: Palette.border_medium;
+                                                        border-color: Palette.border_subtle;
                                                         IconButton {
                                                             icon: @image-url("../../assets/icons/swap.svg");
                                                             tint: Palette.accent_text;

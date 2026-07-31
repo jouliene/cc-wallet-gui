@@ -630,6 +630,11 @@ fn activity_row(
     contacts: &[AddressBookEntry],
 ) -> ActivityRow {
     let movements = movement_rows(&event.movements);
+    let fee = token_amount(
+        AssetId::Native,
+        &format_native_fixed9(event.fee_native)
+            .expect("a decoded activity fee is in the native domain"),
+    );
     let party_full = if event.counterparty.is_empty() {
         "—".to_owned()
     } else {
@@ -643,11 +648,7 @@ fn activity_row(
         party_full: party_full.clone().into(),
         party_mid: middle_truncate(&party_full, 14, 8).into(),
         movements: ModelRc::from(Rc::new(VecModel::from(movements))),
-        fee: group_digits(
-            &format_native_fixed9(event.fee_native)
-                .expect("a decoded activity fee is in the native domain"),
-        )
-        .into(),
+        fee,
         success: event.success,
         bounced: event.bounced,
         finality: format_finality(event.finality_ms).into(),
@@ -1126,6 +1127,31 @@ mod helper_tests {
     }
 
     #[test]
+    fn an_activity_fee_is_an_amount_of_nine_decimals_split_like_every_other_figure() {
+        let event = ActivityEvent {
+            fee_native: 2_804_671,
+            ..ActivityEvent::test_stub(1, 1)
+        };
+
+        let row = activity_row(&event, "0:me", &[]);
+        assert_eq!(row.fee.amount_int.as_str(), "0");
+        assert_eq!(row.fee.amount_frac.as_str(), ".002'804'671");
+
+        let whole = ActivityEvent {
+            fee_native: 1_234_567_890_123,
+            ..ActivityEvent::test_stub(1, 1)
+        };
+        let row = activity_row(&whole, "0:me", &[]);
+        assert_eq!(row.fee.amount_int.as_str(), "1'234");
+        assert_eq!(
+            row.fee.amount_frac.as_str(),
+            ".567'890'123",
+            "a fee carries the same nine decimals as the amount beside it, grouped the \
+             same way; shown to six it reads as a different kind of number"
+        );
+    }
+
+    #[test]
     fn a_pool_reserve_reads_like_a_holding_but_cannot_be_picked() {
         let row = pool_reserve_row(AssetId::CurrencyCollection(2), 107_251_702_625);
         assert_eq!(row.name.as_str(), "Two Token");
@@ -1478,11 +1504,6 @@ mod helper_tests {
                 "an accent wash, versus an informational notice's fill",
             ),
             (
-                "#3B82F680",
-                &["selected_border", "info_border"],
-                "a selected or open boundary, versus an informational notice's frame",
-            ),
-            (
                 "#8FB6FB",
                 &["accent_text", "info"],
                 "accent-coloured text, versus an informational notice's tone",
@@ -1492,11 +1513,6 @@ mod helper_tests {
                 &["text_secondary", "value_out", "value_neutral"],
                 "prose, money going out, and money that is neither — ROLE-02's split, \
                  the one where all five value_neutral sites landed on text_secondary",
-            ),
-            (
-                "#FFFFFF14",
-                &["border_medium", "hover_strong"],
-                "a resting boundary, versus a hover wash",
             ),
         ];
         let src = include_str!("../../ui/design_tokens.slint");
@@ -1609,10 +1625,7 @@ mod helper_tests {
                 "pages/wallet_components.slint",
                 "amount_color: Palette.value_neutral",
             ),
-            (
-                "pages/wallet_components.slint",
-                "text: root.item.fee; color: Palette.value_neutral",
-            ),
+            ("pages/wallet_components.slint", "amount: root.item.fee;"),
             ("pages/explorer_page.slint", "tint: Palette.value_neutral"),
             ("pages/explorer_page.slint", "text: root.item.fee;"),
         ];
@@ -1872,7 +1885,7 @@ mod helper_tests {
                 "{name} no longer silences a field; drop its entry here ({why})"
             );
             assert_eq!(
-                src.contains("Palette.focus_ring"),
+                src.contains("Palette.focus_border"),
                 wrapper_rings,
                 "{name}: a silenced field must have a wrapper that rings, or be the stated \
                  exception ({why})"
@@ -1880,10 +1893,11 @@ mod helper_tests {
         }
 
         assert_eq!(
-            ring_components, 12,
-            "expected 12 components to draw a focus ring (Field, PrimaryButton, \
-             GhostButton, IconButton, Checkbox, MaxChip, SegBtn, SegChoice, Tab, and \
-             the two field wrappers)"
+            ring_components, 8,
+            "expected 8 components to draw the accent focus ring (PrimaryButton, \
+             GhostButton, IconButton, Checkbox, MaxChip, SegBtn, SegChoice, Tab) — a \
+             control you activate. A Field and its wrappers ring in focus_border, \
+             which is a resting border made lighter, not the accent"
         );
     }
 

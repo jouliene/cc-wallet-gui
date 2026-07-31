@@ -1,5 +1,5 @@
 import { Theme, Anim } from "../theme.slint";
-import { Palette, Fonts, Fade, Motion, Radii, Space } from "../design_tokens.slint";
+import { Palette, Fonts, Fade, Motion, Radii, Sizes, Space } from "../design_tokens.slint";
 import { Icon, Avatar, Chip, CopyButton, IconButton, Amount } from "../widgets.slint";
 import { AssetRow, ActivityRow, TokenAmount } from "../models.slint";
 
@@ -9,8 +9,10 @@ export component AssetListRow inherits Rectangle {
     height: 54px;
     border-radius: Radii.md;
     border-width: 1px;
-    border-color: root.asset.selected ? Palette.selected_border : Palette.border_subtle;
-    background: root.asset.selected ? Palette.accent_quiet : (root.asset.sendable && ta.has-hover ? Palette.hover_row : Palette.surface_inset);
+    border-color: root.asset.selected ? Palette.selected_border : Palette.border_strong;
+    background: root.asset.selected
+        ? (ta.has-hover ? Palette.selected_fill_hover : Palette.selected_fill)
+        : (root.asset.sendable && ta.has-hover ? Palette.hover_row : Palette.surface_inset);
     animate background { duration: Motion.fast; easing: Motion.curve; }
     ta := TouchArea {
         enabled: root.asset.sendable;
@@ -57,6 +59,7 @@ export component AssetListRow inherits Rectangle {
                     amount_frac: root.asset.amount_frac,
                 };
                 tint: Palette.text_primary;
+                font_size: Fonts.balance;
                 show_token: false;
             }
         }
@@ -149,7 +152,7 @@ export component ActivityListRow inherits Rectangle {
                 padding-left: Theme.activity_row_pad;
                 padding-right: Theme.activity_row_pad;
                 spacing: Space.s_0;
-                Text { width: Theme.activity_time_w; text: root.item.time; color: Palette.text_tertiary; font-family: Fonts.ui; font-size: Fonts.small; vertical-alignment: center; }
+                Text { width: Theme.activity_time_w; text: root.item.time; color: Palette.text_tertiary; font-family: Fonts.mono; font-size: Fonts.small; vertical-alignment: center; }
                 Rectangle {
                     width: Theme.activity_type_w;
                     HorizontalLayout {
@@ -161,7 +164,7 @@ export component ActivityListRow inherits Rectangle {
                                 min_w: 34px;
                                 fg: !root.item.success ? Palette.negative : (root.item.is_in ? Palette.value_in : Palette.value_out);
                                 bg: !root.item.success ? Palette.negative_quiet : (root.item.is_in ? Palette.positive_quiet : Palette.badge_neutral);
-                                frame: !root.item.success ? Palette.negative_border : (root.item.is_in ? Palette.positive_border : Palette.border_medium);
+                                frame: !root.item.success ? Palette.negative_border : (root.item.is_in ? Palette.positive_border : Palette.border_subtle);
                                 font_size: Fonts.micro;
                                 weight: 700;
                             }
@@ -198,8 +201,8 @@ export component ActivityListRow inherits Rectangle {
                         IconButton {
                             icon: @image-url("../../assets/icons/external-link.svg");
                             tint: Palette.text_quiet;
-                            size: 24px;
-                            icon_size: 14px;
+                            size: Sizes.control_dense;
+                            icon_size: Sizes.icon_sm;
                             clicked => { root.open_in_explorer(); }
                         }
                     }
@@ -219,7 +222,19 @@ export component ActivityListRow inherits Rectangle {
                     }
                 }
                 Rectangle { width: Theme.activity_money_gap; }
-                Text { width: Theme.activity_fee_w; text: root.item.fee; color: Palette.value_neutral; opacity: 0.65; font-family: Fonts.ui; font-weight: Fonts.regular; font-size: Fonts.small; horizontal-alignment: right; vertical-alignment: center; }
+                Rectangle {
+                    width: Theme.activity_fee_w;
+                    clip: true;
+                    Amount {
+                        width: parent.width;
+                        alignment: end;
+                        amount: root.item.fee;
+                        tint: Palette.value_neutral;
+                        int_weight: Fonts.semibold;
+                        font_size: Fonts.small;
+                        show_token: false;
+                    }
+                }
                 Text {
                     width: Theme.activity_final_w;
                     text: root.item.pending ? "sending…" : (!root.item.success ? "failed" : (root.item.finality == "" ? "—" : root.item.finality));

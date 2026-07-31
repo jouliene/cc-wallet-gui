@@ -67,7 +67,7 @@ export component EditableSeedChip inherits Rectangle {
     height: 40px;
     border-radius: 9px;
     border-width: 1px;
-    border-color: fld.has_focus ? Palette.focus_ring : Palette.border_subtle;
+    border-color: fld.has_focus ? Palette.focus_border : Palette.border_subtle;
     background: Palette.surface_sunken;
     changed word => { fld.set_text(root.word); }
     changed resync_gen => { fld.set_text(root.word); }

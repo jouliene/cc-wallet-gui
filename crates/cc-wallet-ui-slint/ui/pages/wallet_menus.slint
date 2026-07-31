@@ -1,5 +1,5 @@
 import { Theme } from "../theme.slint";
-import { Palette, Fonts, Radii, Space } from "../design_tokens.slint";
+import { Sizes, Palette, Fonts, Radii, Space } from "../design_tokens.slint";
 import { Icon, Avatar, IconButton, Chip, Field, MenuSurface, MicroLabel, UserActivity } from "../widgets.slint";
 import { AssetRow, ContactRow } from "../models.slint";
 import { ScrollView } from "std-widgets.slint";
@@ -52,7 +52,7 @@ export component WalletSwitcherMenu inherits MenuSurface {
                 }
             }
         }
-        Rectangle { height: 1px; background: Palette.border_medium; }
+        Rectangle { height: 1px; background: Palette.border_hairline; }
         Rectangle {
             height: 38px;
             border-radius: Radii.sm;
@@ -97,7 +97,7 @@ export component TokenPickerMenu inherits MenuSurface {
             border-radius: Radii.sm;
             border-width: 1px;
             border-color: a.selected ? Palette.selected_border : transparent;
-            background: a.selected ? Palette.accent_quiet : (tta.has-hover ? Palette.hover_strong : transparent);
+            background: a.selected ? (tta.has-hover ? Palette.selected_fill_hover : Palette.selected_fill) : (tta.has-hover ? Palette.hover_strong : transparent);
             HorizontalLayout {
                 padding-left: Space.s_8; padding-right: Space.s_10; spacing: Space.s_8;
                 VerticalLayout { alignment: center; Avatar { initial: a.initial; tint: a.color; size: 22px; } }
@@ -193,13 +193,13 @@ export component ActivityTokenMenu inherits MenuSurface {
             border-radius: Radii.sm;
             border-width: root.selected_token == -2 ? 1px : 0px;
             border-color: Palette.selected_border;
-            background: root.selected_token == -2 ? Palette.accent_quiet : (all_ta.has-hover ? Palette.hover_strong : transparent);
+            background: root.selected_token == -2 ? (all_ta.has-hover ? Palette.selected_fill_hover : Palette.selected_fill) : (all_ta.has-hover ? Palette.hover_strong : transparent);
             HorizontalLayout {
                 padding-left: Space.s_8; padding-right: Space.s_10; spacing: Space.s_8;
                 VerticalLayout { alignment: center; Icon { source: @image-url("../../assets/icons/coins.svg"); tint: Palette.text_tertiary; width: 15px; height: 15px; } }
                 VerticalLayout { alignment: center; Text { text: "All tokens"; color: Palette.text_primary; font-family: Fonts.ui; font-weight: Fonts.semibold; font-size: Fonts.body; } }
                 Rectangle { }
-                if root.selected_token == -2: VerticalLayout { alignment: center; Icon { source: @image-url("../../assets/icons/check.svg"); tint: Palette.accent_text; width: 13px; height: 13px; } }
+                if root.selected_token == -2: VerticalLayout { alignment: center; Icon { source: @image-url("../../assets/icons/check.svg"); tint: Palette.text_secondary; width: Sizes.icon_sm; height: Sizes.icon_sm; } }
             }
             all_ta := TouchArea { mouse-cursor: pointer; clicked => { root.pick(-2); } }
         }
@@ -208,13 +208,13 @@ export component ActivityTokenMenu inherits MenuSurface {
             border-radius: Radii.sm;
             border-width: root.selected_token == a.control_id ? 1px : 0px;
             border-color: Palette.selected_border;
-            background: root.selected_token == a.control_id ? Palette.accent_quiet : (tok_ta.has-hover ? Palette.hover_strong : transparent);
+            background: root.selected_token == a.control_id ? (tok_ta.has-hover ? Palette.selected_fill_hover : Palette.selected_fill) : (tok_ta.has-hover ? Palette.hover_strong : transparent);
             HorizontalLayout {
                 padding-left: Space.s_8; padding-right: Space.s_10; spacing: Space.s_8;
                 VerticalLayout { alignment: center; Avatar { initial: a.initial; tint: a.color; size: 22px; } }
                 VerticalLayout { alignment: center; Text { text: a.symbol; color: Palette.text_primary; font-family: Fonts.ui; font-weight: Fonts.semibold; font-size: Fonts.body; } }
                 Rectangle { }
-                if root.selected_token == a.control_id: VerticalLayout { alignment: center; Icon { source: @image-url("../../assets/icons/check.svg"); tint: Palette.accent_text; width: 13px; height: 13px; } }
+                if root.selected_token == a.control_id: VerticalLayout { alignment: center; Icon { source: @image-url("../../assets/icons/check.svg"); tint: Palette.text_secondary; width: Sizes.icon_sm; height: Sizes.icon_sm; } }
             }
             tok_ta := TouchArea { mouse-cursor: pointer; clicked => { root.pick(a.control_id); } }
         }
@@ -244,13 +244,13 @@ export component ActivityPartyMenu inherits MenuSurface {
         Rectangle {
             height: 40px;
             border-radius: Radii.sm;
-            background: root.selected_party == "" ? Palette.accent_quiet : (any_ta.has-hover ? Palette.hover_row : transparent);
+            background: root.selected_party == "" ? (any_ta.has-hover ? Palette.selected_fill_hover : Palette.selected_fill) : (any_ta.has-hover ? Palette.hover_strong : transparent);
             HorizontalLayout {
                 padding-left: Space.s_8; padding-right: Space.s_10; spacing: Space.s_8;
                 VerticalLayout { alignment: center; Icon { source: @image-url("../../assets/icons/ban.svg"); tint: Palette.text_tertiary; width: 18px; height: 18px; } }
                 VerticalLayout { alignment: center; Text { text: "Anyone"; color: Palette.text_primary; font-family: Fonts.ui; font-weight: Fonts.semibold; font-size: Fonts.body; } }
                 Rectangle { }
-                if root.selected_party == "": VerticalLayout { alignment: center; Icon { source: @image-url("../../assets/icons/check.svg"); tint: Palette.accent_text; width: 13px; height: 13px; } }
+                if root.selected_party == "": VerticalLayout { alignment: center; Icon { source: @image-url("../../assets/icons/check.svg"); tint: Palette.text_secondary; width: Sizes.icon_sm; height: Sizes.icon_sm; } }
             }
             any_ta := TouchArea { mouse-cursor: pointer; clicked => { root.pick(""); } }
         }
@@ -269,7 +269,7 @@ export component ActivityPartyMenu inherits MenuSurface {
                     height: row.vis ? 40px : 0px;
                     clip: true;
                     border-radius: Radii.sm;
-                    background: (row.vis && cta.has-hover) ? Palette.hover_row : transparent;
+                    background: (row.vis && cta.has-hover) ? Palette.hover_strong : transparent;
                     if row.vis: HorizontalLayout {
                         padding-left: Space.s_8; padding-right: Space.s_10; spacing: Space.s_8;
                         VerticalLayout { alignment: center; Avatar { initial: c.initial; tint: c.color; size: 24px; } }
@@ -290,7 +290,7 @@ export component ActivityPartyMenu inherits MenuSurface {
                 if root.search != "" && root.matching_contact_count(root.search) == 0: Rectangle {
                     height: 40px;
                     border-radius: Radii.sm;
-                    background: use_ta.has-hover ? Palette.hover_row : transparent;
+                    background: use_ta.has-hover ? Palette.hover_strong : transparent;
                     HorizontalLayout {
                         padding-left: Space.s_8; padding-right: Space.s_10; spacing: Space.s_8;
                         VerticalLayout { alignment: center; Rectangle { width: 24px; height: 24px; border-radius: Radii.sm; background: Palette.accent_quiet; Icon { source: @image-url("../../assets/icons/plus.svg"); tint: Palette.accent_text; width: 13px; height: 13px; } } }

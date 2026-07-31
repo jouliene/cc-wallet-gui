@@ -23,8 +23,8 @@ component Tab inherits Rectangle {
     background: root.active ? Palette.accent_quiet : (ta.has-hover ? Palette.hover_strong : transparent);
     animate background { duration: Motion.base; easing: Motion.curve; }
     HorizontalLayout {
-        padding-left: 18px;
-        padding-right: 18px;
+        padding-left: Space.s_16;
+        padding-right: Space.s_16;
         padding-top: Space.s_8;
         padding-bottom: Space.s_8;
         Text {
@@ -77,7 +77,7 @@ export component TopNav inherits Rectangle {
             }
         }
 
-        Rectangle { width: 26px; }
+        Rectangle { width: Space.s_24; }
 
         VerticalLayout {
             alignment: center;
@@ -156,7 +156,7 @@ export component TopNav inherits Rectangle {
                     border-width: 1px;
                     border-color: root.live ? Palette.positive_border : Palette.negative_border;
                     HorizontalLayout {
-                        padding-left: Space.s_10;
+                        padding-left: Space.s_12;
                         padding-right: Space.s_12;
                         padding-top: Space.s_6;
                         padding-bottom: Space.s_6;

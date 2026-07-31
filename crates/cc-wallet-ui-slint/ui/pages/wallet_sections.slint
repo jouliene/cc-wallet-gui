@@ -1,5 +1,5 @@
 import { Theme, Status } from "../theme.slint";
-import { Palette, Fonts, Radii, Space, Motion } from "../design_tokens.slint";
+import { Palette, Fonts, Radii, Sizes, Space, Motion } from "../design_tokens.slint";
 import { Icon, Avatar, Card, CardHeader, MicroLabel, IconButton, Field, StatusDot, GhostButton, EmptyState, ClipboardBridge, UserActivity, MaxChip, TableHeader, PrimaryButton, InlineError } from "../widgets.slint";
 import { AssetRow, ActivityRow } from "../models.slint";
 import { AssetListRow, ActivityListRow, SegBtn } from "wallet_components.slint";
@@ -26,6 +26,8 @@ export component OverviewStrip inherits Card {
         wallet_switcher := Rectangle {
             width: 248px;
             border-radius: Radii.md;
+            border-width: root.menu_open ? 1px : 0px;
+            border-color: Palette.focus_border;
             background: root.menu_open ? Palette.surface_inset : transparent;
             HorizontalLayout {
                 padding-left: Space.s_0; padding-right: Space.s_8; spacing: Space.s_12;
@@ -94,8 +96,8 @@ export component OverviewStrip inherits Card {
                 IconButton {
                     icon: root.copied ? @image-url("../../assets/icons/check.svg") : @image-url("../../assets/icons/copy.svg");
                     tint: root.copied ? Palette.positive : Palette.text_quiet;
-                    size: 24px;
-                    icon_size: 16px;
+                    size: Sizes.control_dense;
+                    icon_size: Sizes.icon_sm;
                     enabled: root.address != "";
                     clicked => {
                         ClipboardBridge.copy_text(root.address);
@@ -137,15 +139,15 @@ export component OverviewStrip inherits Card {
         VerticalLayout {
             alignment: center;
             lock_btn := Rectangle {
-                width: 40px; height: 40px;
+                width: Sizes.control_large; height: Sizes.control_large;
                 border-radius: Radii.md;
                 border-width: 1px;
-                border-color: Palette.border_medium;
+                border-color: Palette.border_strong;
                 background: lock_ta.has-hover ? Palette.hover_strong : transparent;
                 Icon {
                     source: @image-url("../../assets/icons/lock.svg");
                     tint: Palette.text_secondary;
-                    width: 18px; height: 18px;
+                    width: Sizes.icon_md; height: Sizes.icon_md;
                 }
                 lock_ta := TouchArea { mouse-cursor: pointer; clicked => { root.lock_now(); } }
             }
@@ -232,7 +234,7 @@ export component SendCard inherits Card {
             VerticalLayout {
                 spacing: Space.s_8;
                 HorizontalLayout {
-                    height: 17px;
+                    height: Sizes.label_row_h;
                     spacing: Space.s_8;
                     alignment: start;
                     VerticalLayout { alignment: center; MicroLabel { text: "RECIPIENT ADDRESS"; } }
@@ -248,6 +250,8 @@ export component SendCard inherits Card {
                         text <=> root.recipient;
                         enabled: !root.form_locked;
                         placeholder: "Paste address or pick from contacts";
+                        font_family: Fonts.mono;
+                        font_size: Fonts.address;
                         pad_right: 108px;
                         editing_border: root.book_open;
                         edited(t) => { root.recipient_edited(t); }
@@ -284,11 +288,11 @@ export component SendCard inherits Card {
                                 }
                             }
                         }
-                        Rectangle { width: 1px; background: Palette.border_medium; }
+                        Rectangle { width: 1px; background: Palette.border_subtle; }
                         VerticalLayout {
                             alignment: center;
                             IconButton {
-                                icon: @image-url("../../assets/icons/contacts.svg");
+                                icon: @image-url("../../assets/icons/users.svg");
                                 tint: Palette.text_tertiary;
                                 size: 24px;
                                 icon_size: 16px;
@@ -304,7 +308,7 @@ export component SendCard inherits Card {
             VerticalLayout {
                 spacing: Space.s_8;
                 HorizontalLayout {
-                    height: 17px;
+                    height: Sizes.label_row_h;
                     spacing: Space.s_8;
                     alignment: start;
                     VerticalLayout { alignment: center; MicroLabel { text: "AMOUNT"; } }
@@ -325,8 +329,10 @@ export component SendCard inherits Card {
                             group_digits: true;
                             placeholder: "0.0";
                             height_: Theme.amount_h;
-                            font_family: Fonts.ui;
-                            font_size: Fonts.body;
+                            font_family: Fonts.mono;
+                            font_size: root.amount.character-count > 19
+                                ? Fonts.amount_tightest
+                                : (root.amount.character-count > 16 ? Fonts.amount_tight : Fonts.amount);
                             font_weight: 600;
                             pad_right: 62px;
                             edited(t) => { root.amount_edited(t); }
@@ -343,7 +349,7 @@ export component SendCard inherits Card {
                         height: Theme.amount_h;
                         border-radius: Radii.md;
                         border-width: 1px;
-                        border-color: root.token_open ? Palette.selected_border : Palette.border_medium;
+                        border-color: root.token_open ? Palette.focus_border : Palette.border_strong;
                         background: Palette.surface_sunken;
                         HorizontalLayout {
                             padding-left: Space.s_10;
@@ -462,7 +468,7 @@ export component ActivityCard inherits Card {
                         border-radius: Radii.sm;
                         background: root.af_token != -2 ? Palette.accent_quiet : Palette.surface_inset;
                         border-width: 1px;
-                        border-color: root.af_token != -2 ? Palette.selected_border : Palette.border_medium;
+                        border-color: root.af_token != -2 ? Palette.selected_border : Palette.border_strong;
                         TouchArea { mouse-cursor: pointer; clicked => { root.open_token_filter(); } }
                         HorizontalLayout {
                             padding-left: Space.s_10;
@@ -485,7 +491,7 @@ export component ActivityCard inherits Card {
                         border-radius: Radii.sm;
                         background: root.af_party_addr != "" ? Palette.accent_quiet : Palette.surface_inset;
                         border-width: 1px;
-                        border-color: root.af_party_addr != "" ? Palette.selected_border : Palette.border_medium;
+                        border-color: root.af_party_addr != "" ? Palette.selected_border : Palette.border_strong;
                         TouchArea { mouse-cursor: pointer; clicked => { root.open_party_filter(); } }
                         HorizontalLayout {
                             padding-left: Space.s_10;
@@ -608,7 +614,7 @@ export component ActivityCard inherits Card {
                                 font-family: Fonts.ui;
                                 font-weight: Fonts.bold;
                                 font-size: Fonts.micro;
-                                letter-spacing: Space.s_2;
+                                letter-spacing: Fonts.tracking_caps;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
                             }

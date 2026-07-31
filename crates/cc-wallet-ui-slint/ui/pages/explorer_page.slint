@@ -60,7 +60,7 @@ component FactDivider inherits VerticalLayout {
     Rectangle {
         width: 1px;
         height: 14px;
-        background: Palette.border_medium;
+        background: Palette.border_subtle;
     }
 }
 
@@ -287,7 +287,7 @@ component TxListRow inherits Rectangle {
                         min_w: 34px;
                         fg: root.tone;
                         bg: !root.item.success ? Palette.negative_quiet : (root.item.is_in ? Palette.positive_quiet : Palette.badge_neutral);
-                        frame: !root.item.success ? Palette.negative_border : (root.item.is_in ? Palette.positive_border : Palette.border_medium);
+                        frame: !root.item.success ? Palette.negative_border : (root.item.is_in ? Palette.positive_border : Palette.border_subtle);
                         font_size: Fonts.micro;
                         weight: 700;
                     }
@@ -460,7 +460,7 @@ export component ExplorerPage inherits VerticalLayout {
             border-radius: Radii.md;
             background: Palette.surface_sunken;
             border-width: addr_field.has_focus ? 2px : 1px;
-            border-color: addr_field.has_focus ? Palette.focus_ring : Palette.border_medium;
+            border-color: addr_field.has_focus ? Palette.focus_border : Palette.border_strong;
             HorizontalLayout {
                 padding-left: Space.s_16; padding-right: Space.s_8;
                 spacing: Space.s_12;

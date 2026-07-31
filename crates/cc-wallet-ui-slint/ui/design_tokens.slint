@@ -27,16 +27,37 @@ export global Fonts {
     out property <length> micro: 11.5px;
     out property <length> small: 12.5px;
     out property <length> body: 14px;
+    out property <length> balance: 16px;
     out property <length> title: 19px;
     out property <length> display: 22px;
     out property <length> hero: 26px;
+    out property <length> amount: 20px;
+    out property <length> amount_tight: 17px;
+    out property <length> amount_tightest: 14px;
+
+    out property <length> address: min(root.body, 14px);
+    out property <length> address_medium: min(root.small, 12.5px);
+    out property <length> address_small: min(root.micro, 11.5px);
 
     out property <int> regular: 400;
     out property <int> semibold: 600;
     out property <int> bold: 700;
     out property <int> medium: 500;
 
-    out property <length> tracking_caps: 1px;
+    out property <length> tracking_caps: 1.6px;
+}
+
+export global Sizes {
+    out property <length> icon_sm: 14px;
+    out property <length> icon_md: 17px;
+    out property <length> icon_lg: 20px;
+
+    out property <length> control_dense: 24px;
+    out property <length> control_inline: 28px;
+    out property <length> control_chip: 30px;
+    out property <length> control_large: 40px;
+
+    out property <length> label_row_h: 18px;
 }
 
 export global Radii {
@@ -53,12 +74,19 @@ export global Palette {
     out property <color> surface_overlay: #141A26;
     out property <color> surface_disabled: #1A2130;
 
-    out property <color> border_subtle: #FFFFFF0F;
-    out property <color> border_hairline: #FFFFFF0D;
-    out property <color> border_medium: #FFFFFF14;
-    out property <color> border_strong: #FFFFFF5A;
+    out property <color> border_hairline: #A8BBD911;
+    out property <color> border_subtle: #A8BBD914;
+    out property <color> border_strong: #A8BBD938;
+
     out property <color> focus_ring: #3B82F6;
-    out property <color> selected_border: #3B82F680;
+    out property <color> focus_border: #D6E2F5B0;
+    out property <color> focus_glow: #A8BBD924;
+
+    out property <color> selected_fill: #A8BBD91A;
+    out property <color> selected_fill_hover: #A8BBD92E;
+    out property <color> selected_border: #A8BBD966;
+    out property <color> drag_marker: #C6D4EA;
+    out property <color> selection_bg: #A8BBD94D;
 
     out property <color> hover_row: #FFFFFF08;
     out property <color> hover_strong: #FFFFFF14;
