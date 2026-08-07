@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, anyhow};
 use tycho_types::dict::Dict;
+use tycho_types::error::Error;
 use tycho_types::models::{Account, AccountState, ExtraCurrencyCollection, ShardIdent};
 use tycho_types::num::{Tokens, VarUint248};
 use tycho_types::prelude::*;
@@ -17,7 +18,7 @@ pub struct ElectionStake {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoinSupply {
     pub total: u128,
-    pub extra: BTreeMap<u32, String>,
+    pub extra: Option<BTreeMap<u32, String>>,
     pub seqno: u32,
     pub gen_utime: u32,
 }
@@ -114,7 +115,7 @@ fn state_header(state: &DynCell) -> Result<(u32, u32)> {
     Ok((seqno, gen_utime))
 }
 
-fn global_balance(extra: &DynCell) -> Result<(u128, BTreeMap<u32, String>)> {
+fn global_balance(extra: &DynCell) -> Result<(u128, Option<BTreeMap<u32, String>>)> {
     let mut slice = extra
         .as_slice()
         .context("masterchain state extra is not readable")?;
@@ -135,21 +136,35 @@ fn global_balance(extra: &DynCell) -> Result<(u128, BTreeMap<u32, String>)> {
     let total = Tokens::load_from(&mut slice).context("global balance is undecodable")?;
     let other = ExtraCurrencyCollection::load_from(&mut slice)
         .context("global extra balance is undecodable")?;
-    Ok((total.into_inner(), extra_currency_supply(&other)?))
+    Ok((
+        total.into_inner(),
+        extra_currency_supply_unless_pruned(&other)?,
+    ))
 }
 
-fn extra_currency_supply(collection: &ExtraCurrencyCollection) -> Result<BTreeMap<u32, String>> {
+fn extra_currency_supply_unless_pruned(
+    collection: &ExtraCurrencyCollection,
+) -> Result<Option<BTreeMap<u32, String>>> {
     let dict: &Dict<u32, VarUint248> = collection.as_dict();
     let mut supply = BTreeMap::new();
     for entry in dict.iter() {
-        let (id, amount) = entry.context("an extra-currency supply entry is undecodable")?;
-        supply.insert(id, amount.to_string());
+        match entry {
+            Ok((id, amount)) => {
+                supply.insert(id, amount.to_string());
+            }
+            Err(Error::UnexpectedExoticCell) => return Ok(None),
+            Err(error) => {
+                return Err(error).context("an extra-currency supply entry is undecodable");
+            }
+        }
     }
-    Ok(supply)
+    Ok(Some(supply))
 }
 
 #[cfg(test)]
 mod tests {
+    use tycho_types::merkle::make_pruned_branch;
+
     use super::*;
 
     fn frozen_validator(stake: u128) -> Cell {
@@ -254,7 +269,10 @@ mod tests {
         for (id, amount) in extra {
             currencies.set(*id, VarUint248::new(*amount)).unwrap();
         }
+        state_extra_with_currencies(total, currencies)
+    }
 
+    fn state_extra_with_currencies(total: u128, currencies: Dict<u32, VarUint248>) -> Cell {
         let mut builder = CellBuilder::new();
         builder.store_u16(MC_STATE_EXTRA_TAG).unwrap();
         builder.store_bit_zero().unwrap();
@@ -274,6 +292,7 @@ mod tests {
     fn the_global_balance_is_the_native_supply_and_every_currency_supply() {
         let extra = state_extra(7_074_806_721_778_674_964, &[(1, 21_000_000), (7, 5)]);
         let (total, currencies) = global_balance(extra.as_ref()).unwrap();
+        let currencies = currencies.unwrap();
 
         assert_eq!(total, 7_074_806_721_778_674_964);
         assert_eq!(currencies.get(&1).map(String::as_str), Some("21000000"));
@@ -284,7 +303,73 @@ mod tests {
     fn a_chain_with_no_extra_currencies_reports_only_the_native_supply() {
         let (total, currencies) = global_balance(state_extra(42, &[]).as_ref()).unwrap();
         assert_eq!(total, 42);
-        assert!(currencies.is_empty());
+        assert!(currencies.unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_key_block_that_pruned_its_currency_dict_still_gives_up_the_native_supply() {
+        let mut currencies = Dict::<u32, VarUint248>::new();
+        currencies.set(264, VarUint248::new(2_100_000)).unwrap();
+        let pruned = make_pruned_branch(
+            currencies.root().as_ref().unwrap().as_ref(),
+            0,
+            Cell::empty_context(),
+        )
+        .unwrap();
+        let extra =
+            state_extra_with_currencies(7_078_140_775_678_674_964, Dict::from_raw(Some(pruned)));
+
+        let (total, currencies) = global_balance(extra.as_ref()).unwrap();
+        assert_eq!(
+            total, 7_078_140_775_678_674_964,
+            "the native supply is in the proof and must survive a pruned currency dict"
+        );
+        assert!(
+            currencies.is_none(),
+            "a pruned dict is unknown, not an empty set of extra currencies"
+        );
+
+        let mut state = CellBuilder::new();
+        state.store_u32(0).unwrap();
+        state.store_u32(0).unwrap();
+        ShardIdent::MASTERCHAIN
+            .store_into(&mut state, Cell::empty_context())
+            .unwrap();
+        state.store_u32(24_415_514).unwrap();
+        state.store_u32(0).unwrap();
+        state.store_u32(1_786_088_161).unwrap();
+        state.store_reference(extra).unwrap();
+        let state = state.build().unwrap();
+
+        let mut update = CellBuilder::new();
+        update.store_reference(Cell::empty_cell()).unwrap();
+        update.store_reference(state).unwrap();
+        let mut wrapper = CellBuilder::new();
+        wrapper.store_reference(update.build().unwrap()).unwrap();
+
+        let mut block = CellBuilder::new();
+        block.store_reference(Cell::empty_cell()).unwrap();
+        block.store_reference(Cell::empty_cell()).unwrap();
+        block.store_reference(wrapper.build().unwrap()).unwrap();
+
+        let supply = key_block_supply(&block.build().unwrap()).unwrap();
+        assert_eq!(supply.total, 7_078_140_775_678_674_964);
+        assert_eq!(supply.seqno, 24_415_514);
+        assert_eq!(supply.gen_utime, 1_786_088_161);
+        assert!(supply.extra.is_none());
+    }
+
+    #[test]
+    fn a_currency_dict_that_is_broken_rather_than_pruned_is_still_refused() {
+        let mut broken = CellBuilder::new();
+        broken.store_bit_one().unwrap();
+        let extra = state_extra_with_currencies(1, Dict::from_raw(Some(broken.build().unwrap())));
+
+        let error = global_balance(extra.as_ref()).unwrap_err();
+        assert!(
+            error.to_string().contains("extra-currency supply entry"),
+            "an undecodable entry is not quietly read as an unknown one: {error}"
+        );
     }
 
     #[test]

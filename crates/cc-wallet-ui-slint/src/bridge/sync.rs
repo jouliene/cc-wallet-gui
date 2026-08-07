@@ -1254,7 +1254,10 @@ mod explorer_tests {
             total_stake: Some(9_532_221_000_000_000),
             supply: Some(CoinSupply {
                 total: 7_074_806_721_778_674_964,
-                extra: std::collections::BTreeMap::from([(1, "21000000".to_owned())]),
+                extra: Some(std::collections::BTreeMap::from([(
+                    1,
+                    "21000000".to_owned(),
+                )])),
                 seqno: 23_197_707,
                 gen_utime: 1_784_777_441,
             }),
@@ -1316,7 +1319,7 @@ mod explorer_tests {
         fn supply(total: u128) -> CoinSupply {
             CoinSupply {
                 total,
-                extra: std::collections::BTreeMap::new(),
+                extra: Some(std::collections::BTreeMap::new()),
                 seqno: 1,
                 gen_utime: 1,
             }
@@ -1353,7 +1356,7 @@ mod explorer_tests {
 
         let supply = CoinSupply {
             total: 1,
-            extra: std::collections::BTreeMap::new(),
+            extra: Some(std::collections::BTreeMap::new()),
             seqno: 23_197_707,
             gen_utime: 1_784_777_441,
         };
