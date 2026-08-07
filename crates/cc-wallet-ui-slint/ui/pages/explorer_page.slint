@@ -720,10 +720,12 @@ export component ExplorerPage inherits VerticalLayout {
                     }
                     Rectangle {
                         height: 254px;
-                    property <length> fw: 152px;
+                    property <length> fw: 164px;
                     property <length> fh: 62px;
                     property <length> cpad: 6px;
-                    property <length> rh: 104px;
+                    property <length> dial: 184px;
+                    property <length> tpad_edge: 10px;
+                    property <length> tpad_dial: 6px;
 
                     Rectangle { x: parent.cpad; y: parent.cpad; width: parent.fw; height: parent.fh; border-radius: Radii.md; background: Palette.surface_sunken; border-width: 1px; border-color: Palette.border_subtle; }
                     Rectangle { x: parent.width - parent.fw - parent.cpad; y: parent.cpad; width: parent.fw; height: parent.fh; border-radius: Radii.md; background: Palette.surface_sunken; border-width: 1px; border-color: Palette.border_subtle; }
@@ -731,18 +733,18 @@ export component ExplorerPage inherits VerticalLayout {
                     Rectangle { x: parent.width - parent.fw - parent.cpad; y: parent.height - parent.fh - parent.cpad; width: parent.fw; height: parent.fh; border-radius: Radii.md; background: Palette.surface_sunken; border-width: 1px; border-color: Palette.border_subtle; }
 
                     Rectangle {
-                        x: (parent.width - 2 * parent.rh) / 2;
-                        y: (parent.height - 2 * parent.rh) / 2;
-                        width: 2 * parent.rh;
-                        height: 2 * parent.rh;
-                        border-radius: parent.rh;
+                        x: (parent.width - parent.dial) / 2;
+                        y: (parent.height - parent.dial) / 2;
+                        width: parent.dial;
+                        height: parent.dial;
+                        border-radius: parent.dial / 2;
                         background: Palette.surface_raised;
                     }
 
                     ValidatorClock {
                         x: (parent.width - self.width) / 2;
                         y: (parent.height - self.height) / 2;
-                        size: 184px;
+                        size: parent.dial;
                         needle_angle: root.clock_needle_angle;
                         elect_frac_start: root.clock_elect_start;
                         elect_frac_end: root.clock_elect_end;
@@ -751,25 +753,25 @@ export component ExplorerPage inherits VerticalLayout {
                     }
 
                     CornerText {
-                        x: parent.cpad + 13px; y: parent.cpad; width: parent.fw - 26px; height: parent.fh;
+                        x: parent.cpad + parent.tpad_edge; y: parent.cpad; width: parent.fw - parent.tpad_edge - parent.tpad_dial; height: parent.fh;
                         title: "ACTIVE ROUND";
                         value: root.clock_active_round;
                         value_color: root.clock_active_round == "GREEN" ? Palette.positive : Palette.accent_text;
                     }
                     CornerText {
-                        x: parent.width - parent.fw - parent.cpad + 13px; y: parent.cpad; width: parent.fw - 26px; height: parent.fh;
+                        x: parent.width - parent.fw - parent.cpad + parent.tpad_dial; y: parent.cpad; width: parent.fw - parent.tpad_edge - parent.tpad_dial; height: parent.fh;
                         align_right: true;
                         title: "ELECTION PHASE";
                         value: root.clock_elections;
                         value_color: root.clock_elections_open ? Palette.clock_now : Palette.text_primary;
                     }
                     CornerText {
-                        x: parent.cpad + 13px; y: parent.height - parent.fh - parent.cpad; width: parent.fw - 26px; height: parent.fh;
+                        x: parent.cpad + parent.tpad_edge; y: parent.height - parent.fh - parent.cpad; width: parent.fw - parent.tpad_edge - parent.tpad_dial; height: parent.fh;
                         title: "ROUND ENDS IN";
                         value: root.clock_round_ends_in;
                     }
                     CornerText {
-                        x: parent.width - parent.fw - parent.cpad + 13px; y: parent.height - parent.fh - parent.cpad; width: parent.fw - 26px; height: parent.fh;
+                        x: parent.width - parent.fw - parent.cpad + parent.tpad_dial; y: parent.height - parent.fh - parent.cpad; width: parent.fw - parent.tpad_edge - parent.tpad_dial; height: parent.fh;
                         align_right: true;
                         title: root.clock_elections_open ? "ELECTION ENDS IN" : "NEXT ELECTION IN";
                         value: root.clock_elections_countdown;

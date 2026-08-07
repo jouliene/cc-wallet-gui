@@ -1709,10 +1709,37 @@ mod explorer_tests {
             "the corner text sits in the middle of its frame, not against the top"
         );
         assert_eq!(
-            page.matches("width: parent.fw - 26px; height: parent.fh;")
-                .count(),
+            page.matches(
+                "width: parent.fw - parent.tpad_edge - parent.tpad_dial; height: parent.fh;"
+            )
+            .count(),
             4,
             "all four corner labels are drawn to the full height of their frame"
+        );
+    }
+
+    #[test]
+    fn the_clock_corners_take_their_room_from_the_dial_not_from_a_fitted_number() {
+        let page = include_str!("../../ui/pages/explorer_page.slint");
+
+        assert!(
+            page.contains("border-radius: parent.dial / 2;") && page.contains("size: parent.dial;"),
+            "the circle that bites the corner cards is the dial's own footprint, \
+             so the cards keep every pixel the dial does not cover"
+        );
+        assert!(
+            !page.contains("parent.cpad + 13px") && !page.contains("parent.fw - 26px"),
+            "the corner text is placed by named padding, not by numbers fitted to one label"
+        );
+        assert_eq!(
+            page.matches("parent.tpad_edge").count(),
+            6,
+            "both left corners and all four widths take one padding from the card edge"
+        );
+        assert_eq!(
+            page.matches("parent.tpad_dial").count(),
+            6,
+            "both right corners and all four widths take one padding towards the dial"
         );
     }
 
