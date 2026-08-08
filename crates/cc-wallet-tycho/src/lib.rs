@@ -6,6 +6,7 @@ pub mod emulator;
 pub mod everwallet;
 pub mod history;
 pub mod network;
+pub mod storage;
 pub mod subscription;
 pub mod transport;
 
@@ -38,6 +39,12 @@ pub use history::{
     ChainMessage, ChainTransaction, MAX_TRANSACTION_BOC_BYTES, MsgKind, parse_transaction,
 };
 pub use network::{CoinSupply, ElectionStake, elector_election_stake, key_block_supply};
+pub use storage::{
+    MAX_BLOB_BYTES as MAX_STORAGE_BLOB_BYTES, MAX_RECORDS as MAX_STORAGE_RECORDS,
+    MIN_STORAGE_RESERVE, STORAGE_CONTRACT, StorageData, delete_body as storage_delete_body,
+    put_body as storage_put_body, storage_address, storage_code_hash, storage_error_text,
+    storage_from_account, withdraw_body as storage_withdraw_body,
+};
 pub use subscription::{AccountUpdate, SubscriptionEvent, account_subscription_loop};
 pub use transport::{
     AccountState, AccountTimings, BlockchainConfigState, BroadcastAcknowledgement,

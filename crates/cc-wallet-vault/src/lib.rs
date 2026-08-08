@@ -2,6 +2,7 @@ mod aead;
 pub mod error;
 mod keyslot;
 pub mod params;
+pub mod record;
 mod vault;
 
 pub(crate) const MAGIC: [u8; 8] = *b"CCWALLET";
@@ -9,6 +10,7 @@ pub(crate) const FORMAT_VERSION: u16 = 1;
 
 pub use error::{VaultError, VaultResult};
 pub use params::KdfParams;
+pub use record::{RECORD_SEAL_OVERHEAD, open_record, seal_record};
 pub use vault::{
     ActivitySection, MAX_DISPLAY_NAME_BYTES, MAX_HEADER_PROBE_LEN, OpenedContainer, OpenedKeyslot,
     Purpose, Vault, container_declared_len, keyslot_prefix, looks_like_container,

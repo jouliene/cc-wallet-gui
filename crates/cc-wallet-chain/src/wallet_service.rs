@@ -17,18 +17,22 @@ use crate::trace::{
 use cc_wallet_domain::{
     AssetAmount, AssetId, CcAmount, Digest32, EndpointAddressInputs, NetworkTimeProvenance,
     NodeResponseKind, ObservedNetworkTime as DomainObservedNetworkTime, PrepareProvenance,
-    PreparedRecord, Reservation, ReservationKind, SeedPhrase, SendRequest, SendTicket, SwapRequest,
-    ValidatorCycle, WalletInputs, WalletSnapshot, canonicalize_recipient, evaluate_affordability,
-    normalize_seed, validate_seed, validate_workchain,
+    PreparedRecord, Reservation, ReservationKind, STORAGE_KEY_CONTEXT, SeedPhrase, SendRequest,
+    SendTicket, StorageOp, StorageRecord, StorageSnapshot, SwapRequest, ValidatorCycle,
+    WalletInputs, WalletSnapshot, canonicalize_recipient, decode_record, encode_record,
+    evaluate_affordability, normalize_seed, record_aad, validate_seed, validate_workchain,
 };
 use cc_wallet_tycho::{
-    AccountInspection, AccountState, AccountStatus, BlockchainConfigState, CcdexAsset,
-    ChainTransaction, CoinSupply, EmulationConfig, EverTransfer, EverWallet, KeyPair, LocalReason,
-    MsgKind, ResponseKind, Seed, SendAttemptOutcome, SubscriptionEvent, Transport, WalletState,
+    AccountInspection, AccountState, AccountStatus, BlockchainConfigState,
+    BroadcastAcknowledgement, CcdexAsset, ChainTransaction, CoinSupply, EmulationConfig,
+    EverTransfer, EverWallet, KeyPair, LocalReason, MsgKind, ResponseKind, Seed,
+    SendAttemptOutcome, StdAddr, SubscriptionEvent, Transport, WalletState,
     account_subscription_loop, comment_payload, elector_election_stake, emulate_external_message,
     key_block_supply, parse_transaction, pool_storage_from_account, prepare_emulation_config,
-    shard_account_for_emulation, swap_body, validate_emulation_input_sizes,
+    shard_account_for_emulation, storage_address, storage_delete_body, storage_from_account,
+    storage_put_body, swap_body, validate_emulation_input_sizes,
 };
+use cc_wallet_vault::{open_record, seal_record};
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
@@ -89,6 +93,10 @@ const SAFE_SEND_FLAGS: u8 = 1;
 const SWAP_GAS_NATIVE: u128 = 200_000_000;
 
 const SWAP_VALID_SECS: u32 = 300;
+
+const STORAGE_DEPLOY_NATIVE: u128 = 1_000_000_000;
+
+const STORAGE_OP_NATIVE: u128 = 200_000_000;
 
 fn emulation_balance_floor(transfer_native: u128) -> ChainResult<u128> {
     let min_balance = transfer_native
@@ -191,6 +199,64 @@ impl PreparedSwap {
 
     pub fn deploy(&self) -> bool {
         self.deploy
+    }
+
+    pub fn attached_native(&self) -> u128 {
+        self.attached_native
+    }
+
+    pub fn fee_nanos(&self) -> u128 {
+        self.fee_nanos
+    }
+
+    pub fn candidate_count(&self) -> usize {
+        self.route.candidate_count()
+    }
+}
+
+pub struct PreparedStorageOp {
+    endpoint: String,
+    message: cc_wallet_tycho::Cell,
+    route: cc_wallet_tycho::ResolvedSendRoute,
+    external_hash: Digest32,
+    expire_at: u32,
+    storage_address: String,
+    op: StorageOp,
+    attached_native: u128,
+    fee_nanos: u128,
+}
+
+impl fmt::Debug for PreparedStorageOp {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PreparedStorageOp")
+            .field("endpoint", &self.endpoint)
+            .field("storage_address", &self.storage_address)
+            .field("op", &self.op.label())
+            .field("record_id", &self.op.record_id())
+            .field("external_hash", &self.external_hash)
+            .field("expire_at", &self.expire_at)
+            .field("attached_native", &self.attached_native)
+            .field("fee_nanos", &self.fee_nanos)
+            .finish_non_exhaustive()
+    }
+}
+
+impl PreparedStorageOp {
+    pub fn external_hash(&self) -> &Digest32 {
+        &self.external_hash
+    }
+
+    pub fn expire_at(&self) -> u32 {
+        self.expire_at
+    }
+
+    pub fn op(&self) -> &StorageOp {
+        &self.op
+    }
+
+    pub fn storage_address(&self) -> &str {
+        &self.storage_address
     }
 
     pub fn attached_native(&self) -> u128 {
@@ -1309,34 +1375,251 @@ impl TychoWalletService {
                 &prepared.message,
             )
             .await;
-        Ok(match outcome {
-            Ok(acknowledgement) => CandidateBroadcastOutcome::NodeResponseObserved {
-                request_id: acknowledgement.request_id,
-                response: NodeResponseKind::Acknowledged,
-                detail: "node acknowledged the signed swap; delivery remains unverified".to_owned(),
-            },
-            Err(SendAttemptOutcome::NotTransmitted(reason)) => {
-                let retry_next_candidate =
-                    matches!(reason, LocalReason::AllCandidatesFailedPreConnect(_));
-                CandidateBroadcastOutcome::NotTransmitted {
-                    detail: SendAttemptOutcome::NotTransmitted(reason).to_string(),
-                    retry_next_candidate,
-                }
+        Ok(classify_broadcast(outcome, "signed swap"))
+    }
+
+    fn storage_owner(&self, inputs: &WalletInputs) -> ChainResult<(Arc<KeyPair>, StdAddr)> {
+        let seed = normalize_and_validate_inputs(inputs)?;
+        let keys = self.keypair_for(seed)?;
+        let owner = EverWallet::compute_address(inputs.workchain, keys.public_key())
+            .map_err(ChainError::wallet)?;
+        Ok((keys, owner))
+    }
+
+    pub fn storage_address_for(&self, inputs: &WalletInputs) -> ChainResult<String> {
+        let (_, owner) = self.storage_owner(inputs)?;
+        Ok(storage_address(&owner)
+            .map_err(ChainError::wallet)?
+            .0
+            .to_string())
+    }
+
+    pub async fn load_storage(&self, inputs: WalletInputs) -> ChainResult<StorageSnapshot> {
+        let (keys, owner) = self.storage_owner(&inputs)?;
+        let (address, _) = storage_address(&owner).map_err(ChainError::wallet)?;
+        let transport = self.transport_for(&inputs.endpoint)?;
+        let state = transport
+            .get_account_state(address.to_string())
+            .await
+            .map_err(ChainError::wallet)?;
+
+        let mut snapshot = StorageSnapshot {
+            address: address.to_string(),
+            ..StorageSnapshot::default()
+        };
+        let Some(account) = state.account() else {
+            return Ok(snapshot);
+        };
+        snapshot.balance = account.balance.tokens.into();
+
+        let Some(stored) = storage_from_account(&state).map_err(ChainError::wallet)? else {
+            return Ok(snapshot);
+        };
+        snapshot.exists = true;
+
+        let owner_text = owner.to_string();
+        if stored.owner != owner_text {
+            return Err(ChainError::Wallet(
+                "the storage at this wallet's address is owned by a different wallet".to_owned(),
+            ));
+        }
+
+        let key = keys.derive_secret(STORAGE_KEY_CONTEXT);
+        for (id, blob) in &stored.records {
+            let aad = record_aad(&owner_text, *id);
+            match open_record(&key, &aad, blob)
+                .map_err(|_| ())
+                .and_then(|plain| {
+                    decode_record(&plain)
+                        .map(|(title, data)| StorageRecord {
+                            id: *id,
+                            title,
+                            data,
+                        })
+                        .map_err(|_| ())
+                }) {
+                Ok(record) => snapshot.records.push(record),
+                Err(()) => snapshot.unreadable += 1,
             }
-            Err(SendAttemptOutcome::MayHaveBroadcast(reason)) => {
-                CandidateBroadcastOutcome::MayHaveBroadcast {
-                    detail: SendAttemptOutcome::MayHaveBroadcast(reason).to_string(),
-                }
+        }
+        Ok(snapshot)
+    }
+
+    pub async fn prepare_storage_op(
+        &self,
+        inputs: WalletInputs,
+        op: StorageOp,
+    ) -> ChainResult<PreparedStorageOp> {
+        let (keys, owner) = self.storage_owner(&inputs)?;
+        let (address, init) = storage_address(&owner).map_err(ChainError::wallet)?;
+        let (mut wallet, transport) =
+            self.build_wallet(&inputs, normalize_and_validate_inputs(&inputs)?)?;
+
+        let config = self.blockchain_config(&transport).await?;
+        let signature_context = config
+            .state
+            .signature_context()
+            .map_err(ChainError::wallet)?;
+        let has_signature_id = cc_wallet_tycho::signature_context_has_id(&signature_context);
+        validate_signature_context(
+            signature_context.global_id,
+            has_signature_id,
+            inputs.network_id,
+            inputs.require_signature_id,
+        )
+        .map_err(ChainError::Wallet)?;
+
+        let observed_state = transport
+            .get_account_state_observed(wallet.address_string())
+            .await
+            .map_err(ChainError::wallet)?;
+        let account_state = observed_state.state().clone();
+        wallet
+            .apply_observed_account_state(observed_state)
+            .map_err(ChainError::wallet)?;
+
+        let query_id = swap_query_id();
+        let (attached_native, transfer) = match &op {
+            StorageOp::Create => (
+                STORAGE_DEPLOY_NATIVE,
+                EverTransfer::new(&address)
+                    .map_err(ChainError::invalid_input)?
+                    .native(STORAGE_DEPLOY_NATIVE)
+                    .map_err(ChainError::invalid_input)?
+                    .bounce(false)
+                    .flags(SAFE_SEND_FLAGS)
+                    .dest_state_init(init),
+            ),
+            StorageOp::Put { id, title, data } => {
+                let key = keys.derive_secret(STORAGE_KEY_CONTEXT);
+                let plaintext = Zeroizing::new(
+                    encode_record(title, data)
+                        .map_err(|error| ChainError::InvalidInput(error.to_string()))?,
+                );
+                let blob = seal_record(&key, &record_aad(&owner.to_string(), *id), &plaintext)
+                    .map_err(|error| ChainError::Wallet(error.to_string()))?;
+                let body = storage_put_body(query_id, *id, &blob).map_err(ChainError::wallet)?;
+                (
+                    STORAGE_OP_NATIVE,
+                    EverTransfer::new(&address)
+                        .map_err(ChainError::invalid_input)?
+                        .native(STORAGE_OP_NATIVE)
+                        .map_err(ChainError::invalid_input)?
+                        .bounce(true)
+                        .flags(SAFE_SEND_FLAGS)
+                        .payload(body),
+                )
             }
-            Err(SendAttemptOutcome::NodeResponseObserved(response)) => {
-                let response_kind = classify_node_response(&response);
-                CandidateBroadcastOutcome::NodeResponseObserved {
-                    request_id: response.request_id().to_owned(),
-                    response: response_kind,
-                    detail: SendAttemptOutcome::NodeResponseObserved(response).to_string(),
-                }
+            StorageOp::Delete { id } => {
+                let body = storage_delete_body(query_id, *id).map_err(ChainError::wallet)?;
+                (
+                    STORAGE_OP_NATIVE,
+                    EverTransfer::new(&address)
+                        .map_err(ChainError::invalid_input)?
+                        .native(STORAGE_OP_NATIVE)
+                        .map_err(ChainError::invalid_input)?
+                        .bounce(true)
+                        .flags(SAFE_SEND_FLAGS)
+                        .payload(body),
+                )
             }
+        };
+
+        let prepared = wallet
+            .prepare_send_currency(&transfer, signature_context)
+            .map_err(ChainError::wallet)?;
+        let external_hash = Digest32::try_from_hex(&prepared.message_hash).map_err(|error| {
+            ChainError::Wallet(format!(
+                "prepared storage message hash is not canonical 32-byte hex: {error}"
+            ))
+        })?;
+
+        validate_emulation_input_sizes(&config.state, &account_state, &prepared.message)
+            .map_err(ChainError::wallet)?;
+
+        let min_balance = emulation_balance_floor(attached_native)?;
+        let shard_account =
+            shard_account_for_emulation(wallet.address(), &account_state, min_balance)
+                .map_err(ChainError::wallet)?;
+        let block_time = now_unix_secs()?.saturating_add(FEE_ESTIMATE_STORAGE_LAG_SECS);
+
+        let job = self.emulation_jobs.acquire(format!(
+            "{}|{}",
+            transport.endpoint(),
+            wallet.address_string()
+        ))?;
+        let emulation = config.emulation.clone();
+        let wallet_address = wallet.address().clone();
+        let message = prepared.message.clone();
+        let emulated = tokio::time::timeout(
+            FEE_EMULATION_TIMEOUT,
+            tokio::task::spawn_blocking(move || {
+                let _job = job;
+                emulate_external_message(
+                    &emulation,
+                    &wallet_address,
+                    &shard_account,
+                    &message,
+                    block_time,
+                )
+            }),
+        )
+        .await
+        .map_err(|_| {
+            ChainError::Wallet(
+                "storage preparation emulation timed out on hostile chain data".to_owned(),
+            )
+        })?
+        .map_err(|_| {
+            ChainError::Wallet(
+                "storage preparation emulation crashed on invalid chain data".to_owned(),
+            )
+        })?
+        .map_err(ChainError::wallet)?;
+        if emulated.aborted || !emulated.compute_success {
+            return Err(ChainError::Wallet(format!(
+                "this request would fail on your wallet before it reached the storage (exit code {})",
+                emulated.exit_code
+            )));
+        }
+        let fee_nanos = activity_from_chain_tx(&emulated)?
+            .into_iter()
+            .next()
+            .map(|event| event.fee_native)
+            .unwrap_or(0);
+
+        let route = transport
+            .resolve_send_route()
+            .await
+            .map_err(ChainError::wallet)?;
+
+        Ok(PreparedStorageOp {
+            endpoint: transport.endpoint().to_owned(),
+            message: prepared.message,
+            route,
+            external_hash,
+            expire_at: prepared.expire_at,
+            storage_address: address.to_string(),
+            op,
+            attached_native,
+            fee_nanos,
         })
+    }
+
+    pub async fn broadcast_storage_op(
+        &self,
+        prepared: &PreparedStorageOp,
+        candidate_index: usize,
+    ) -> ChainResult<CandidateBroadcastOutcome> {
+        let transport = self.transport_for(&prepared.endpoint)?;
+        let outcome = transport
+            .send_message_cell_candidate_classified(
+                &prepared.route,
+                candidate_index,
+                &prepared.message,
+            )
+            .await;
+        Ok(classify_broadcast(outcome, "storage request"))
     }
 
     async fn blockchain_config(&self, transport: &Transport) -> ChainResult<CachedConfig> {
@@ -1473,6 +1756,40 @@ pub trait ChainService: Send + Sync {
         Box::pin(async {
             Err(ChainError::Wallet(
                 "this chain service does not implement swap broadcasting".to_owned(),
+            ))
+        })
+    }
+    fn storage_address_for(&self, _inputs: &WalletInputs) -> ChainResult<String> {
+        Err(ChainError::Wallet(
+            "this chain service does not derive storage addresses".to_owned(),
+        ))
+    }
+    fn load_storage(&self, _inputs: WalletInputs) -> ChainFuture<'_, StorageSnapshot> {
+        Box::pin(async {
+            Err(ChainError::Wallet(
+                "this chain service does not read storage state".to_owned(),
+            ))
+        })
+    }
+    fn prepare_storage_op(
+        &self,
+        _inputs: WalletInputs,
+        _op: StorageOp,
+    ) -> ChainFuture<'_, PreparedStorageOp> {
+        Box::pin(async {
+            Err(ChainError::Wallet(
+                "this chain service does not implement storage preparation".to_owned(),
+            ))
+        })
+    }
+    fn broadcast_storage_op<'a>(
+        &'a self,
+        _prepared: &'a PreparedStorageOp,
+        _candidate_index: usize,
+    ) -> ChainFuture<'a, CandidateBroadcastOutcome> {
+        Box::pin(async {
+            Err(ChainError::Wallet(
+                "this chain service does not implement storage broadcasting".to_owned(),
             ))
         })
     }
@@ -1639,6 +1956,34 @@ impl ChainService for TychoWalletService {
         candidate_index: usize,
     ) -> ChainFuture<'a, CandidateBroadcastOutcome> {
         Box::pin(TychoWalletService::broadcast_swap(
+            self,
+            prepared,
+            candidate_index,
+        ))
+    }
+
+    fn storage_address_for(&self, inputs: &WalletInputs) -> ChainResult<String> {
+        TychoWalletService::storage_address_for(self, inputs)
+    }
+
+    fn load_storage(&self, inputs: WalletInputs) -> ChainFuture<'_, StorageSnapshot> {
+        Box::pin(TychoWalletService::load_storage(self, inputs))
+    }
+
+    fn prepare_storage_op(
+        &self,
+        inputs: WalletInputs,
+        op: StorageOp,
+    ) -> ChainFuture<'_, PreparedStorageOp> {
+        Box::pin(TychoWalletService::prepare_storage_op(self, inputs, op))
+    }
+
+    fn broadcast_storage_op<'a>(
+        &'a self,
+        prepared: &'a PreparedStorageOp,
+        candidate_index: usize,
+    ) -> ChainFuture<'a, CandidateBroadcastOutcome> {
+        Box::pin(TychoWalletService::broadcast_storage_op(
             self,
             prepared,
             candidate_index,
@@ -2033,6 +2378,40 @@ fn build_transfer(request: &SendRequest, bounce: bool) -> ChainResult<EverTransf
                 )
             })
             .map_err(ChainError::invalid_input),
+    }
+}
+
+fn classify_broadcast(
+    outcome: Result<BroadcastAcknowledgement, SendAttemptOutcome>,
+    what: &str,
+) -> CandidateBroadcastOutcome {
+    match outcome {
+        Ok(acknowledgement) => CandidateBroadcastOutcome::NodeResponseObserved {
+            request_id: acknowledgement.request_id,
+            response: NodeResponseKind::Acknowledged,
+            detail: format!("node acknowledged the {what}; delivery remains unverified"),
+        },
+        Err(SendAttemptOutcome::NotTransmitted(reason)) => {
+            let retry_next_candidate =
+                matches!(reason, LocalReason::AllCandidatesFailedPreConnect(_));
+            CandidateBroadcastOutcome::NotTransmitted {
+                detail: SendAttemptOutcome::NotTransmitted(reason).to_string(),
+                retry_next_candidate,
+            }
+        }
+        Err(SendAttemptOutcome::MayHaveBroadcast(reason)) => {
+            CandidateBroadcastOutcome::MayHaveBroadcast {
+                detail: SendAttemptOutcome::MayHaveBroadcast(reason).to_string(),
+            }
+        }
+        Err(SendAttemptOutcome::NodeResponseObserved(response)) => {
+            let response_kind = classify_node_response(&response);
+            CandidateBroadcastOutcome::NodeResponseObserved {
+                request_id: response.request_id().to_owned(),
+                response: response_kind,
+                detail: SendAttemptOutcome::NodeResponseObserved(response).to_string(),
+            }
+        }
     }
 }
 

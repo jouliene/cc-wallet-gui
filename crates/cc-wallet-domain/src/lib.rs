@@ -12,6 +12,7 @@ pub mod network;
 pub mod profile;
 pub mod risk;
 pub mod send;
+pub mod storage;
 pub mod strict;
 pub mod swap;
 pub mod validator_clock;
@@ -54,6 +55,11 @@ pub use risk::{RiskGrant, RiskGrantConsumption};
 pub use send::{
     COMMENT_CELL_BYTES, COMMENT_CELLS, COMMENT_ROOT_BYTES, MAX_COMMENT_BYTES, SendAuthorization,
     SendForm, SendRequest, SendToken, truncate_comment,
+};
+pub use storage::{
+    MAX_RECORD_DATA_BYTES, MAX_RECORD_TITLE_BYTES, STORAGE_KEY_CONTEXT, StorageError, StorageOp,
+    StorageRecord, StorageResult, StorageSnapshot, decode_record, encode_record, next_free_id,
+    record_aad, validate_record,
 };
 pub use strict::{
     Classified, EnvelopeSchemaV1, SchemaChecked, SchemaPolicy, StrictError, StrictObject,

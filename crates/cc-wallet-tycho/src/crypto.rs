@@ -220,6 +220,11 @@ impl KeyPair {
         self.public_key().to_bytes()
     }
 
+    pub fn derive_secret(&self, context: &str) -> Zeroizing<[u8; 32]> {
+        let seed = Zeroizing::new(self.secret.to_bytes());
+        Zeroizing::new(blake3::derive_key(context, seed.as_ref()))
+    }
+
     #[cfg(test)]
     pub fn secret_key_hex(&self) -> String {
         hex::encode(self.secret_key_bytes())
@@ -353,6 +358,37 @@ mod tests {
         assert!(KeyPair::from_secret_hex("abc").is_err());
         assert!(public_key_from_hex("abc").is_err());
         assert!(signature_from_hex("abc").is_err());
+    }
+
+    #[test]
+    fn a_derived_secret_is_stable_separated_by_context_and_is_not_the_signing_key() -> Result<()> {
+        let keys = KeyPair::from_secret_hex(TEST_SECRET_HEX)?;
+        let other = KeyPair::from_secret_hex(
+            "0f0e0d0c0b0a09080706050403020100000102030405060708090a0b0c0d0e0f",
+        )?;
+
+        let first = keys.derive_secret("cc-wallet storage record key v1");
+        assert_eq!(
+            *first,
+            *keys.derive_secret("cc-wallet storage record key v1"),
+            "the same key and context always derive the same secret"
+        );
+        assert_ne!(
+            *first,
+            *keys.derive_secret("cc-wallet some other purpose v1"),
+            "a different purpose derives an unrelated secret"
+        );
+        assert_ne!(
+            *first,
+            *other.derive_secret("cc-wallet storage record key v1"),
+            "a different wallet derives an unrelated secret"
+        );
+        assert_ne!(
+            *first,
+            keys.secret_key_bytes(),
+            "the derived secret is not the signing key itself"
+        );
+        Ok(())
     }
 
     #[test]

@@ -60,6 +60,7 @@ pub(super) fn connect_callbacks(
     on0!(on_nav_swap, AppCommand::SelectTab(AppTab::Swap));
     on0!(on_nav_contacts, AppCommand::SelectTab(AppTab::Contacts));
     on0!(on_nav_explorer, AppCommand::SelectTab(AppTab::Explorer));
+    on0!(on_nav_storage, AppCommand::SelectTab(AppTab::Storage));
     on0!(on_nav_settings, AppCommand::SelectTab(AppTab::Settings));
     on0!(on_refresh_wallet, AppCommand::RefreshWallet);
     on0!(on_clear_error, AppCommand::ClearError);
@@ -167,6 +168,29 @@ pub(super) fn connect_callbacks(
     );
     on0!(on_request_swap, AppCommand::RequestSwap);
     on0!(on_dismiss_swap_receipt, AppCommand::DismissSwapReceipt);
+    on0!(on_refresh_storage, AppCommand::RefreshStorage);
+    on0!(on_create_storage, AppCommand::CreateStorage);
+    on0!(on_add_storage_record, AppCommand::AddStorageRecord);
+    on1!(
+        on_storage_title_edited,
+        t,
+        AppCommand::SetStorageTitle(t.to_string())
+    );
+    on1!(
+        on_storage_data_edited,
+        t,
+        AppCommand::SetStorageData(t.to_string())
+    );
+    on1!(
+        on_delete_storage_record,
+        id,
+        AppCommand::DeleteStorageRecord(id.max(0) as u32)
+    );
+    on1!(
+        on_copy_storage_record,
+        id,
+        AppCommand::CopyStorageRecord(id.max(0) as u32)
+    );
     on0!(on_request_risk_override, AppCommand::RequestRiskOverride);
     {
         let weak = ui.as_weak();

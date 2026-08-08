@@ -17,8 +17,9 @@ use cc_wallet_domain::{
     EndpointAddressInputs, EndpointTransactionEvidence, EvidenceTag, LOCAL_SEND_FEE_HEADROOM_NANOS,
     ObservedNetworkTime, PrepareProvenance, PreparedRecord, RISK_WARNING_VERSION, RecordId,
     Reservation, ReservationKind, RiskGrant, RiskGrantConsumption, RiskNonce, SeedPhrase,
-    SendAuthorization, SendRequest, SendTicket, TerminalOutcome, WalletInputs, WalletProfile,
-    WalletSnapshot, blocker_set_digest, overlap_set_digest, reservation_set_digest,
+    SendAuthorization, SendRequest, SendTicket, StorageOp, StorageRecord, StorageSnapshot,
+    TerminalOutcome, WalletInputs, WalletProfile, WalletSnapshot, blocker_set_digest,
+    overlap_set_digest, reservation_set_digest,
 };
 use cc_wallet_vault::{KdfParams, Vault};
 
@@ -5834,12 +5835,22 @@ struct FakeInner {
     unseal_calls: u32,
     drain_emulation_blocks: bool,
     drain_calls: u32,
+    storage: Option<StorageSnapshot>,
+    storage_ops: Vec<StorageOp>,
 }
 
 #[derive(Clone, Default)]
 struct FakeChain(Arc<Mutex<FakeInner>>);
 
 impl FakeChain {
+    fn set_storage(&self, snapshot: StorageSnapshot) {
+        self.0.lock().unwrap().storage = Some(snapshot);
+    }
+
+    fn storage_ops(&self) -> Vec<StorageOp> {
+        self.0.lock().unwrap().storage_ops.clone()
+    }
+
     fn set_prepare_error(&self, error: ChainError) {
         self.0.lock().unwrap().prepare_error = Some(error);
     }
@@ -6171,6 +6182,28 @@ impl ChainService for FakeChain {
 
     fn derive_wallet_address(&self, _inputs: &WalletInputs) -> ChainResult<String> {
         Ok(SEND_DEST.to_owned())
+    }
+
+    fn storage_address_for(&self, _inputs: &WalletInputs) -> ChainResult<String> {
+        Ok(STORAGE_ADDR.to_owned())
+    }
+
+    fn load_storage(&self, _inputs: WalletInputs) -> ChainFuture<'_, StorageSnapshot> {
+        let snapshot = self.0.lock().unwrap().storage.clone().unwrap_or_default();
+        Box::pin(async move { Ok(snapshot) })
+    }
+
+    fn prepare_storage_op(
+        &self,
+        _inputs: WalletInputs,
+        op: StorageOp,
+    ) -> ChainFuture<'_, cc_wallet_chain::PreparedStorageOp> {
+        self.0.lock().unwrap().storage_ops.push(op);
+        Box::pin(async {
+            Err(ChainError::Wallet(
+                "the test double records the op and stops before signing".to_owned(),
+            ))
+        })
     }
 
     fn load_wallet<'a>(
@@ -11351,5 +11384,217 @@ fn the_send_button_settles_once_instead_of_blinking_while_the_fee_lands() {
         vec![false, true],
         "the button may only go off-then-on; it blinked instead: {seen:?}"
     );
+    cleanup(&dir);
+}
+
+const STORAGE_ADDR: &str = "0:5f5c08a95c2f1332dd6305d824d31b76f7cdb3040e3955c08d23b269ed13969b";
+
+fn stored(id: u32, title: &str, data: &str) -> StorageRecord {
+    StorageRecord {
+        id,
+        title: title.to_owned(),
+        data: data.to_owned(),
+    }
+}
+
+fn settle(c: &mut AppController) {
+    c.pump_events();
+}
+
+fn authorize(c: &mut AppController) {
+    c.handle_command(AppCommand::AuthSubmit {
+        pw: Password::new(String::from_utf8(PW.to_vec()).unwrap()),
+        pw2: Password::new(String::new()),
+        remember: false,
+    });
+    c.pump_key();
+    c.pump_events();
+}
+
+fn storage_controller(
+    dir: &Path,
+    chain: FakeChain,
+    records: Vec<StorageRecord>,
+) -> (AppController, MemoryClipboard) {
+    chain.set_storage(StorageSnapshot {
+        address: STORAGE_ADDR.to_owned(),
+        exists: true,
+        balance: 1_000_000_000,
+        records,
+        unreadable: 0,
+    });
+    let profile = WalletProfile {
+        seed: test_seed(),
+        ..WalletProfile::default()
+    };
+    let mut c = unlocked(dir, profile);
+    c.state_mut().seed = test_seed();
+    c.chain = Arc::new(chain);
+    c.flush_save_blocking();
+    while c.rx.try_recv().is_ok() {}
+    let mem = mem_clipboard(&mut c);
+    c.handle_command(AppCommand::SelectTab(AppTab::Storage));
+    settle(&mut c);
+    (c, mem)
+}
+
+#[test]
+fn opening_the_storage_tab_reads_what_is_on_chain() {
+    let dir = temp_dir("storage-open");
+    let chain = FakeChain::default();
+    let (c, _mem) = storage_controller(
+        &dir,
+        chain,
+        vec![
+            stored(1, "Inna's phone", "86594423664"),
+            stored(2, "My email", "abc@gmail.com"),
+        ],
+    );
+
+    assert!(c.state().storage.exists);
+    assert!(c.state().storage.loaded);
+    assert_eq!(c.state().storage.address, STORAGE_ADDR);
+    assert_eq!(c.state().storage.records.len(), 2);
+    assert_eq!(c.state().storage.records[0].title, "Inna's phone");
+    assert_eq!(c.state().storage.records[1].data, "abc@gmail.com");
+    cleanup(&dir);
+}
+
+#[test]
+fn adding_a_record_asks_for_authorization_before_it_reaches_the_chain() {
+    let dir = temp_dir("storage-auth-gate");
+    let chain = FakeChain::default();
+    let (mut c, _mem) = storage_controller(&dir, chain.clone(), Vec::new());
+
+    c.handle_command(AppCommand::SetStorageTitle("Inna's phone".to_owned()));
+    c.handle_command(AppCommand::SetStorageData("86594423664".to_owned()));
+    c.handle_command(AppCommand::AddStorageRecord);
+    settle(&mut c);
+
+    assert!(c.state().auth.open, "the record waits for authorization");
+    assert_eq!(c.state().auth.purpose, AuthPurpose::Storage);
+    assert!(
+        chain.storage_ops().is_empty(),
+        "nothing reached the chain before the user authorized it"
+    );
+
+    c.handle_command(AppCommand::AuthCancel);
+    settle(&mut c);
+    assert!(
+        chain.storage_ops().is_empty(),
+        "cancelling drops the request instead of sending it"
+    );
+    assert!(!c.state().auth.open);
+    cleanup(&dir);
+}
+
+#[test]
+fn an_authorized_record_reaches_the_chain_with_the_lowest_free_number() {
+    let dir = temp_dir("storage-lowest-gap");
+    let chain = FakeChain::default();
+    let (mut c, _mem) = storage_controller(
+        &dir,
+        chain.clone(),
+        vec![stored(1, "one", "a"), stored(3, "three", "c")],
+    );
+
+    c.handle_command(AppCommand::SetStorageTitle("  My email  ".to_owned()));
+    c.handle_command(AppCommand::SetStorageData("abc@gmail.com".to_owned()));
+    c.handle_command(AppCommand::AddStorageRecord);
+    settle(&mut c);
+    authorize(&mut c);
+
+    assert_eq!(
+        chain.storage_ops(),
+        vec![StorageOp::Put {
+            id: 2,
+            title: "My email".to_owned(),
+            data: "abc@gmail.com".to_owned(),
+        }],
+        "the freed number 2 is reused and the name is trimmed"
+    );
+    cleanup(&dir);
+}
+
+#[test]
+fn a_record_the_form_would_reject_never_opens_the_authorization() {
+    let dir = temp_dir("storage-form-gate");
+    let chain = FakeChain::default();
+    let (mut c, _mem) = storage_controller(&dir, chain.clone(), Vec::new());
+
+    c.handle_command(AppCommand::SetStorageTitle("   ".to_owned()));
+    c.handle_command(AppCommand::SetStorageData("86594423664".to_owned()));
+    c.handle_command(AppCommand::AddStorageRecord);
+    settle(&mut c);
+    assert!(!c.state().auth.open, "a blank name never asks to sign");
+    assert!(!c.state().storage.form_error.is_empty());
+
+    c.handle_command(AppCommand::SetStorageTitle("fine".to_owned()));
+    c.handle_command(AppCommand::SetStorageData("x".repeat(2000)));
+    c.handle_command(AppCommand::AddStorageRecord);
+    settle(&mut c);
+    assert!(
+        !c.state().auth.open,
+        "an oversized record never asks to sign"
+    );
+
+    assert!(chain.storage_ops().is_empty());
+    cleanup(&dir);
+}
+
+#[test]
+fn deleting_names_the_record_and_refuses_one_that_is_not_there() {
+    let dir = temp_dir("storage-delete");
+    let chain = FakeChain::default();
+    let (mut c, _mem) = storage_controller(&dir, chain.clone(), vec![stored(4, "note", "secret")]);
+
+    c.handle_command(AppCommand::DeleteStorageRecord(9));
+    settle(&mut c);
+    assert!(
+        !c.state().auth.open,
+        "deleting an absent record asks nothing"
+    );
+    assert!(!c.state().storage.error.is_empty());
+
+    c.handle_command(AppCommand::DeleteStorageRecord(4));
+    settle(&mut c);
+    assert_eq!(c.state().auth.purpose, AuthPurpose::Storage);
+    authorize(&mut c);
+
+    assert_eq!(chain.storage_ops(), vec![StorageOp::Delete { id: 4 }]);
+    cleanup(&dir);
+}
+
+#[test]
+fn copying_a_record_puts_its_contents_on_the_clipboard_and_not_its_name() {
+    let dir = temp_dir("storage-copy");
+    let chain = FakeChain::default();
+    let (mut c, mem) =
+        storage_controller(&dir, chain, vec![stored(1, "My email", "abc@gmail.com")]);
+
+    c.handle_command(AppCommand::CopyStorageRecord(1));
+    settle(&mut c);
+
+    assert_eq!(clipboard_of(&mem), "abc@gmail.com");
+    cleanup(&dir);
+}
+
+#[test]
+fn locking_forgets_every_decrypted_record() {
+    let dir = temp_dir("storage-lock");
+    let chain = FakeChain::default();
+    let (mut c, _mem) =
+        storage_controller(&dir, chain, vec![stored(1, "My email", "abc@gmail.com")]);
+    assert_eq!(c.state().storage.records.len(), 1);
+
+    c.handle_command(AppCommand::LockNow);
+    settle(&mut c);
+
+    assert!(
+        c.state().storage.records.is_empty(),
+        "plaintext records do not survive a lock"
+    );
+    assert!(c.state().storage.title_input.is_empty());
+    assert!(c.state().storage.data_input.is_empty());
     cleanup(&dir);
 }

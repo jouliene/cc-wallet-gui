@@ -15,13 +15,16 @@ test-support = []
 [dependencies]
 cc-wallet-domain = { path = "../cc-wallet-domain" }
 cc-wallet-tycho = { path = "../cc-wallet-tycho" }
+cc-wallet-vault = { path = "../cc-wallet-vault" }
 blake3 = "1"
 sha2 = { version = "=0.10.9", default-features = false }
 tokio = { version = "1", features = ["rt", "time"] }
 zeroize.workspace = true
 
 [dev-dependencies]
+num-bigint = { version = "=0.4.6", default-features = false, features = ["std"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+tycho-types = { version = "=0.3.5", default-features = false, features = ["abi", "models"] }
 
 [lints]
 workspace = true

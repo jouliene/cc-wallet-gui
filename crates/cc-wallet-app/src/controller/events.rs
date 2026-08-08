@@ -670,6 +670,21 @@ impl AppController {
             AppEvent::SwapFinished { generation, result } => {
                 self.apply_swap_finished(generation, result)
             }
+            AppEvent::StorageLoaded {
+                generation,
+                seq,
+                snapshot,
+            } => self.apply_storage_loaded(generation, seq, snapshot),
+            AppEvent::StorageLoadFailed {
+                generation,
+                seq,
+                error,
+            } => self.apply_storage_load_failed(generation, seq, error),
+            AppEvent::StorageFinished {
+                generation,
+                op,
+                result,
+            } => self.apply_storage_finished(generation, op, result),
             AppEvent::Error(error) => self.state.set_error(error),
         }
     }

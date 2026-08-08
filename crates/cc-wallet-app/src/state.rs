@@ -2,16 +2,18 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
+use cc_wallet_chain::MAX_STORAGE_RECORDS;
 use cc_wallet_chain::{
     AccountInspection, AccountTrace, AccountTx, DestinationAccountStatus, FeeEstimate,
     LOCAL_SEND_FEE_CEILING_NANOS, LOCAL_SEND_FEE_HEADROOM_NANOS, NetworkStats, PoolSnapshot,
 };
 use cc_wallet_domain::{
     ActivityEvent, AddressBookEntry, AssetAmount, AssetId, CcAmount, DEFAULT_NETWORK_ID,
-    DEFAULT_WORKCHAIN, Digest32, Reservation, SeedPhrase, SendForm, SendToken, SwapForm, SwapQuote,
-    SwapRequest, ValidatorCycle, WalletProfile, WalletSnapshot, all_supported_assets,
-    base_units_u128, canonicalize_recipient, evaluate_affordability, format_slippage_percent,
-    known_cc_assets, parse_send_amount, parse_slippage_percent, recipient_is_valid,
+    DEFAULT_WORKCHAIN, Digest32, Reservation, SeedPhrase, SendForm, SendToken, StorageRecord,
+    SwapForm, SwapQuote, SwapRequest, ValidatorCycle, WalletProfile, WalletSnapshot,
+    all_supported_assets, base_units_u128, canonicalize_recipient, evaluate_affordability,
+    format_slippage_percent, known_cc_assets, parse_send_amount, parse_slippage_percent,
+    recipient_is_valid, validate_record,
 };
 
 pub const HARDCODED_SEND_FEE_NANOS: u128 = 7_400_000;
@@ -26,6 +28,7 @@ pub enum AppTab {
     Swap,
     Contacts,
     Explorer,
+    Storage,
     Settings,
 }
 
@@ -106,6 +109,7 @@ pub enum AuthMode {
 pub enum AuthPurpose {
     Send,
     Swap,
+    Storage,
     ChangePassword,
     RevealSeed,
     DeleteWallet,
@@ -190,6 +194,58 @@ impl Default for SwapUi {
             confirm: None,
             slippage_input: format_slippage_percent(SwapForm::default().slippage_bps),
             receipt: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct StorageUi {
+    pub address: String,
+    pub exists: bool,
+    pub balance: u128,
+    pub records: Vec<StorageRecord>,
+    pub unreadable: usize,
+    pub loading: bool,
+    pub loaded: bool,
+    pub error: String,
+    pub busy: bool,
+    pub pending_label: String,
+    pub title_input: String,
+    pub data_input: String,
+    pub form_error: String,
+    pub notice: String,
+}
+
+impl StorageUi {
+    pub fn taken_ids(&self) -> Vec<u32> {
+        self.records.iter().map(|record| record.id).collect()
+    }
+
+    pub fn add_enabled(&self) -> bool {
+        self.exists
+            && !self.busy
+            && !self.loading
+            && validate_record(&self.title_input, &self.data_input).is_ok()
+            && !self.is_full()
+    }
+
+    pub fn is_full(&self) -> bool {
+        self.records.len() >= usize::from(MAX_STORAGE_RECORDS)
+    }
+
+    pub fn form_message(&self) -> String {
+        if !self.form_error.is_empty() {
+            return self.form_error.clone();
+        }
+        if self.title_input.trim().is_empty() && self.data_input.is_empty() {
+            return String::new();
+        }
+        match validate_record(&self.title_input, &self.data_input) {
+            Ok(()) if self.is_full() => {
+                format!("The storage already holds {MAX_STORAGE_RECORDS} records")
+            }
+            Ok(()) => String::new(),
+            Err(error) => error.to_string(),
         }
     }
 }
@@ -283,6 +339,7 @@ pub struct AppState {
     pub trace_error: Option<String>,
     pub trace_hash: String,
     pub swap: SwapUi,
+    pub storage: StorageUi,
 }
 
 impl Default for AppState {
@@ -372,6 +429,7 @@ impl Default for AppState {
             trace_error: None,
             trace_hash: String::new(),
             swap: SwapUi::default(),
+            storage: StorageUi::default(),
         }
     }
 }

@@ -6,7 +6,8 @@ use cc_wallet_chain::{
     PreparedChainSend,
 };
 use cc_wallet_domain::{
-    ActivityEvent, Digest32, EndpointTransactionEvidence, ValidatorCycle, WalletSnapshot,
+    ActivityEvent, Digest32, EndpointTransactionEvidence, StorageOp, StorageSnapshot,
+    ValidatorCycle, WalletSnapshot,
 };
 
 #[derive(Debug)]
@@ -160,6 +161,21 @@ pub enum AppEvent {
     SwapFinished {
         generation: u64,
         result: Result<SwapDispatch, ChainError>,
+    },
+    StorageLoaded {
+        generation: u64,
+        seq: u64,
+        snapshot: StorageSnapshot,
+    },
+    StorageLoadFailed {
+        generation: u64,
+        seq: u64,
+        error: String,
+    },
+    StorageFinished {
+        generation: u64,
+        op: StorageOp,
+        result: Result<CandidateBroadcastOutcome, ChainError>,
     },
     Error(String),
 }

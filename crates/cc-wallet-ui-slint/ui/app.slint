@@ -19,10 +19,11 @@ import { WalletPage } from "pages/wallet_page.slint";
 import { SwapPage } from "pages/swap_page.slint";
 import { ContactsPage } from "pages/contacts_page.slint";
 import { ExplorerPage } from "pages/explorer_page.slint";
+import { StoragePage } from "pages/storage_page.slint";
 import { SettingsPage } from "pages/settings_page.slint";
-import { AssetRow, ContactRow, ActivityRow, TokenAmount, RiskOverlapRow, CurrencyRow, FieldRow, AccountView, NetworkStatsView, ExplorerTxRow, TracePartyCol, TraceEdgeRow } from "models.slint";
+import { AssetRow, ContactRow, ActivityRow, TokenAmount, RiskOverlapRow, CurrencyRow, FieldRow, AccountView, NetworkStatsView, ExplorerTxRow, TracePartyCol, TraceEdgeRow, StorageRow } from "models.slint";
 
-export { AssetRow, ContactRow, ActivityRow, TokenAmount, RiskOverlapRow, NetworkStatsView, Anim, AmountFormat, ClipboardBridge, UserActivity }
+export { AssetRow, ContactRow, ActivityRow, TokenAmount, RiskOverlapRow, StorageRow, NetworkStatsView, Anim, AmountFormat, ClipboardBridge, UserActivity }
 
 export component AppWindow inherits Window {
     title: "CC Wallet";
@@ -219,6 +220,36 @@ export component AppWindow inherits Window {
     callback trace_transaction(string);
     callback close_trace();
 
+    in property <string> storage_address: "";
+    in property <string> storage_short: "";
+    in property <bool> storage_exists: false;
+    in property <bool> storage_loading: false;
+    in property <bool> storage_busy: false;
+    in property <string> storage_pending_label: "";
+    in property <string> storage_error: "";
+    in property <string> storage_notice: "";
+    in property <TokenAmount> storage_balance;
+    in property <int> storage_count: 0;
+    in property <int> storage_limit: 512;
+    in property <int> storage_unreadable: 0;
+    in property <[StorageRow]> storage_records: [];
+    in property <bool> storage_add_enabled: false;
+    in property <string> storage_form_error: "";
+    in property <int> storage_title_limit: 128;
+    in property <int> storage_data_limit: 1024;
+    in property <int> storage_title_bytes: 0;
+    in property <int> storage_data_bytes: 0;
+    in-out property <string> storage_title_input: "";
+    in-out property <string> storage_data_input: "";
+    callback nav_storage();
+    callback refresh_storage();
+    callback create_storage();
+    callback add_storage_record();
+    callback delete_storage_record(int);
+    callback copy_storage_record(int);
+    callback storage_title_edited(string);
+    callback storage_data_edited(string);
+
     callback nav_wallet();
     callback nav_contacts();
     callback nav_explorer();
@@ -307,6 +338,7 @@ export component AppWindow inherits Window {
             nav_swap => { root.selected_tab = "Swap"; root.nav_swap(); }
             nav_contacts => { root.selected_tab = "Contacts"; root.nav_contacts(); }
             nav_explorer => { root.selected_tab = "Explorer"; root.nav_explorer(); }
+            nav_storage => { root.selected_tab = "Storage"; root.nav_storage(); }
             nav_settings => { root.selected_tab = "Settings"; root.nav_settings(); }
             retry_connection => { root.refresh_wallet(); }
         }
@@ -513,6 +545,40 @@ export component AppWindow inherits Window {
                 close_trace() => { root.close_trace(); }
                 address_input <=> root.expl_address;
                 lookup(a) => { root.inspect_account(a); }
+            }
+            if root.selected_tab == "Storage": StoragePage {
+                width: holder.width;
+                page_height: scroll.height;
+                has_wallet: root.has_wallet;
+                address: root.storage_address;
+                short: root.storage_short;
+                exists: root.storage_exists;
+                loading: root.storage_loading;
+                busy: root.storage_busy;
+                pending_label: root.storage_pending_label;
+                error: root.storage_error;
+                notice: root.storage_notice;
+                balance: root.storage_balance;
+                count: root.storage_count;
+                limit: root.storage_limit;
+                unreadable: root.storage_unreadable;
+                records: root.storage_records;
+                add_enabled: root.storage_add_enabled;
+                form_error: root.storage_form_error;
+                title_limit: root.storage_title_limit;
+                data_limit: root.storage_data_limit;
+                title_bytes: root.storage_title_bytes;
+                data_bytes: root.storage_data_bytes;
+                title_input <=> root.storage_title_input;
+                data_input <=> root.storage_data_input;
+                create_storage => { root.create_storage(); }
+                refresh_storage => { root.refresh_storage(); }
+                add_record => { root.add_storage_record(); }
+                delete_record(id) => { root.delete_storage_record(id); }
+                copy_record(id) => { root.copy_storage_record(id); }
+                title_edited(t) => { root.storage_title_edited(t); }
+                data_edited(t) => { root.storage_data_edited(t); }
+                open_in_explorer(address, hash) => { root.open_in_explorer(address, hash); }
             }
             if root.selected_tab == "Settings": SettingsPage {
                 width: holder.width;

@@ -426,6 +426,7 @@ impl AppController {
         self.state.allow_unbounced = false;
         self.pending_security_setting = None;
         self.clear_pending_swap();
+        self.clear_pending_storage();
     }
 
     pub(super) fn refuse_unpermitted_send(&mut self) -> bool {
@@ -513,6 +514,36 @@ impl AppController {
                 self.spawn_unlock(
                     pw,
                     KeyAction::ConfirmSwap {
+                        remember,
+                        generation: pending.generation,
+                    },
+                );
+            }
+            (AuthMode::Confirm, AuthPurpose::Storage) => {
+                if !self.state.within_autosign() {
+                    self.state.auth.mode = AuthMode::Enter;
+                    self.state.auth.error =
+                        "Auto-sign expired — enter your password to confirm".to_owned();
+                    return;
+                }
+                if self.pending_storage.is_none() {
+                    self.state.auth.error = "The storage authorization no longer exists".to_owned();
+                    return;
+                }
+                self.state.auth.open = false;
+                if remember {
+                    self.state.extend_autosign();
+                }
+                self.dispatch_authorized_storage();
+            }
+            (AuthMode::Enter, AuthPurpose::Storage) => {
+                let Some(pending) = self.pending_storage.as_ref() else {
+                    self.state.auth.error = "The storage authorization no longer exists".to_owned();
+                    return;
+                };
+                self.spawn_unlock(
+                    pw,
+                    KeyAction::ConfirmStorage {
                         remember,
                         generation: pending.generation,
                     },
@@ -851,6 +882,7 @@ impl AppController {
         self.state.fee_estimate = None;
         self.state.fee_estimating = false;
         self.reset_swap_for_new_identity();
+        self.reset_storage_for_new_identity();
         self.save_profile();
         self.save_history();
         self.refresh_wallet();

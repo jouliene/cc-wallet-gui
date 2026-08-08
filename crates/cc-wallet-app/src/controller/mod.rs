@@ -6,6 +6,7 @@ mod live;
 mod risk;
 mod save;
 mod seed_auth;
+mod storage;
 mod swap;
 #[cfg(test)]
 mod tests;
@@ -102,6 +103,10 @@ pub(crate) enum KeyAction {
         remember: bool,
         generation: u64,
     },
+    ConfirmStorage {
+        remember: bool,
+        generation: u64,
+    },
     VerifyForChangePassword,
     ChangePassword,
     RevealSeed,
@@ -116,6 +121,7 @@ impl KeyAction {
             self,
             Self::ConfirmSend { .. }
                 | Self::ConfirmSwap { .. }
+                | Self::ConfirmStorage { .. }
                 | Self::VerifyForChangePassword
                 | Self::RevealSeed
                 | Self::DeleteWallet
@@ -262,6 +268,9 @@ pub struct AppController {
     pending_swap: Option<swap::PendingSwap>,
     swap_in_flight: Option<swap::SwapIntent>,
     swap_pool_seq: u64,
+    pending_storage: Option<storage::PendingStorage>,
+    storage_seq: u64,
+    storage_watch: Option<storage::StorageWatch>,
     pending_security_setting: Option<SecuritySetting>,
     pending_picker_delete: Option<PickerDeleteTarget>,
     pending_risk_reconciliation: bool,
@@ -421,6 +430,9 @@ impl AppController {
             pending_swap: None,
             swap_in_flight: None,
             swap_pool_seq: 0,
+            pending_storage: None,
+            storage_seq: 0,
+            storage_watch: None,
             pending_security_setting: None,
             pending_picker_delete: None,
             pending_risk_reconciliation: false,
@@ -636,6 +648,9 @@ impl AppController {
                 if tab == AppTab::Swap {
                     self.on_swap_tab_opened();
                 }
+                if tab == AppTab::Storage {
+                    self.on_storage_tab_opened();
+                }
             }
             AppCommand::GenerateSeed => self.generate_seed(),
             AppCommand::SaveSeed(seed) => self.save_seed(seed),
@@ -705,6 +720,13 @@ impl AppController {
             AppCommand::DismissSwapReceipt => self.state.swap.receipt = None,
             AppCommand::FlipSwap => self.flip_swap(),
             AppCommand::RequestSwap => self.request_swap(),
+            AppCommand::RefreshStorage => self.refresh_storage(),
+            AppCommand::CreateStorage => self.create_storage(),
+            AppCommand::SetStorageTitle(title) => self.set_storage_title(title),
+            AppCommand::SetStorageData(data) => self.set_storage_data(data),
+            AppCommand::AddStorageRecord => self.add_storage_record(),
+            AppCommand::DeleteStorageRecord(id) => self.delete_storage_record(id),
+            AppCommand::CopyStorageRecord(id) => self.copy_storage_record(id),
             AppCommand::RequestRiskOverride => self.request_risk_override(),
             AppCommand::SetRiskOverlap { index, selected } => {
                 self.set_risk_overlap(index, selected)
@@ -1024,6 +1046,7 @@ impl AppController {
         if suspended {
             self.on_resume_from_suspend();
         }
+        self.poll_storage_settlement();
         if let Some(deadline) = self.clipboard_deadline
             && deadline.expired()
         {
@@ -1668,6 +1691,25 @@ impl AppController {
                     self.state.extend_autosign();
                 }
                 self.send_authorized_transaction(authorization);
+            }
+            KeyAction::ConfirmStorage {
+                remember,
+                generation,
+            } => {
+                let matches = self
+                    .pending_storage
+                    .as_ref()
+                    .is_some_and(|pending| pending.generation == generation);
+                if !matches {
+                    self.state.auth.error = "The storage authorization no longer exists".to_owned();
+                    return;
+                }
+                self.state.auth.open = false;
+                self.state.auth.error = String::new();
+                if remember {
+                    self.state.extend_autosign();
+                }
+                self.dispatch_authorized_storage();
             }
             KeyAction::ConfirmSwap {
                 remember,

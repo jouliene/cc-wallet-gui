@@ -3,9 +3,10 @@ use std::rc::Rc;
 use cc_wallet_app::{
     AccountInspection, AccountTrace, ActivityEvent, AppPhase, AppState, AppTab, AssetAmount,
     AssetId, AuthMode, AuthPurpose, CcAmount, CoinSupply, DecodedContract, DecodedValue,
-    DestinationAccountStatus, LiveStatus, MAX_COMMENT_BYTES, MAX_SLIPPAGE_BPS, NetworkStats,
-    RecipientCheck, all_supported_assets, asset_meta, canonicalize_recipient, fmt_duration,
-    format_fixed9_amount, format_native_fixed9, known_cc_assets,
+    DestinationAccountStatus, LiveStatus, MAX_COMMENT_BYTES, MAX_RECORD_DATA_BYTES,
+    MAX_RECORD_TITLE_BYTES, MAX_SLIPPAGE_BPS, MAX_STORAGE_RECORDS, NetworkStats, RecipientCheck,
+    all_supported_assets, asset_meta, canonicalize_recipient, fmt_duration, format_fixed9_amount,
+    format_native_fixed9, known_cc_assets,
 };
 use slint::{ModelRc, SharedString, VecModel};
 
@@ -16,7 +17,8 @@ use super::render::{
 };
 use super::{
     AccountView, ActivityFilters, ActivityRow, AppWindow, AssetRow, ContactRow, CurrencyRow,
-    FieldRow, NetworkStatsView, RiskOverlapRow, TokenAmount, TraceEdgeRow, TracePartyCol, UiCache,
+    FieldRow, NetworkStatsView, RiskOverlapRow, StorageRow, TokenAmount, TraceEdgeRow,
+    TracePartyCol, UiCache,
 };
 
 fn empty_import_words() -> ModelRc<SharedString> {
@@ -593,6 +595,7 @@ pub(super) fn sync_ui(ui: &AppWindow, state: &AppState, form_locked: bool, cache
 
     render_explorer_account(ui, state, cache, now);
     sync_swap(ui, state, cache);
+    sync_storage(ui, state);
 
     if state.risk_review_open != cache.risk_was_open {
         ui.set_risk_typed_confirmation(SharedString::new());
@@ -754,6 +757,7 @@ fn sync_auth(ui: &AppWindow, state: &AppState, cache: &mut UiCache) {
     let purpose = match state.auth.purpose {
         AuthPurpose::Send => "send",
         AuthPurpose::Swap => "swap",
+        AuthPurpose::Storage => "storage",
         AuthPurpose::ChangePassword => "changepassword",
         AuthPurpose::RevealSeed => "revealseed",
         AuthPurpose::DeleteWallet => "deletewallet",
@@ -801,6 +805,15 @@ fn sync_auth(ui: &AppWindow, state: &AppState, cache: &mut UiCache) {
         (AuthMode::Confirm, AuthPurpose::Swap) => (
             "Confirm swap".into(),
             "Review the swap, then confirm to submit.".into(),
+        ),
+        (AuthMode::Enter, AuthPurpose::Storage) => (
+            format!("Sign — {}", state.storage.pending_label),
+            "Your records are encrypted with this wallet's key. Enter your password to sign."
+                .into(),
+        ),
+        (AuthMode::Confirm, AuthPurpose::Storage) => (
+            format!("Confirm — {}", state.storage.pending_label),
+            "Your records are encrypted with this wallet's key. Confirm to submit.".into(),
         ),
         (AuthMode::Enter, AuthPurpose::RevealSeed) => (
             "Enter password".into(),
@@ -917,8 +930,43 @@ fn tab_label(tab: AppTab) -> &'static str {
         AppTab::Swap => "Swap",
         AppTab::Contacts => "Contacts",
         AppTab::Explorer => "Explorer",
+        AppTab::Storage => "Storage",
         AppTab::Settings => "Settings",
     }
+}
+
+fn sync_storage(ui: &AppWindow, state: &AppState) {
+    let storage = &state.storage;
+    ui.set_storage_address(storage.address.clone().into());
+    ui.set_storage_short(short_addr(&storage.address).into());
+    ui.set_storage_exists(storage.exists);
+    ui.set_storage_loading(storage.loading);
+    ui.set_storage_busy(storage.busy);
+    ui.set_storage_pending_label(storage.pending_label.clone().into());
+    ui.set_storage_error(storage.error.clone().into());
+    ui.set_storage_notice(storage.notice.clone().into());
+    ui.set_storage_balance(token_units(AssetId::Native, storage.balance));
+    ui.set_storage_count(storage.records.len() as i32);
+    ui.set_storage_limit(i32::from(MAX_STORAGE_RECORDS));
+    ui.set_storage_unreadable(storage.unreadable as i32);
+    ui.set_storage_add_enabled(storage.add_enabled());
+    ui.set_storage_form_error(storage.form_message().into());
+    ui.set_storage_title_limit(MAX_RECORD_TITLE_BYTES as i32);
+    ui.set_storage_data_limit(MAX_RECORD_DATA_BYTES as i32);
+    ui.set_storage_title_bytes(storage.title_input.trim().len() as i32);
+    ui.set_storage_data_bytes(storage.data_input.len() as i32);
+
+    let rows: Vec<StorageRow> = storage
+        .records
+        .iter()
+        .map(|record| StorageRow {
+            id: record.id as i32,
+            number: format!("#{}", record.id).into(),
+            title: record.title.clone().into(),
+            data: record.data.clone().into(),
+        })
+        .collect();
+    ui.set_storage_records(ModelRc::from(Rc::new(VecModel::from(rows))));
 }
 
 fn sync_swap(ui: &AppWindow, state: &AppState, cache: &mut UiCache) {

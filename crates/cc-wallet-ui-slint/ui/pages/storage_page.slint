@@ -1,0 +1,350 @@
+import { Theme } from "../theme.slint";
+import { Palette, Fonts, Radii, Space, Motion } from "../design_tokens.slint";
+import { Icon, Card, CardHeader, MicroLabel, PrimaryButton, GhostButton, IconButton, CopyButton, Field, EmptyState, InlineError, Amount, UserActivity } from "../widgets.slint";
+import { StorageRow, TokenAmount } from "../models.slint";
+
+component RecordRow inherits Rectangle {
+    in property <StorageRow> record;
+    in property <bool> busy;
+    in property <length> number_w;
+    in property <length> title_w;
+    callback delete_record(int);
+    callback copy_record(int);
+
+    height: 54px;
+    background: ta.has-hover ? Palette.hover_row : transparent;
+    animate background { duration: Motion.base; easing: Motion.curve; }
+
+    ta := TouchArea { }
+
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Palette.border_subtle;
+    }
+
+    HorizontalLayout {
+        padding-left: Space.s_16;
+        padding-right: Space.s_8;
+        spacing: Space.s_12;
+
+        VerticalLayout {
+            alignment: center;
+            width: root.number_w;
+            Text {
+                text: root.record.number;
+                color: Palette.text_quiet;
+                font-family: Fonts.mono;
+                font-size: Fonts.small;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            width: root.title_w;
+            Text {
+                text: root.record.title;
+                color: Palette.text_primary;
+                font-family: Fonts.ui;
+                font-weight: Fonts.semibold;
+                font-size: Fonts.body;
+                overflow: elide;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: root.record.data;
+                color: Palette.text_secondary;
+                font-family: Fonts.mono;
+                font-size: Fonts.small;
+                overflow: elide;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                spacing: Space.s_4;
+                CopyButton {
+                    clicked => { root.copy_record(root.record.id); }
+                }
+                IconButton {
+                    icon: @image-url("../../assets/icons/trash.svg");
+                    tint: Palette.negative;
+                    enabled: !root.busy;
+                    clicked => { root.delete_record(root.record.id); }
+                }
+            }
+        }
+    }
+}
+
+export component StoragePage inherits VerticalLayout {
+    in property <length> page_height: 400px;
+    in property <bool> has_wallet;
+    in property <string> address;
+    in property <string> short;
+    in property <bool> exists;
+    in property <bool> loading;
+    in property <bool> busy;
+    in property <string> pending_label;
+    in property <string> error;
+    in property <string> notice;
+    in property <TokenAmount> balance;
+    in property <int> count;
+    in property <int> limit;
+    in property <int> unreadable;
+    in property <[StorageRow]> records;
+    in property <bool> add_enabled;
+    in property <string> form_error;
+    in property <int> title_limit;
+    in property <int> data_limit;
+    in property <int> title_bytes;
+    in property <int> data_bytes;
+    in-out property <string> title_input;
+    in-out property <string> data_input;
+
+    callback create_storage();
+    callback refresh_storage();
+    callback add_record();
+    callback delete_record(int);
+    callback copy_record(int);
+    callback title_edited(string);
+    callback data_edited(string);
+    callback open_in_explorer(string, string);
+
+    height: root.page_height;
+    padding-top: Space.s_4;
+    spacing: Space.s_16;
+
+    Card {
+        vertical-stretch: 1;
+        VerticalLayout {
+            CardHeader {
+                icon: @image-url("../../assets/icons/lock.svg");
+                title: "Storage";
+                subtitle: root.exists
+                    ? (root.count + " of " + root.limit + " records, encrypted with this wallet's key")
+                    : "A private, encrypted store on chain that only this wallet can read";
+                HorizontalLayout {
+                    spacing: Space.s_8;
+                    alignment: end;
+                    VerticalLayout {
+                        alignment: center;
+                        if root.exists: HorizontalLayout {
+                            spacing: Space.s_6;
+                            VerticalLayout {
+                                alignment: center;
+                                Text {
+                                    text: root.short;
+                                    color: Palette.text_quiet;
+                                    font-family: Fonts.mono;
+                                    font-size: Fonts.small;
+                                }
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                Amount { amount: root.balance; font_size: Fonts.small; }
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                IconButton {
+                                    icon: @image-url("../../assets/icons/external-link.svg");
+                                    clicked => { root.open_in_explorer(root.address, ""); }
+                                }
+                            }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        IconButton {
+                            icon: @image-url("../../assets/icons/refresh.svg");
+                            enabled: !root.loading && root.has_wallet;
+                            clicked => { root.refresh_storage(); }
+                        }
+                    }
+                }
+            }
+
+            if root.error != "": VerticalLayout {
+                padding: Space.s_12;
+                InlineError { text: root.error; }
+            }
+
+            if root.notice != "" && root.error == "": VerticalLayout {
+                padding-left: Space.s_16;
+                padding-right: Space.s_16;
+                padding-top: Space.s_8;
+                Text {
+                    text: root.notice;
+                    color: Palette.text_quiet;
+                    font-family: Fonts.ui;
+                    font-size: Fonts.small;
+                }
+            }
+
+            if root.unreadable > 0: VerticalLayout {
+                padding-left: Space.s_16;
+                padding-right: Space.s_16;
+                padding-top: Space.s_8;
+                Text {
+                    text: root.unreadable + " record(s) on chain could not be decrypted by this wallet.";
+                    color: Palette.negative;
+                    font-family: Fonts.ui;
+                    font-size: Fonts.small;
+                    wrap: word-wrap;
+                }
+            }
+
+            if !root.exists: VerticalLayout {
+                vertical-stretch: 1;
+                padding: Space.s_24;
+                EmptyState {
+                    icon: @image-url("../../assets/icons/lock.svg");
+                    title: root.loading ? "Looking for your storage…" : "No storage yet";
+                    subtitle: "Create one to keep notes, logins and numbers on chain. Every record is encrypted on this machine before it is sent — the chain only ever sees ciphertext.";
+                    HorizontalLayout {
+                        alignment: center;
+                        padding-top: Space.s_8;
+                        PrimaryButton {
+                            label: root.busy ? "Creating…" : "Create storage";
+                            enabled: root.has_wallet && !root.busy && !root.loading;
+                            clicked => { UserActivity.ping(); root.create_storage(); }
+                        }
+                    }
+                }
+            }
+
+            if root.exists: VerticalLayout {
+                vertical-stretch: 1;
+
+                Rectangle {
+                    height: 32px;
+                    HorizontalLayout {
+                        padding-left: Space.s_16;
+                        padding-right: Space.s_8;
+                        spacing: Space.s_12;
+                        VerticalLayout { alignment: center; width: 52px; MicroLabel { text: "#"; } }
+                        VerticalLayout { alignment: center; width: 220px; MicroLabel { text: "NAME"; } }
+                        VerticalLayout { alignment: center; horizontal-stretch: 1; MicroLabel { text: "RECORD"; } }
+                        VerticalLayout { alignment: center; width: 72px; }
+                    }
+                    Rectangle {
+                        y: parent.height - 1px;
+                        height: 1px;
+                        background: Palette.border_subtle;
+                    }
+                }
+
+                if root.count == 0: VerticalLayout {
+                    vertical-stretch: 1;
+                    padding: Space.s_24;
+                    EmptyState {
+                        icon: @image-url("../../assets/icons/seed.svg");
+                        title: "No records yet";
+                        subtitle: "Add the first one below.";
+                    }
+                }
+
+                if root.count > 0: Flickable {
+                    vertical-stretch: 1;
+                    viewport-height: root.count * 54px;
+                    VerticalLayout {
+                        alignment: start;
+                        for row in root.records: RecordRow {
+                            record: row;
+                            busy: root.busy;
+                            number_w: 52px;
+                            title_w: 220px;
+                            delete_record(id) => { UserActivity.ping(); root.delete_record(id); }
+                            copy_record(id) => { root.copy_record(id); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if root.exists: Card {
+        vertical-stretch: 0;
+        VerticalLayout {
+            alignment: start;
+            CardHeader {
+                icon: @image-url("../../assets/icons/plus.svg");
+                title: "Add a record";
+                subtitle: "The name and the record are encrypted together before they leave this machine";
+                hairline: true;
+            }
+            VerticalLayout {
+                padding: Space.s_16;
+                spacing: Space.s_10;
+
+                HorizontalLayout {
+                    spacing: Space.s_12;
+                    height: 62px;
+                    VerticalLayout {
+                        width: 280px;
+                        alignment: start;
+                        spacing: Space.s_4;
+                        HorizontalLayout {
+                            MicroLabel { text: "NAME"; }
+                            Rectangle { }
+                            Text {
+                                text: root.title_bytes + "/" + root.title_limit;
+                                color: root.title_bytes > root.title_limit ? Palette.negative : Palette.text_quiet;
+                                font-family: Fonts.mono;
+                                font-size: Fonts.micro;
+                            }
+                        }
+                        title_field := Field {
+                            text <=> root.title_input;
+                            placeholder: "Inna's phone";
+                            enabled: !root.busy;
+                            edited(t) => { root.title_edited(t); }
+                            accepted => { if (root.add_enabled) { root.add_record(); } }
+                        }
+                    }
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: start;
+                        spacing: Space.s_4;
+                        HorizontalLayout {
+                            MicroLabel { text: "RECORD"; }
+                            Rectangle { }
+                            Text {
+                                text: root.data_bytes + "/" + root.data_limit;
+                                color: root.data_bytes > root.data_limit ? Palette.negative : Palette.text_quiet;
+                                font-family: Fonts.mono;
+                                font-size: Fonts.micro;
+                            }
+                        }
+                        Field {
+                            text <=> root.data_input;
+                            placeholder: "86594423664";
+                            enabled: !root.busy;
+                            font_family: Fonts.mono;
+                            edited(t) => { root.data_edited(t); }
+                            accepted => { if (root.add_enabled) { root.add_record(); } }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: end;
+                        PrimaryButton {
+                            label: root.busy ? root.pending_label : "Add record";
+                            enabled: root.add_enabled;
+                            clicked => { UserActivity.ping(); root.add_record(); }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    height: 18px;
+                    if root.form_error != "": InlineError { text: root.form_error; }
+                }
+            }
+        }
+    }
+}

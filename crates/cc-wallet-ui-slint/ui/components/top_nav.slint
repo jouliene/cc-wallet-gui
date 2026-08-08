@@ -51,6 +51,7 @@ export component TopNav inherits Rectangle {
     callback nav_swap();
     callback nav_contacts();
     callback nav_explorer();
+    callback nav_storage();
     callback nav_settings();
     callback retry_connection();
     height: Theme.topnav_h;
@@ -108,6 +109,11 @@ export component TopNav inherits Rectangle {
                         label: "Explorer";
                         active: root.selected_tab == "Explorer";
                         clicked => { root.nav_explorer(); }
+                    }
+                    Tab {
+                        label: "Storage";
+                        active: root.selected_tab == "Storage";
+                        clicked => { root.nav_storage(); }
                     }
                     Tab {
                         label: "Settings";

@@ -370,6 +370,7 @@ pub struct EverTransfer {
     bounce: bool,
     flags: u8,
     payload: Option<Cell>,
+    dest_state_init: Option<StateInit>,
 }
 
 impl EverTransfer {
@@ -381,6 +382,7 @@ impl EverTransfer {
             bounce: false,
             flags: DEFAULT_SEND_FLAGS,
             payload: None,
+            dest_state_init: None,
         })
     }
 
@@ -432,6 +434,11 @@ impl EverTransfer {
         self
     }
 
+    pub fn dest_state_init(mut self, state_init: StateInit) -> Self {
+        self.dest_state_init = Some(state_init);
+        self
+    }
+
     pub fn build_internal_message(&self) -> Result<Cell> {
         let mut entries = Vec::new();
         for (&cc_id, amount) in &self.extra_currencies {
@@ -455,7 +462,7 @@ impl EverTransfer {
                 value,
                 ..Default::default()
             }),
-            init: None,
+            init: self.dest_state_init.clone(),
             body: self
                 .payload
                 .clone()
@@ -1001,6 +1008,38 @@ mod tests {
             }
             _ => panic!("expected an internal message"),
         }
+        Ok(())
+    }
+
+    #[test]
+    fn a_transfer_can_carry_the_state_init_that_deploys_its_destination() -> Result<()> {
+        let owner = StdAddr::new(0, HashBytes([0x44; 32]));
+        let (address, init) = crate::storage::storage_address(&owner)?;
+
+        let plain = EverTransfer::new(&address)?
+            .native(1_000_000_000)?
+            .build_internal_message()?
+            .parse::<OwnedRelaxedMessage>()?;
+        assert!(
+            plain.init.is_none(),
+            "an ordinary transfer never carries a state init"
+        );
+
+        let deploy = EverTransfer::new(&address)?
+            .native(1_000_000_000)?
+            .dest_state_init(init.clone())
+            .build_internal_message()?
+            .parse::<OwnedRelaxedMessage>()?;
+        let carried = deploy.init.expect("the deploy carries a state init");
+        assert_eq!(
+            CellBuilder::build_from(&carried)?.repr_hash(),
+            CellBuilder::build_from(&init)?.repr_hash()
+        );
+        assert_eq!(
+            address.address.0,
+            CellBuilder::build_from(&init)?.repr_hash().0,
+            "the destination is the address that state init hashes to"
+        );
         Ok(())
     }
 

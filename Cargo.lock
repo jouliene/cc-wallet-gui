@@ -776,8 +776,11 @@ dependencies = [
  "blake3",
  "cc-wallet-domain",
  "cc-wallet-tycho",
+ "cc-wallet-vault",
+ "num-bigint",
  "sha2",
  "tokio",
+ "tycho-types",
  "zeroize",
 ]
 
@@ -785,6 +788,7 @@ dependencies = [
 name = "cc-wallet-domain"
 version = "0.2.0"
 dependencies = [
+ "cc-wallet-vault",
  "num-bigint",
  "serde",
  "serde_json",
@@ -813,6 +817,7 @@ dependencies = [
  "base64",
  "bip32",
  "bip39",
+ "blake3",
  "ed25519-dalek",
  "hex",
  "rand_core 0.6.4",

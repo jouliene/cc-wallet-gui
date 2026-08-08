@@ -100,6 +100,108 @@ impl SwapDrive {
     }
 }
 
+#[cfg(debug_assertions)]
+#[derive(Default)]
+struct StorageDrive {
+    create: bool,
+    add: Vec<(String, String)>,
+    delete: Vec<u32>,
+    settled_at: Option<std::time::Instant>,
+}
+
+#[cfg(debug_assertions)]
+impl StorageDrive {
+    fn from_env() -> Self {
+        let var = |name: &str| {
+            std::env::var(name)
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        };
+        Self {
+            create: var("CC_WALLET_TEST_STORAGE_CREATE").is_some(),
+            add: var("CC_WALLET_TEST_STORAGE_ADD")
+                .map(|raw| {
+                    raw.split(';')
+                        .filter_map(|entry| entry.split_once('='))
+                        .map(|(title, data)| (title.to_owned(), data.to_owned()))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            delete: var("CC_WALLET_TEST_STORAGE_DELETE")
+                .map(|raw| {
+                    raw.split(',')
+                        .filter_map(|id| id.trim().parse().ok())
+                        .collect()
+                })
+                .unwrap_or_default(),
+            settled_at: None,
+        }
+    }
+
+    fn idle(&self) -> bool {
+        !self.create && self.add.is_empty() && self.delete.is_empty()
+    }
+
+    fn authorize(controller: &mut AppController) {
+        if let Ok(pw) = std::env::var("CC_WALLET_TEST_PASSWORD") {
+            controller.handle_command(AppCommand::AuthSubmit {
+                pw: Password::new(pw),
+                pw2: Password::new(String::new()),
+                remember: true,
+            });
+        }
+    }
+
+    fn apply(&mut self, controller: &mut AppController) {
+        let state = controller.state();
+        if state.phase != cc_wallet_app::AppPhase::Unlocked
+            || !state.storage.loaded
+            || state.storage.busy
+            || state.auth.open
+        {
+            return;
+        }
+
+        let settled = match self.settled_at {
+            Some(at) => at.elapsed() >= std::time::Duration::from_secs(2),
+            None => true,
+        };
+        if !settled {
+            return;
+        }
+
+        if self.create {
+            if state.storage.exists {
+                self.create = false;
+            } else {
+                controller.handle_command(AppCommand::CreateStorage);
+                Self::authorize(controller);
+                self.create = false;
+                self.settled_at = Some(std::time::Instant::now());
+            }
+            return;
+        }
+        if !controller.state().storage.exists {
+            return;
+        }
+        if !self.add.is_empty() {
+            let (title, data) = self.add.remove(0);
+            controller.handle_command(AppCommand::SetStorageTitle(title));
+            controller.handle_command(AppCommand::SetStorageData(data));
+            controller.handle_command(AppCommand::AddStorageRecord);
+            Self::authorize(controller);
+            self.settled_at = Some(std::time::Instant::now());
+            return;
+        }
+        if !self.delete.is_empty() {
+            let id = self.delete.remove(0);
+            controller.handle_command(AppCommand::DeleteStorageRecord(id));
+            Self::authorize(controller);
+            self.settled_at = Some(std::time::Instant::now());
+        }
+    }
+}
+
 type SwapPoolKey = (Vec<(AssetId, u128)>, AssetId, AssetId);
 
 #[derive(Default)]
@@ -300,6 +402,8 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
     #[cfg(debug_assertions)]
     let pending_swap_drive = std::rc::Rc::new(std::cell::RefCell::new(SwapDrive::from_env()));
     #[cfg(debug_assertions)]
+    let pending_storage_drive = std::rc::Rc::new(std::cell::RefCell::new(StorageDrive::from_env()));
+    #[cfg(debug_assertions)]
     if let Some(token) = std::env::var("CC_WALLET_TEST_TOKEN_FILTER")
         .ok()
         .and_then(|v| v.parse::<i32>().ok())
@@ -322,6 +426,8 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
         let pending_trace = pending_trace.clone();
         #[cfg(debug_assertions)]
         let pending_swap_drive = pending_swap_drive.clone();
+        #[cfg(debug_assertions)]
+        let pending_storage_drive = pending_storage_drive.clone();
         timer.start(TimerMode::Repeated, Duration::from_millis(150), move || {
             let Some(ui) = weak.upgrade() else { return };
             {
@@ -349,6 +455,7 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
                             "contacts" => cc_wallet_app::AppTab::Contacts,
                             "explorer" => cc_wallet_app::AppTab::Explorer,
                             "swap" => cc_wallet_app::AppTab::Swap,
+                            "storage" => cc_wallet_app::AppTab::Storage,
                             _ => cc_wallet_app::AppTab::Wallet,
                         };
                         if c.state().selected_tab != want {
@@ -370,6 +477,12 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
                     }
                     {
                         let mut drive = pending_swap_drive.borrow_mut();
+                        if !drive.idle() {
+                            drive.apply(&mut c);
+                        }
+                    }
+                    {
+                        let mut drive = pending_storage_drive.borrow_mut();
                         if !drive.idle() {
                             drive.apply(&mut c);
                         }

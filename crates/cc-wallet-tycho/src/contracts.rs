@@ -6,6 +6,7 @@ use tycho_types::prelude::Cell;
 use crate::ccdex::ccdex_pool_spec;
 use crate::elector::elector_spec;
 use crate::everwallet::ever_wallet_spec;
+use crate::storage::storage_spec;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DecodedValue {
@@ -103,7 +104,14 @@ impl<'a> ContractAt<'a> {
 
 fn specs() -> &'static [ContractSpec] {
     static SPECS: OnceLock<Vec<ContractSpec>> = OnceLock::new();
-    SPECS.get_or_init(|| vec![ever_wallet_spec(), elector_spec(), ccdex_pool_spec()])
+    SPECS.get_or_init(|| {
+        vec![
+            ever_wallet_spec(),
+            elector_spec(),
+            ccdex_pool_spec(),
+            storage_spec(),
+        ]
+    })
 }
 
 fn index() -> &'static BTreeMap<String, usize> {

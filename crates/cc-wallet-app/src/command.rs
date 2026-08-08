@@ -161,6 +161,13 @@ pub enum AppCommand {
     FlipSwap,
     RequestSwap,
     DismissSwapReceipt,
+    RefreshStorage,
+    CreateStorage,
+    SetStorageTitle(String),
+    SetStorageData(String),
+    AddStorageRecord,
+    DeleteStorageRecord(u32),
+    CopyStorageRecord(u32),
     RequestRiskOverride,
     SetRiskOverlap {
         index: usize,
@@ -224,6 +231,11 @@ impl AppCommand {
             | Self::EditSwapSlippage(_)
             | Self::FlipSwap
             | Self::DismissSwapReceipt
+            | Self::CreateStorage
+            | Self::SetStorageTitle(_)
+            | Self::SetStorageData(_)
+            | Self::AddStorageRecord
+            | Self::DeleteStorageRecord(_)
             | Self::AddEndpoint(_)
             | Self::SelectEndpoint(_)
             | Self::RemoveEndpoint(_) => true,
@@ -261,6 +273,8 @@ impl AppCommand {
             | Self::OpenInExplorer { .. }
             | Self::TraceTransaction(_)
             | Self::CloseTrace
+            | Self::RefreshStorage
+            | Self::CopyStorageRecord(_)
             | Self::ClearError => false,
         }
     }
@@ -330,6 +344,13 @@ impl AppCommand {
             | Self::OpenInExplorer { .. }
             | Self::TraceTransaction(_)
             | Self::CloseTrace
+            | Self::RefreshStorage
+            | Self::CreateStorage
+            | Self::SetStorageTitle(_)
+            | Self::SetStorageData(_)
+            | Self::AddStorageRecord
+            | Self::DeleteStorageRecord(_)
+            | Self::CopyStorageRecord(_)
             | Self::ClearError => false,
         }
     }

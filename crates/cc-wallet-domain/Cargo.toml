@@ -11,6 +11,9 @@ path = "src/lib.rs"
 [features]
 test-fixtures = []
 
+[dev-dependencies]
+cc-wallet-vault = { path = "../cc-wallet-vault" }
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
