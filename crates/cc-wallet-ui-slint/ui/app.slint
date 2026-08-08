@@ -221,7 +221,6 @@ export component AppWindow inherits Window {
     callback close_trace();
 
     in property <string> storage_address: "";
-    in property <string> storage_short: "";
     in property <bool> storage_exists: false;
     in property <bool> storage_loading: false;
     in property <bool> storage_busy: false;
@@ -245,6 +244,7 @@ export component AppWindow inherits Window {
     callback refresh_storage();
     callback create_storage();
     callback add_storage_record();
+    callback clear_storage_form();
     callback delete_storage_record(int);
     callback copy_storage_record(int);
     callback storage_title_edited(string);
@@ -551,7 +551,6 @@ export component AppWindow inherits Window {
                 page_height: scroll.height;
                 has_wallet: root.has_wallet;
                 address: root.storage_address;
-                short: root.storage_short;
                 exists: root.storage_exists;
                 loading: root.storage_loading;
                 busy: root.storage_busy;
@@ -574,6 +573,7 @@ export component AppWindow inherits Window {
                 create_storage => { root.create_storage(); }
                 refresh_storage => { root.refresh_storage(); }
                 add_record => { root.add_storage_record(); }
+                clear_form => { root.clear_storage_form(); }
                 delete_record(id) => { root.delete_storage_record(id); }
                 copy_record(id) => { root.copy_storage_record(id); }
                 title_edited(t) => { root.storage_title_edited(t); }

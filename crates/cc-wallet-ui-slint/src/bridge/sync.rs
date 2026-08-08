@@ -938,7 +938,6 @@ fn tab_label(tab: AppTab) -> &'static str {
 fn sync_storage(ui: &AppWindow, state: &AppState) {
     let storage = &state.storage;
     ui.set_storage_address(storage.address.clone().into());
-    ui.set_storage_short(short_addr(&storage.address).into());
     ui.set_storage_exists(storage.exists);
     ui.set_storage_loading(storage.loading);
     ui.set_storage_busy(storage.busy);
@@ -955,6 +954,13 @@ fn sync_storage(ui: &AppWindow, state: &AppState) {
     ui.set_storage_data_limit(MAX_RECORD_DATA_BYTES as i32);
     ui.set_storage_title_bytes(storage.title_input.trim().len() as i32);
     ui.set_storage_data_bytes(storage.data_input.len() as i32);
+
+    if ui.get_storage_title_input().as_str() != storage.title_input {
+        ui.set_storage_title_input(storage.title_input.clone().into());
+    }
+    if ui.get_storage_data_input().as_str() != storage.data_input {
+        ui.set_storage_data_input(storage.data_input.clone().into());
+    }
 
     let rows: Vec<StorageRow> = storage
         .records

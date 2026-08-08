@@ -41,7 +41,8 @@ pub use history::{
 pub use network::{CoinSupply, ElectionStake, elector_election_stake, key_block_supply};
 pub use storage::{
     MAX_BLOB_BYTES as MAX_STORAGE_BLOB_BYTES, MAX_RECORDS as MAX_STORAGE_RECORDS,
-    MIN_STORAGE_RESERVE, STORAGE_CONTRACT, StorageData, delete_body as storage_delete_body,
+    MIN_OP_ATTACH as STORAGE_MIN_OP_ATTACH, STORAGE_CONTRACT, STORAGE_WORKCHAIN, StorageData,
+    TARGET_BALANCE as STORAGE_TARGET_BALANCE, delete_body as storage_delete_body,
     put_body as storage_put_body, storage_address, storage_code_hash, storage_error_text,
     storage_from_account, withdraw_body as storage_withdraw_body,
 };

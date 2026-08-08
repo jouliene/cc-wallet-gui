@@ -725,6 +725,7 @@ impl AppController {
             AppCommand::SetStorageTitle(title) => self.set_storage_title(title),
             AppCommand::SetStorageData(data) => self.set_storage_data(data),
             AppCommand::AddStorageRecord => self.add_storage_record(),
+            AppCommand::ClearStorageForm => self.clear_storage_form(),
             AppCommand::DeleteStorageRecord(id) => self.delete_storage_record(id),
             AppCommand::CopyStorageRecord(id) => self.copy_storage_record(id),
             AppCommand::RequestRiskOverride => self.request_risk_override(),

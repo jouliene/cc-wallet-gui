@@ -158,6 +158,12 @@ impl AppController {
         self.state.storage.form_error.clear();
     }
 
+    pub(super) fn clear_storage_form(&mut self) {
+        self.state.storage.title_input.clear();
+        self.state.storage.data_input.clear();
+        self.state.storage.form_error.clear();
+    }
+
     pub(super) fn create_storage(&mut self) {
         if self.state.storage.exists {
             self.state.storage.error = "This wallet already has a storage".to_owned();

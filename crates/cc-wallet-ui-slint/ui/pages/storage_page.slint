@@ -1,6 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Palette, Fonts, Radii, Space, Motion } from "../design_tokens.slint";
-import { Icon, Card, CardHeader, MicroLabel, PrimaryButton, GhostButton, IconButton, CopyButton, Field, EmptyState, InlineError, Amount, UserActivity } from "../widgets.slint";
+import { Icon, Card, CardHeader, MicroLabel, PrimaryButton, GhostButton, IconButton, CopyButton, Field, EmptyState, InlineError, Amount, UserActivity, ClipboardBridge } from "../widgets.slint";
 import { StorageRow, TokenAmount } from "../models.slint";
 
 component RecordRow inherits Rectangle {
@@ -86,7 +86,6 @@ export component StoragePage inherits VerticalLayout {
     in property <length> page_height: 400px;
     in property <bool> has_wallet;
     in property <string> address;
-    in property <string> short;
     in property <bool> exists;
     in property <bool> loading;
     in property <bool> busy;
@@ -110,6 +109,7 @@ export component StoragePage inherits VerticalLayout {
     callback create_storage();
     callback refresh_storage();
     callback add_record();
+    callback clear_form();
     callback delete_record(int);
     callback copy_record(int);
     callback title_edited(string);
@@ -134,38 +134,55 @@ export component StoragePage inherits VerticalLayout {
                     alignment: end;
                     VerticalLayout {
                         alignment: center;
-                        if root.exists: HorizontalLayout {
-                            spacing: Space.s_6;
-                            VerticalLayout {
-                                alignment: center;
-                                Text {
-                                    text: root.short;
-                                    color: Palette.text_quiet;
-                                    font-family: Fonts.mono;
-                                    font-size: Fonts.small;
-                                }
-                            }
-                            VerticalLayout {
-                                alignment: center;
-                                Amount { amount: root.balance; font_size: Fonts.small; }
-                            }
-                            VerticalLayout {
-                                alignment: center;
-                                IconButton {
-                                    icon: @image-url("../../assets/icons/external-link.svg");
-                                    clicked => { root.open_in_explorer(root.address, ""); }
-                                }
-                            }
-                        }
-                    }
-                    VerticalLayout {
-                        alignment: center;
                         IconButton {
                             icon: @image-url("../../assets/icons/refresh.svg");
                             enabled: !root.loading && root.has_wallet;
                             clicked => { root.refresh_storage(); }
                         }
                     }
+                }
+            }
+
+            if root.exists: Rectangle {
+                height: 46px;
+                background: Palette.surface_inset;
+                Rectangle {
+                    y: parent.height - 1px;
+                    height: 1px;
+                    background: Palette.border_subtle;
+                }
+                HorizontalLayout {
+                    padding-left: Space.s_16;
+                    padding-right: Space.s_8;
+                    spacing: Space.s_8;
+                    VerticalLayout { alignment: center; MicroLabel { text: "ADDRESS"; } }
+                    VerticalLayout {
+                        alignment: center;
+                        Text {
+                            text: root.address;
+                            color: Palette.text_secondary;
+                            font-family: Fonts.mono;
+                            font-size: Fonts.small;
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        CopyButton { clicked => { ClipboardBridge.copy_text(root.address); } }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        IconButton {
+                            icon: @image-url("../../assets/icons/external-link.svg");
+                            clicked => { root.open_in_explorer(root.address, ""); }
+                        }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    VerticalLayout { alignment: center; MicroLabel { text: "BALANCE"; } }
+                    VerticalLayout {
+                        alignment: center;
+                        Amount { amount: root.balance; font_size: Fonts.small; }
+                    }
+                    Rectangle { width: Space.s_8; }
                 }
             }
 
@@ -284,9 +301,9 @@ export component StoragePage inherits VerticalLayout {
 
                 HorizontalLayout {
                     spacing: Space.s_12;
-                    height: 62px;
+                    height: 118px;
                     VerticalLayout {
-                        width: 280px;
+                        width: 300px;
                         alignment: start;
                         spacing: Space.s_4;
                         HorizontalLayout {
@@ -326,16 +343,25 @@ export component StoragePage inherits VerticalLayout {
                             placeholder: "86594423664";
                             enabled: !root.busy;
                             font_family: Fonts.mono;
+                            multiline: true;
+                            height_: 92px;
                             edited(t) => { root.data_edited(t); }
-                            accepted => { if (root.add_enabled) { root.add_record(); } }
                         }
                     }
                     VerticalLayout {
-                        alignment: end;
+                        alignment: start;
+                        spacing: Space.s_8;
+                        width: 132px;
+                        Rectangle { height: 18px; }
                         PrimaryButton {
                             label: root.busy ? root.pending_label : "Add record";
                             enabled: root.add_enabled;
                             clicked => { UserActivity.ping(); root.add_record(); }
+                        }
+                        GhostButton {
+                            label: "Clear";
+                            enabled: !root.busy && (root.title_input != "" || root.data_input != "");
+                            clicked => { root.clear_form(); }
                         }
                     }
                 }

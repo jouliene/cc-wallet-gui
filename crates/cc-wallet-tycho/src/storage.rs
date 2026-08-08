@@ -11,7 +11,7 @@ use crate::transport::AccountState;
 
 pub const STORAGE_CONTRACT: &str = "CC Storage";
 
-pub const STORAGE_CODE_BOC: &str = "te6ccgECCgEAAUAAART/APSkE/S88sgLAQIBYgIDAvjQ7aLt+/iRkTDg+Jhu8uBrINdJwSCRMOAg10nCX/LgbdMf0z/tRND6SNMP9ATR+JIjxwXy4GUlghBXpwABuo42NDQB0x/U0SHCAPLgZiCAEPlAb6VvoWwx8uBoUxOAIPQOb6ExmiSDCLny4GcEpATfQBOAIPQX4w4ByPpSBAUCASAGBwDKJYIQV6cAArqOSVsDghBXpwADuo46+JcB+gDRIMIA8uBs+CdvEFihIYIQBfXhAKC+8uBqyM+FCBP6Ulj6AoIQV6cAA88Liss/yYAQ+wDbMeDywGThNDQB0x/RWIAg9Fvy4GkCpQIAEBLLD/QAye1UAgFmCAkAHb6x52omh9JBjph5j6AmjAAdsNE7UTQ+kgx0w/0BDHRgAB2yaXtRND6SNMPMfQEMdGA=";
+pub const STORAGE_CODE_BOC: &str = "te6ccgECCgEAAXEAART/APSkE/S88sgLAQIBYgIDAtjQ7aLt+/iRkTDg+Jhu8uBrINdJwSCRMOAg10nCX/LgbdMf0z/tRND6SNMP9ATR+JIjxwXy4GUlghBXpwABuuMPAcj6UhLLD/QAye1U+JKCEDuaygBy+wLIz4UI+lJwzwtuEssfyz/JgQCC+wAEBQIBIAYHAH74l4IJMS0AvvLgbgPTH9TRIcIA8uBmIIAQ+UBvpW+hbDHy4GhTFIAg9A5voTGaIoMIufLgZwKkAt9AFIAg9BcA3iWCEFenAAK6jklbA4IQV6cAA7qOOviXAfoA0SDCAPLgbPgnbxBYoSGCEDuaygCgvvLgasjPhQgT+lJY+gKCEFenAAPPC4rLP8mAEPsA2zHg8sBk4fiXggkxLQC+8uBuA9Mf0VADgCD0W/LgaQKlAgIBZggJAB2+sedqJofSQY6YeY+gJowAHbDRO1E0PpIMdMP9AQx0YAAdsml7UTQ+kjTDzH0BDHRg";
 
 static STORAGE_CODE: LazyLock<Cell> =
     LazyLock::new(|| Boc::decode_base64(STORAGE_CODE_BOC).expect("invalid CC Storage code BOC"));
@@ -38,10 +38,15 @@ pub const ERR_STORAGE_RESERVE: i32 = 106;
 pub const ERR_EXTRA_CURRENCY: i32 = 107;
 pub const ERR_BAD_AMOUNT: i32 = 108;
 pub const ERR_MALFORMED_BODY: i32 = 109;
+pub const ERR_INSUFFICIENT_ATTACH: i32 = 110;
 
 pub const MAX_RECORDS: u16 = 512;
 
-pub const MIN_STORAGE_RESERVE: u128 = 100_000_000;
+pub const STORAGE_WORKCHAIN: i8 = 0;
+
+pub const TARGET_BALANCE: u128 = 1_000_000_000;
+
+pub const MIN_OP_ATTACH: u128 = 20_000_000;
 
 pub const MAX_RECORD_CELLS: usize = 16;
 
@@ -125,7 +130,7 @@ pub fn storage_address(owner: &StdAddr) -> Result<(StdAddr, StateInit)> {
     let init = storage_state_init(owner)?;
     let cell =
         CellBuilder::build_from(&init).context("failed to serialize the storage state init")?;
-    Ok((StdAddr::new(owner.workchain, *cell.repr_hash()), init))
+    Ok((StdAddr::new(STORAGE_WORKCHAIN, *cell.repr_hash()), init))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -244,6 +249,7 @@ pub fn storage_error_text(exit_code: i32) -> Option<&'static str> {
         ERR_EXTRA_CURRENCY => "the storage does not accept tokens",
         ERR_BAD_AMOUNT => "the amount must be greater than zero",
         ERR_MALFORMED_BODY => "the storage could not read that request",
+        ERR_INSUFFICIENT_ATTACH => "the request did not carry enough to pay for itself",
         _ => return None,
     })
 }
@@ -262,7 +268,7 @@ mod tests {
     fn the_code_hash_matches_the_compiled_artifact() {
         assert_eq!(
             storage_code_hash(),
-            "357a5fecff9e9eff2736db69890d98bb17177f0e92ee07273281d092ebca4ded"
+            "d603f744b89bcd52344355cbfa3421cad1eaf3c3a7a91747e471d7099ef85567"
         );
     }
 
@@ -300,7 +306,7 @@ mod tests {
 
         assert_eq!(a1, a2);
         assert_ne!(a1, b1);
-        assert_eq!(a1.workchain, alice.workchain);
+        assert_eq!(a1.workchain, STORAGE_WORKCHAIN);
         assert_eq!(
             a1.address.0,
             CellBuilder::build_from(&init).unwrap().repr_hash().0
@@ -308,11 +314,20 @@ mod tests {
     }
 
     #[test]
-    fn a_masterchain_owner_keeps_its_storage_in_the_masterchain() {
-        let owner: StdAddr = "-1:248f89d7b06fbed0a3d96302ca7d9afa6baba5ad476bbfbc0099396dd0016258"
-            .parse()
-            .unwrap();
-        assert_eq!(storage_address(&owner).unwrap().0.workchain, -1);
+    fn a_storage_lives_in_the_basechain_even_for_a_masterchain_owner() {
+        let masterchain: StdAddr =
+            "-1:248f89d7b06fbed0a3d96302ca7d9afa6baba5ad476bbfbc0099396dd0016258"
+                .parse()
+                .unwrap();
+        assert_eq!(
+            storage_address(&masterchain).unwrap().0.workchain,
+            STORAGE_WORKCHAIN,
+            "rent in the masterchain costs a thousand times more, forever"
+        );
+        assert_eq!(
+            storage_address(&owner()).unwrap().0.workchain,
+            STORAGE_WORKCHAIN
+        );
     }
 
     #[test]
@@ -435,6 +450,7 @@ mod tests {
             ERR_EXTRA_CURRENCY,
             ERR_BAD_AMOUNT,
             ERR_MALFORMED_BODY,
+            ERR_INSUFFICIENT_ATTACH,
         ] {
             assert!(storage_error_text(code).is_some(), "code {code} is unnamed");
         }

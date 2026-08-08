@@ -25,8 +25,8 @@ use cc_wallet_domain::{
 use cc_wallet_tycho::{
     AccountInspection, AccountState, AccountStatus, BlockchainConfigState,
     BroadcastAcknowledgement, CcdexAsset, ChainTransaction, CoinSupply, EmulationConfig,
-    EverTransfer, EverWallet, KeyPair, LocalReason, MsgKind, ResponseKind, Seed,
-    SendAttemptOutcome, StdAddr, SubscriptionEvent, Transport, WalletState,
+    EverTransfer, EverWallet, KeyPair, LocalReason, MsgKind, ResponseKind, STORAGE_TARGET_BALANCE,
+    Seed, SendAttemptOutcome, StdAddr, SubscriptionEvent, Transport, WalletState,
     account_subscription_loop, comment_payload, elector_election_stake, emulate_external_message,
     key_block_supply, parse_transaction, pool_storage_from_account, prepare_emulation_config,
     shard_account_for_emulation, storage_address, storage_delete_body, storage_from_account,
@@ -94,9 +94,9 @@ const SWAP_GAS_NATIVE: u128 = 200_000_000;
 
 const SWAP_VALID_SECS: u32 = 300;
 
-const STORAGE_DEPLOY_NATIVE: u128 = 1_000_000_000;
+const STORAGE_DEPLOY_GAS: u128 = 50_000_000;
 
-const STORAGE_OP_NATIVE: u128 = 200_000_000;
+const STORAGE_OP_GAS: u128 = 60_000_000;
 
 fn emulation_balance_floor(transfer_native: u128) -> ChainResult<u128> {
     let min_balance = transfer_native
@@ -1455,6 +1455,13 @@ impl TychoWalletService {
         let (mut wallet, transport) =
             self.build_wallet(&inputs, normalize_and_validate_inputs(&inputs)?)?;
 
+        let storage_balance = transport
+            .get_account_state(address.to_string())
+            .await
+            .map_err(ChainError::wallet)?
+            .account()
+            .map_or(0u128, |account| account.balance.tokens.into());
+
         let config = self.blockchain_config(&transport).await?;
         let signature_context = config
             .state
@@ -1479,12 +1486,15 @@ impl TychoWalletService {
             .map_err(ChainError::wallet)?;
 
         let query_id = swap_query_id();
+        let top_up = STORAGE_TARGET_BALANCE.saturating_sub(storage_balance);
+        let op_native = STORAGE_OP_GAS.saturating_add(top_up);
+        let deploy_native = STORAGE_TARGET_BALANCE.saturating_add(STORAGE_DEPLOY_GAS);
         let (attached_native, transfer) = match &op {
             StorageOp::Create => (
-                STORAGE_DEPLOY_NATIVE,
+                deploy_native,
                 EverTransfer::new(&address)
                     .map_err(ChainError::invalid_input)?
-                    .native(STORAGE_DEPLOY_NATIVE)
+                    .native(deploy_native)
                     .map_err(ChainError::invalid_input)?
                     .bounce(false)
                     .flags(SAFE_SEND_FLAGS)
@@ -1500,10 +1510,10 @@ impl TychoWalletService {
                     .map_err(|error| ChainError::Wallet(error.to_string()))?;
                 let body = storage_put_body(query_id, *id, &blob).map_err(ChainError::wallet)?;
                 (
-                    STORAGE_OP_NATIVE,
+                    op_native,
                     EverTransfer::new(&address)
                         .map_err(ChainError::invalid_input)?
-                        .native(STORAGE_OP_NATIVE)
+                        .native(op_native)
                         .map_err(ChainError::invalid_input)?
                         .bounce(true)
                         .flags(SAFE_SEND_FLAGS)
@@ -1513,10 +1523,10 @@ impl TychoWalletService {
             StorageOp::Delete { id } => {
                 let body = storage_delete_body(query_id, *id).map_err(ChainError::wallet)?;
                 (
-                    STORAGE_OP_NATIVE,
+                    op_native,
                     EverTransfer::new(&address)
                         .map_err(ChainError::invalid_input)?
-                        .native(STORAGE_OP_NATIVE)
+                        .native(op_native)
                         .map_err(ChainError::invalid_input)?
                         .bounce(true)
                         .flags(SAFE_SEND_FLAGS)

@@ -166,6 +166,7 @@ pub enum AppCommand {
     SetStorageTitle(String),
     SetStorageData(String),
     AddStorageRecord,
+    ClearStorageForm,
     DeleteStorageRecord(u32),
     CopyStorageRecord(u32),
     RequestRiskOverride,
@@ -235,6 +236,7 @@ impl AppCommand {
             | Self::SetStorageTitle(_)
             | Self::SetStorageData(_)
             | Self::AddStorageRecord
+            | Self::ClearStorageForm
             | Self::DeleteStorageRecord(_)
             | Self::AddEndpoint(_)
             | Self::SelectEndpoint(_)
@@ -349,6 +351,7 @@ impl AppCommand {
             | Self::SetStorageTitle(_)
             | Self::SetStorageData(_)
             | Self::AddStorageRecord
+            | Self::ClearStorageForm
             | Self::DeleteStorageRecord(_)
             | Self::CopyStorageRecord(_)
             | Self::ClearError => false,
