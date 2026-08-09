@@ -1,6 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Palette, Fonts, Radii, Space, Motion, Sizes } from "../design_tokens.slint";
-import { Icon, Card, CardHeader, MicroLabel, FieldLabel, PrimaryButton, GhostButton, IconButton, CopyButton, SecretCopyButton, Field, EmptyState, InlineError, Amount, UserActivity, ClipboardBridge } from "../widgets.slint";
+import { Icon, Card, CardHeader, MicroLabel, FieldLabel, PrimaryButton, GhostButton, IconButton, CopyButton, SecretCopyButton, Field, EmptyState, InlineError, Amount, RefreshButton, UserActivity, ClipboardBridge } from "../widgets.slint";
 import { StorageRow, TokenAmount } from "../models.slint";
 
 component RecordRow inherits Rectangle {
@@ -18,7 +18,7 @@ component RecordRow inherits Rectangle {
     // A record may be several lines long, and a record you cannot read in full
     // is not much use — so the row grows to fit one, while a single-line record
     // keeps the compact height that lets more of them fit on screen.
-    height: max(Sizes.control_dense + 2 * Space.s_10, body.preferred-height);
+    height: max(Sizes.control_dense + 2 * Space.s_12, body.preferred-height);
     background: ta.has-hover ? Palette.hover_row : transparent;
     animate background { duration: Motion.base; easing: Motion.curve; }
 
@@ -32,7 +32,7 @@ component RecordRow inherits Rectangle {
 
     body := HorizontalLayout {
         padding-left: Space.s_16;
-        padding-right: Space.s_8;
+        padding-right: Space.s_16;
         padding-top: Space.s_12;
         padding-bottom: Space.s_12;
         spacing: root.col_gap;
@@ -45,6 +45,8 @@ component RecordRow inherits Rectangle {
                 color: Palette.text_quiet;
                 font-family: Fonts.mono;
                 font-size: Fonts.small;
+                min-height: Sizes.control_dense;
+                vertical-alignment: center;
             }
         }
 
@@ -58,6 +60,8 @@ component RecordRow inherits Rectangle {
                 font-weight: Fonts.semibold;
                 font-size: Fonts.body;
                 wrap: word-wrap;
+                min-height: Sizes.control_dense;
+                vertical-alignment: center;
             }
         }
 
@@ -70,12 +74,16 @@ component RecordRow inherits Rectangle {
                 font-family: Fonts.mono;
                 font-size: Fonts.small;
                 wrap: word-wrap;
+                min-height: Sizes.control_dense;
+                vertical-alignment: center;
             }
             if !root.revealed: Text {
                 text: "••••••••••••";
                 color: Palette.text_quiet;
                 font-family: Fonts.mono;
                 font-size: Fonts.small;
+                min-height: Sizes.control_dense;
+                vertical-alignment: center;
             }
         }
 
@@ -139,8 +147,7 @@ export component StoragePage inherits VerticalLayout {
     callback open_in_explorer(string, string);
 
     height: root.page_height;
-    padding-top: Space.s_4;
-    spacing: Space.s_16;
+    spacing: Space.stack_gap;
 
     // The heading row and the record rows read these same three, so a column
     // and its label can never end up starting in different places.
@@ -156,19 +163,21 @@ export component StoragePage inherits VerticalLayout {
     property <length> col_actions_w: 2 * Sizes.control_dense + Space.s_4;
     property <length> col_gap: Space.s_12;
     property <length> col_free_w: max(0px, root.width
-        - Space.s_16 - Space.s_8
+        - 2 * Space.s_16
         - root.col_number_w - root.col_actions_w
         - 3 * root.col_gap);
     property <length> col_title_w: root.col_free_w / 4;
     property <length> col_data_w: root.col_free_w - root.col_title_w;
 
-    property <length> form_actions_w: 132px;
-    property <length> form_free_w: max(0px, root.width
-        - 2 * Space.s_16
-        - root.form_actions_w
-        - 2 * root.col_gap);
-    property <length> form_title_w: root.form_free_w / 4;
-    property <length> form_data_w: root.form_free_w - root.form_title_w;
+    // The form starts at the card inset and its first column swallows the
+    // ordinal gutter: a record being written has no number yet, and the field
+    // still ends where the NAME column ends.
+    property <length> form_title_w: root.col_number_w + root.col_gap + root.col_title_w;
+    property <length> form_btn_h: 40px;
+    property <length> form_record_h: Theme.field_h + Space.s_8 + root.form_btn_h;
+
+    property <bool> has_footer_msg:
+        root.error != "" || root.notice != "" || root.unreadable > 0;
 
     Card {
         vertical-stretch: 1;
@@ -194,20 +203,19 @@ export component StoragePage inherits VerticalLayout {
                     }
                     VerticalLayout {
                         alignment: center;
-                        IconButton {
-                            icon: @image-url("../../assets/icons/refresh.svg");
+                        RefreshButton {
                             enabled: !root.loading && root.has_wallet;
-                            clicked => { root.refresh_storage(); }
+                            refreshed => { root.refresh_storage(); }
                         }
                     }
                 }
             }
 
             if root.exists: HorizontalLayout {
-                padding-left: Space.s_12;
-                padding-right: Space.s_12;
-                padding-top: Space.s_10;
-                padding-bottom: Space.s_10;
+                padding-left: Space.card_pad_h;
+                padding-right: Space.card_pad_h;
+                padding-top: Space.card_pad_v;
+                padding-bottom: Space.card_pad_v;
                 Rectangle {
                     background: Palette.surface_inset;
                     border-radius: Radii.md;
@@ -216,9 +224,9 @@ export component StoragePage inherits VerticalLayout {
                     height: zone.preferred-height;
                     zone := VerticalLayout {
                         padding-left: Space.s_12;
-                        padding-right: Space.s_10;
-                        padding-top: Space.s_8;
-                        padding-bottom: Space.s_8;
+                        padding-right: Space.s_12;
+                        padding-top: Space.s_12;
+                        padding-bottom: Space.s_12;
                         spacing: Space.s_2;
 
                         HorizontalLayout {
@@ -299,7 +307,7 @@ export component StoragePage inherits VerticalLayout {
                     height: 32px;
                     HorizontalLayout {
                         padding-left: Space.s_16;
-                        padding-right: Space.s_8;
+                        padding-right: Space.s_16;
                         spacing: root.col_gap;
                         VerticalLayout {
                             alignment: center;
@@ -392,8 +400,8 @@ export component StoragePage inherits VerticalLayout {
                                             Icon {
                                                 source: @image-url("../../assets/icons/chevron-down.svg");
                                                 tint: Palette.text_quiet;
-                                                width: 11px;
-                                                height: 11px;
+                                                width: Sizes.icon_sm;
+                                                height: Sizes.icon_sm;
                                             }
                                         }
                                         Text {
@@ -416,7 +424,7 @@ export component StoragePage inherits VerticalLayout {
                 height: 26px;
                 Rectangle {
                     y: 0;
-                    height: 1px;
+                    height: root.has_footer_msg ? 1px : 0px;
                     background: Palette.border_subtle;
                 }
                 HorizontalLayout {
@@ -451,30 +459,33 @@ export component StoragePage inherits VerticalLayout {
                 icon: @image-url("../../assets/icons/plus.svg");
                 title: "Add a record";
                 subtitle: "The name and the record are encrypted together before they leave this machine";
-                hairline: true;
             }
             VerticalLayout {
                 padding-left: Space.s_16;
                 padding-right: Space.s_16;
-                padding-top: Space.s_10;
-                padding-bottom: Space.s_10;
+                padding-top: Space.s_12;
+                padding-bottom: Space.s_12;
                 spacing: Space.s_6;
 
                 HorizontalLayout {
-                    spacing: Space.s_12;
-                    height: 96px;
+                    spacing: root.col_gap;
+
                     VerticalLayout {
                         width: root.form_title_w;
                         alignment: start;
                         spacing: Space.s_4;
                         HorizontalLayout {
-                            MicroLabel { text: "NAME"; }
+                            height: Sizes.label_row_h;
+                            VerticalLayout { alignment: center; MicroLabel { text: "NAME"; } }
                             Rectangle { }
-                            Text {
-                                text: root.title_bytes + "/" + root.title_limit;
-                                color: root.title_bytes > root.title_limit ? Palette.negative : Palette.text_quiet;
-                                font-family: Fonts.mono;
-                                font-size: Fonts.micro;
+                            VerticalLayout {
+                                alignment: center;
+                                Text {
+                                    text: root.title_bytes + "/" + root.title_limit;
+                                    color: root.title_bytes > root.title_limit ? Palette.negative : Palette.text_quiet;
+                                    font-family: Fonts.mono;
+                                    font-size: Fonts.micro;
+                                }
                             }
                         }
                         title_field := Field {
@@ -483,19 +494,43 @@ export component StoragePage inherits VerticalLayout {
                             edited(t) => { root.title_edited(t); }
                             accepted => { if (root.add_enabled) { root.add_record(); } }
                         }
+                        Rectangle { height: Space.s_8; }
+                        HorizontalLayout {
+                            spacing: Space.s_8;
+                            PrimaryButton {
+                                horizontal-stretch: 1;
+                                label: root.busy ? root.pending_label : "Add record";
+                                height_: root.form_btn_h;
+                                enabled: root.add_enabled;
+                                clicked => { UserActivity.ping(); root.add_record(); }
+                            }
+                            GhostButton {
+                                label: "Clear";
+                                height_: root.form_btn_h;
+                                radius: Radii.md;
+                                pad_h: 18px;
+                                enabled: !root.busy && (root.title_input != "" || root.data_input != "");
+                                clicked => { root.clear_form(); }
+                            }
+                        }
                     }
+
                     VerticalLayout {
-                        width: root.form_data_w;
+                        horizontal-stretch: 1;
                         alignment: start;
                         spacing: Space.s_4;
                         HorizontalLayout {
-                            MicroLabel { text: "RECORD"; }
+                            height: Sizes.label_row_h;
+                            VerticalLayout { alignment: center; MicroLabel { text: "RECORD"; } }
                             Rectangle { }
-                            Text {
-                                text: root.data_bytes + "/" + root.data_limit;
-                                color: root.data_bytes > root.data_limit ? Palette.negative : Palette.text_quiet;
-                                font-family: Fonts.mono;
-                                font-size: Fonts.micro;
+                            VerticalLayout {
+                                alignment: center;
+                                Text {
+                                    text: root.data_bytes + "/" + root.data_limit;
+                                    color: root.data_bytes > root.data_limit ? Palette.negative : Palette.text_quiet;
+                                    font-family: Fonts.mono;
+                                    font-size: Fonts.micro;
+                                }
                             }
                         }
                         Field {
@@ -503,30 +538,14 @@ export component StoragePage inherits VerticalLayout {
                             placeholder: "Anything you want kept private — a password, a number, a note";
                             font_family: Fonts.mono;
                             multiline: true;
-                            height_: 70px;
+                            height_: root.form_record_h;
                             edited(t) => { root.data_edited(t); }
-                        }
-                    }
-                    VerticalLayout {
-                        alignment: start;
-                        spacing: Space.s_8;
-                        width: root.form_actions_w;
-                        Rectangle { height: 18px; }
-                        PrimaryButton {
-                            label: root.busy ? root.pending_label : "Add record";
-                            enabled: root.add_enabled;
-                            clicked => { UserActivity.ping(); root.add_record(); }
-                        }
-                        GhostButton {
-                            label: "Clear";
-                            enabled: !root.busy && (root.title_input != "" || root.data_input != "");
-                            clicked => { root.clear_form(); }
                         }
                     }
                 }
 
                 Rectangle {
-                    height: 16px;
+                    height: Sizes.label_row_h;
                     if root.form_error != "": InlineError { text: root.form_error; }
                 }
             }
