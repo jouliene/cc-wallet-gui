@@ -69,6 +69,12 @@ pub struct ContractSpec {
     pub decode_data: fn(&Cell) -> Option<DecodedContract>,
     pub external_method: fn(&Cell) -> Option<(&'static str, u32)>,
     pub internal_method: fn(u32) -> Option<&'static str>,
+    /// How this contract's own outgoing message reads when it carries an op it
+    /// also ACCEPTS. A contract that answers with a distinct op needs nothing
+    /// here — the name already says which direction it is. One that echoes the
+    /// op it is answering about does, or the same name appears on arrows going
+    /// both ways and reads as two identical calls.
+    pub internal_reply: fn(u32) -> Option<&'static str>,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -158,6 +164,10 @@ pub fn external_method(at: ContractAt, body: &Cell) -> Option<(&'static str, u32
 
 pub fn internal_method(at: ContractAt, function_id: u32) -> Option<&'static str> {
     (at.resolve()?.internal_method)(function_id)
+}
+
+pub fn internal_reply(at: ContractAt, function_id: u32) -> Option<&'static str> {
+    (at.resolve()?.internal_reply)(function_id)
 }
 
 #[cfg(test)]

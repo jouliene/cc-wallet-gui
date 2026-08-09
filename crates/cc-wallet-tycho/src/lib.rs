@@ -16,7 +16,7 @@ pub use ccdex::{
 };
 pub use contracts::{
     ContractAt, ContractSpec, DecodedContract, DecodedField, DecodedValue, contract_for_code_hash,
-    contract_name, decode_contract_data, external_method, internal_method,
+    contract_name, decode_contract_data, external_method, internal_method, internal_reply,
 };
 pub use crypto::{
     CryptoError, KeyPair, PublicKeyBytes, SecretKeyBytes, Seed, SignatureBytes, derivation_path,

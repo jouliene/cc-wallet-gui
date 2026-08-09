@@ -206,6 +206,7 @@ pub fn ever_wallet_spec() -> ContractSpec {
         decode_data: decode_ever_wallet_data,
         external_method: ever_wallet_external_method,
         internal_method: ever_wallet_internal_method,
+        internal_reply: |_| None,
     }
 }
 

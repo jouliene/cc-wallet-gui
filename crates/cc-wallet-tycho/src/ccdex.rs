@@ -157,6 +157,7 @@ pub fn ccdex_pool_spec() -> ContractSpec {
         decode_data: decode_pool_fields,
         external_method: |_body| None,
         internal_method: ccdex_internal_method,
+        internal_reply: |_| None,
     }
 }
 

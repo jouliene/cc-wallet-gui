@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use cc_wallet_domain::{AssetMovement, Digest32};
 use cc_wallet_tycho::{
     ChainMessage, ChainTransaction, ContractAt, MsgKind, contract_name, external_method,
-    internal_method,
+    internal_method, internal_reply,
 };
 
 use crate::activity::message_movements;
@@ -286,8 +286,19 @@ fn message_op(message: &ChainMessage, src: ContractAt, dst: ContractAt) -> Strin
     }
 }
 
+/// Names an internal message by the operation it carries.
+///
+/// The receiver is asked first, because an op sent TO a contract is a call on
+/// it. Only if the receiver knows nothing of the op is the SENDER asked — the
+/// message is then that contract answering. A contract whose answer carries a
+/// distinct op needs nothing more, since the name already reads as an answer;
+/// one that echoes the op it is answering about says so through
+/// `internal_reply`, or the same name lands on arrows going both ways.
 fn internal_op_name(src: ContractAt, dst: ContractAt, op: u32) -> Option<String> {
-    internal_method(dst, op)
+    if let Some(called) = internal_method(dst, op) {
+        return Some(called.to_owned());
+    }
+    internal_reply(src, op)
         .or_else(|| internal_method(src, op))
         .map(str::to_owned)
 }
@@ -788,5 +799,56 @@ mod tests {
     #[test]
     fn a_trace_of_nothing_is_an_error_not_an_empty_diagram() {
         assert!(flatten(&[], focus(), false, &ContractIndex::new()).is_err());
+    }
+}
+
+#[cfg(test)]
+mod reply_naming_tests {
+    use super::*;
+    use cc_wallet_tycho::{storage_code_hash, storage_put_body};
+
+    fn int_msg(body: cc_wallet_tycho::Cell) -> ChainMessage {
+        ChainMessage {
+            kind: MsgKind::Int,
+            hash: String::new(),
+            src: None,
+            dst: None,
+            value_native: 0,
+            value_extra: BTreeMap::new(),
+            fwd_fee: 0,
+            bounce: true,
+            bounced: false,
+            created_lt: 0,
+            created_at: 0,
+            state_init: None,
+            state_init_hash: None,
+            body_boc_base64: String::new(),
+            body,
+        }
+    }
+
+    #[test]
+    fn a_call_is_named_for_the_contract_it_is_sent_to() {
+        let code = storage_code_hash();
+        let name = message_op(
+            &int_msg(storage_put_body(1, 1, b"x").unwrap()),
+            ContractAt::default(),
+            ContractAt::by_code(&code),
+        );
+        assert_eq!(name, "put_record");
+    }
+
+    #[test]
+    fn a_contract_answering_with_the_same_op_is_not_named_a_second_call() {
+        // The storage echoes the op it is answering about, so the change it
+        // sends back carries OP_PUT. Reading that as "put_record" made the
+        // diagram show the same call twice, in opposite directions.
+        let code = storage_code_hash();
+        let name = message_op(
+            &int_msg(storage_put_body(1, 1, b"x").unwrap()),
+            ContractAt::by_code(&code),
+            ContractAt::default(),
+        );
+        assert_eq!(name, "put_record change");
     }
 }

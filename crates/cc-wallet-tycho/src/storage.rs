@@ -213,6 +213,7 @@ pub fn storage_spec() -> ContractSpec {
         decode_data: decode_storage_fields,
         external_method: |_body| None,
         internal_method: storage_internal_method,
+        internal_reply: storage_internal_reply,
     }
 }
 
@@ -233,6 +234,15 @@ fn storage_internal_method(op: u32) -> Option<&'static str> {
         OP_PUT => "put_record",
         OP_DELETE => "delete_record",
         OP_WITHDRAW => "withdraw",
+        _ => return None,
+    })
+}
+
+fn storage_internal_reply(op: u32) -> Option<&'static str> {
+    Some(match op {
+        OP_PUT => "put_record change",
+        OP_DELETE => "delete_record change",
+        OP_WITHDRAW => "withdraw payout",
         _ => return None,
     })
 }

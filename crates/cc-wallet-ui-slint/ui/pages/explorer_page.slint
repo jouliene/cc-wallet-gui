@@ -1034,16 +1034,6 @@ export component ExplorerPage inherits VerticalLayout {
                         viewport_h: min(root.trace_edges.length * 66px, max(330px, root.page_height - 250px));
                     }
                 }
-                if !root.trace_loading && root.trace_error == "" && root.trace_edges.length > 0: HorizontalLayout {
-                    padding-left: Space.s_16; padding-right: Space.s_16;
-                    padding-top: Space.card_pad_v; padding-bottom: Space.card_pad_v;
-                    Text {
-                        text: "Drag the sheet to move it, or throw it. The wheel pans it, Shift-wheel sideways; the bars and the arrow keys cross it in one go.";
-                        color: Palette.text_quiet;
-                        font-family: Fonts.ui;
-                        font-size: Fonts.micro;
-                    }
-                }
             }
 
             if !root.trace_open && root.txs_skipped > 0: VerticalLayout {
