@@ -44,9 +44,15 @@ pub const COMMENT_ROOT_BYTES: usize = 123;
 
 pub const COMMENT_CELL_BYTES: usize = 127;
 
-pub const COMMENT_CELLS: usize = 4;
+/// What a comment may carry, matching what a stored record may. The chain
+/// permits far more — 65535 bytes for the whole signed message, a snake 500
+/// cells deep — so this is a spending decision, not a structural one: at 8000
+/// nano a byte in forward fees, a full kilobyte roughly doubles what a bare
+/// transfer costs. Raising it later leaves older messages readable.
+pub const MAX_COMMENT_BYTES: usize = 1024;
 
-pub const MAX_COMMENT_BYTES: usize = COMMENT_ROOT_BYTES + COMMENT_CELLS * COMMENT_CELL_BYTES;
+pub const COMMENT_CELLS: usize =
+    (MAX_COMMENT_BYTES - COMMENT_ROOT_BYTES).div_ceil(COMMENT_CELL_BYTES);
 
 pub fn comment_payload(text: &str) -> Result<Cell> {
     let bytes = text.as_bytes();
@@ -751,7 +757,7 @@ impl IntoTupleResult for tycho_types::abi::AbiValue {
 mod tests {
 
     #[test]
-    fn a_comment_fills_the_root_cell_then_chains_up_to_four_more() {
+    fn a_comment_fills_the_root_cell_then_chains_as_many_as_the_budget_needs() {
         let short = comment_payload("rent").unwrap();
         assert_eq!(short.reference_count(), 0);
         let mut slice = short.as_slice().unwrap();
@@ -775,7 +781,7 @@ mod tests {
         }
         assert_eq!(
             depth, COMMENT_CELLS,
-            "123 bytes in the root and 127 in each of four references is the whole budget"
+            "the root holds 123 bytes and each reference 127, chained until the budget is met"
         );
 
         assert!(

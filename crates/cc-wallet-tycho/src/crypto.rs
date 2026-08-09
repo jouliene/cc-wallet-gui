@@ -220,6 +220,16 @@ impl KeyPair {
         self.public_key().to_bytes()
     }
 
+    /// The key this wallet and one other arrive at independently. Both sides
+    /// compute it from their own scalar and the other's published key, which is
+    /// what lets the sender read back what they sent.
+    ///
+    /// It reuses the signing key, because a wallet publishes no other: the
+    /// recipient's account carries the key it signs with and nothing else.
+    pub fn comment_secret(&self, their_key: &VerifyingKey) -> Zeroizing<[u8; 32]> {
+        crate::encrypted_comment::shared_secret(&self.secret.to_scalar(), their_key)
+    }
+
     pub fn derive_secret(&self, context: &str) -> Zeroizing<[u8; 32]> {
         let seed = Zeroizing::new(self.secret.to_bytes());
         Zeroizing::new(blake3::derive_key(context, seed.as_ref()))

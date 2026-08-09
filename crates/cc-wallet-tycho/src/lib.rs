@@ -3,6 +3,7 @@ pub mod contracts;
 pub mod crypto;
 pub mod elector;
 pub mod emulator;
+pub mod encrypted_comment;
 pub mod everwallet;
 pub mod history;
 pub mod network;
