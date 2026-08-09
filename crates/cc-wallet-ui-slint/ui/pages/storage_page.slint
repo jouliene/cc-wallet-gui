@@ -93,7 +93,9 @@ component RecordRow inherits Rectangle {
             HorizontalLayout {
                 spacing: Space.s_4;
                 alignment: end;
-                SecretCopyButton {
+                // Copying is reading. Offering it while the record is hidden
+                // handed out the contents the password was standing in front of.
+                if root.revealed: SecretCopyButton {
                     copy => { root.copy_record(root.record.id); }
                 }
                 IconButton {

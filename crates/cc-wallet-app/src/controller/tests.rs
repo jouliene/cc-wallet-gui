@@ -7080,6 +7080,10 @@ fn a_dispatched_send_reaches_the_chain_with_the_form_values() {
         c.state().send_form.amount.is_empty(),
         "an observed node response clears the submitted amount"
     );
+    assert!(
+        c.state().send_form.comment.is_empty(),
+        "and the note that went with it, which belongs to that transfer and no other"
+    );
     assert_eq!(c.state().recipient_check, RecipientCheck::Unchecked);
     assert!(!c.state().allow_unbounced);
     cleanup(&dir);
@@ -11824,6 +11828,16 @@ fn copying_a_record_puts_its_contents_on_the_clipboard_and_not_its_name() {
 
     c.handle_command(AppCommand::CopyStorageRecord(1));
     settle(&mut c);
+    assert_eq!(
+        clipboard_of(&mem),
+        "",
+        "copying is reading: a hidden record does not reach the clipboard, or the \
+         password guarding it guards nothing"
+    );
+
+    c.state_mut().storage.revealed = true;
+    c.handle_command(AppCommand::CopyStorageRecord(1));
+    settle(&mut c);
 
     assert_eq!(clipboard_of(&mem), "abc@gmail.com");
     cleanup(&dir);
@@ -11909,6 +11923,7 @@ fn hiding_records_also_wipes_what_was_copied_from_them() {
     let (mut c, mem) =
         storage_controller(&dir, chain, vec![stored(1, "My email", "abc@gmail.com")]);
 
+    c.state_mut().storage.revealed = true;
     c.handle_command(AppCommand::CopyStorageRecord(1));
     settle(&mut c);
     assert_eq!(clipboard_of(&mem), "abc@gmail.com");
@@ -11930,6 +11945,7 @@ fn a_copied_record_is_wiped_when_the_wallet_locks() {
     let (mut c, mem) =
         storage_controller(&dir, chain, vec![stored(1, "My email", "abc@gmail.com")]);
 
+    c.state_mut().storage.revealed = true;
     c.handle_command(AppCommand::CopyStorageRecord(1));
     settle(&mut c);
     assert_eq!(clipboard_of(&mem), "abc@gmail.com");
@@ -12054,6 +12070,7 @@ fn a_copied_record_is_wiped_on_the_same_timer_as_the_recovery_phrase() {
     let (mut c, mem) =
         storage_controller(&dir, chain, vec![stored(1, "My email", "abc@gmail.com")]);
 
+    c.state_mut().storage.revealed = true;
     c.handle_command(AppCommand::CopyStorageRecord(1));
     settle(&mut c);
     assert_eq!(clipboard_of(&mem), "abc@gmail.com");

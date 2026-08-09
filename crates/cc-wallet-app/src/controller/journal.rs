@@ -649,6 +649,9 @@ impl AppController {
         self.session.fee_reestimate_at = None;
         self.state.send_form.destination.clear();
         self.state.send_form.amount.clear();
+        // A note belongs to the transfer that carried it. Leaving it behind
+        // attaches it to whatever is sent next.
+        self.state.send_form.comment.clear();
         self.state.reset_recipient_status();
         self.state.clear_send_form_error();
     }

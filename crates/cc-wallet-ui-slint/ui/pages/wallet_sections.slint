@@ -491,7 +491,6 @@ export component SendCard inherits Card {
                     alignment: end;
                     Rectangle {
                         height: Theme.field_h;
-                        opacity: root.encrypt_available ? 1.0 : Fade.disabled;
                         HorizontalLayout {
                             spacing: Space.s_8;
                             alignment: start;
@@ -508,6 +507,7 @@ export component SendCard inherits Card {
                                 Text {
                                     text: "Send encrypted";
                                     color: Palette.text_secondary;
+                                    opacity: root.encrypt_available ? 1.0 : Fade.disabled;
                                     font-family: Fonts.ui;
                                     font-weight: Fonts.medium;
                                     font-size: Fonts.small;

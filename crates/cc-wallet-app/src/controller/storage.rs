@@ -238,6 +238,11 @@ impl AppController {
     }
 
     pub(super) fn copy_storage_record(&mut self, id: u32) {
+        // The button is only drawn once the records are open, and this is the
+        // same rule said where it is enforced rather than where it is offered.
+        if !self.state.storage.revealed {
+            return;
+        }
         let Some(record) = self
             .state
             .storage

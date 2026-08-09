@@ -1140,6 +1140,11 @@ impl AppController {
             && Instant::now() >= deadline
         {
             self.session.fee_reestimate_at = None;
+            // A recipient is worth reading on its own. The fee needs an amount
+            // as well, but whether this account can be written to privately is
+            // answerable the moment the address is, and the toggle beside the
+            // comment has nothing else to wait for.
+            self.check_destination();
             if self.state.send_form.request().is_ok() {
                 self.estimate_fee();
             }

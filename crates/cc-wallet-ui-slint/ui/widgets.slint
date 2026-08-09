@@ -37,11 +37,12 @@ export component Checkbox inherits Rectangle {
     height: 18px;
     border-radius: 5px;
     border-width: fs.has-focus ? 2px : 1px;
+    // A box you cannot tick is still a box: it keeps the outline it has when
+    // live, because a slot nobody can see is a slot nobody knows about. What it
+    // cannot do is said by the label beside it, not by vanishing.
     border-color: fs.has-focus
         ? Palette.focus_ring
-        : (!root.enabled
-            ? Palette.border_subtle
-            : (root.checked ? root.active_color : Palette.border_strong));
+        : (root.enabled && root.checked ? root.active_color : Palette.border_strong);
     fs := FocusScope {
         enabled: root.enabled;
         key-pressed(e) => {
@@ -838,7 +839,14 @@ export component Field inherits Rectangle {
     property <length> caret_margin: 6px;
     property <length> line_height: root.font_size * 1.6;
     property <length> inner_w: max(1px, root.width - root.pad_left - root.pad_right);
-    property <length> inner_h: max(1px, root.height - (root.multiline ? 2 * root.pad_left : 0px));
+    // A multiline field shows whole lines only. Half a line of text at the
+    // bottom edge is not more content, it is a sliced letter, and it is what
+    // makes a one-line note in a short field look broken.
+    property <int> visible_lines: max(1, floor((root.height - Space.s_12) / root.line_height));
+    property <length> inner_h: root.multiline
+        ? root.visible_lines * root.line_height
+        : max(1px, root.height);
+    property <length> pad_v: root.multiline ? (root.height - root.inner_h) / 2 : 0px;
     property <length> caret_x: 0px;
     property <length> caret_y: 0px;
 
@@ -880,6 +888,16 @@ export component Field inherits Rectangle {
         }
     }
 
+    // The band of whole lines the field actually shows. Without it the text is
+    // clipped by the box instead of by the band, and a second line appears in a
+    // one-line field with its top sliced off.
+    band := Rectangle {
+        x: 0px;
+        y: root.pad_v;
+        width: parent.width;
+        height: root.multiline ? root.inner_h : parent.height;
+        clip: root.multiline;
+
     input := TextInput {
         text <=> root.text;
         enabled: root.enabled;
@@ -889,7 +907,7 @@ export component Field inherits Rectangle {
             ? 0px
             : min(0px, max(root.inner_w - self.width - self.text-cursor-width, root.caret_x)));
         y: root.multiline
-            ? root.pad_left + min(0px, max(root.inner_h - self.height, root.caret_y))
+            ? min(0px, max(root.inner_h - self.height, root.caret_y))
             : 0px;
         width: root.multiline
             ? root.inner_w
@@ -960,6 +978,7 @@ export component Field inherits Rectangle {
             return reject;
         }
     }
+    }
 
     if root.money_int != "": Text {
         text: root.money_int;
@@ -978,7 +997,7 @@ export component Field inherits Rectangle {
         visible: root.text == "";
         text: root.placeholder;
         x: root.pad_left;
-        y: root.multiline ? root.pad_left : 0px;
+        y: root.multiline ? root.pad_v : 0px;
         width: max(1px, parent.width - root.pad_left - root.pad_right);
         height: root.multiline ? parent.height - 2 * root.pad_left : parent.height;
         color: Palette.text_placeholder;
