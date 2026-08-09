@@ -233,7 +233,6 @@ export component AppWindow inherits Window {
     in property <int> storage_limit: 512;
     in property <int> storage_unreadable: 0;
     in property <bool> storage_revealed: false;
-    in property <int> storage_reveal_ttl: 0;
     in property <[StorageRow]> storage_records: [];
     in property <bool> storage_add_enabled: false;
     in property <string> storage_form_error: "";
@@ -567,7 +566,6 @@ export component AppWindow inherits Window {
                 limit: root.storage_limit;
                 unreadable: root.storage_unreadable;
                 revealed: root.storage_revealed;
-                reveal_ttl: root.storage_reveal_ttl;
                 records: root.storage_records;
                 add_enabled: root.storage_add_enabled;
                 form_error: root.storage_form_error;

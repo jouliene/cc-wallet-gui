@@ -959,7 +959,6 @@ fn sync_storage(ui: &AppWindow, state: &AppState, cache: &mut UiCache) {
     ui.set_storage_limit(i32::from(MAX_STORAGE_RECORDS));
     ui.set_storage_unreadable(storage.unreadable as i32);
     ui.set_storage_revealed(storage.revealed);
-    ui.set_storage_reveal_ttl(storage.reveal_ttl_secs as i32);
     ui.set_storage_add_enabled(storage.add_enabled());
     ui.set_storage_form_error(storage.form_message().into());
     ui.set_storage_title_limit(MAX_RECORD_TITLE_BYTES as i32);

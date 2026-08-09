@@ -112,7 +112,6 @@ export component StoragePage inherits VerticalLayout {
     in property <int> limit;
     in property <int> unreadable;
     in property <bool> revealed;
-    in property <int> reveal_ttl;
     in property <[StorageRow]> records;
     in property <bool> add_enabled;
     in property <string> form_error;
@@ -151,23 +150,10 @@ export component StoragePage inherits VerticalLayout {
                 HorizontalLayout {
                     spacing: Space.s_8;
                     alignment: end;
-                    if root.exists && root.count > 0 && root.revealed: VerticalLayout {
-                        alignment: center;
-                        Text {
-                            text: root.reveal_ttl + "s";
-                            color: Palette.text_quiet;
-                            font-family: Fonts.mono;
-                            font-size: Fonts.small;
-                        }
-                    }
                     if root.exists && root.count > 0: VerticalLayout {
                         alignment: center;
                         GhostButton {
-                            label: root.revealed ? "Hide records" : "Reveal records";
-                            has_icon: true;
-                            icon: root.revealed
-                                ? @image-url("../../assets/icons/eye-off.svg")
-                                : @image-url("../../assets/icons/eye.svg");
+                            label: root.revealed ? "Hide" : "Reveal";
                             clicked => {
                                 UserActivity.ping();
                                 if (root.revealed) { root.hide_records(); } else { root.reveal_records(); }
