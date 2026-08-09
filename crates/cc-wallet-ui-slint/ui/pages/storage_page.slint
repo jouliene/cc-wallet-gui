@@ -312,8 +312,13 @@ export component StoragePage inherits VerticalLayout {
                     }
                 }
 
-                if root.count > 0: Rectangle {
+                if root.count > 0: hold := Rectangle {
                     vertical-stretch: 1;
+                    // A row only partly under the fade is still a row you cannot
+                    // read, so it counts. Rounding to nearest called that zero
+                    // and the hint contradicted itself.
+                    property <int> below: max(0,
+                        ceil((list.viewport-height + list.viewport-y - self.height) / 54px));
                     list := Flickable {
                     viewport-height: root.count * 54px;
                     VerticalLayout {
@@ -333,8 +338,7 @@ export component StoragePage inherits VerticalLayout {
                     // Anything below the fold is invisible otherwise, so the
                     // list says so: the rows fade out under a count of what is
                     // still down there, and both go away at the bottom.
-                    if list.viewport-height > list.height
-                        && -list.viewport-y < list.viewport-height - list.height - 1px: Rectangle {
+                    if hold.below > 0: Rectangle {
                         y: parent.height - self.height;
                         height: 44px;
                         background: @linear-gradient(180deg,
@@ -365,8 +369,7 @@ export component StoragePage inherits VerticalLayout {
                                             }
                                         }
                                         Text {
-                                            text: round((list.viewport-height + list.viewport-y - list.height) / 54px)
-                                                + " more below";
+                                            text: hold.below + " more below";
                                             color: Palette.text_quiet;
                                             font-family: Fonts.ui;
                                             font-weight: Fonts.bold;
