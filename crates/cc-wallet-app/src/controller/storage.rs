@@ -2,10 +2,11 @@ use std::time::{Duration, Instant};
 
 use cc_wallet_chain::{CandidateBroadcastOutcome, ChainError, MAX_STORAGE_RECORDS};
 use cc_wallet_domain::{StorageOp, StorageSnapshot, WalletInputs, next_free_id, validate_record};
+use zeroize::Zeroizing;
 
 use super::AppController;
 use crate::event::AppEvent;
-use crate::state::{AuthModal, AuthMode, AuthPurpose, StorageUi};
+use crate::state::{AuthModal, AuthMode, AuthPurpose, Deadline, StorageUi};
 
 pub(super) struct PendingStorage {
     pub op: StorageOp,
@@ -16,6 +17,8 @@ pub(super) struct PendingStorage {
 const STORAGE_POLL_EVERY: Duration = Duration::from_millis(1500);
 
 const STORAGE_POLL_FOR: Duration = Duration::from_secs(90);
+
+const RECORD_REVEAL_FOR: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum StorageExpectation {
@@ -100,6 +103,7 @@ impl AppController {
         snapshot: StorageSnapshot,
     ) {
         if generation != self.subscription_generation || seq != self.storage_seq {
+            self.abandon_stale_storage_read(seq);
             return;
         }
         self.state.storage.loading = false;
@@ -142,10 +146,25 @@ impl AppController {
 
     pub(super) fn apply_storage_load_failed(&mut self, generation: u64, seq: u64, error: String) {
         if generation != self.subscription_generation || seq != self.storage_seq {
+            self.abandon_stale_storage_read(seq);
             return;
         }
         self.state.storage.loading = false;
         self.state.storage.error = error;
+    }
+
+    /// A read whose wallet identity changed under it is discarded, but it is
+    /// still the answer to the only request in flight. Leaving `loading` set
+    /// would strand the page on "Looking for your storage…" with nothing left to
+    /// resolve it, so the read is re-armed instead.
+    fn abandon_stale_storage_read(&mut self, seq: u64) {
+        if seq != self.storage_seq || !self.state.storage.loading {
+            return;
+        }
+        self.state.storage.loading = false;
+        if self.state.selected_tab == crate::state::AppTab::Storage {
+            self.refresh_storage();
+        }
     }
 
     pub(super) fn set_storage_title(&mut self, title: String) {
@@ -211,8 +230,53 @@ impl AppController {
         else {
             return;
         };
-        let data = record.data.clone();
-        self.copy_text(&data);
+        let data = Zeroizing::new(record.data.clone());
+        self.copy_secret_to_clipboard(data);
+    }
+
+    pub(super) fn reveal_storage_records(&mut self) {
+        if self.state.storage.records.is_empty() {
+            return;
+        }
+        self.state.auth = AuthModal {
+            open: true,
+            mode: AuthMode::Enter,
+            purpose: AuthPurpose::RevealRecords,
+            send_options_editable: false,
+            error: String::new(),
+        };
+    }
+
+    pub(super) fn show_records_for_one_minute(&mut self) {
+        self.state.storage.revealed = true;
+        self.state.records_reveal_deadline = Some(Deadline::after(RECORD_REVEAL_FOR));
+        self.refresh_record_reveal_ttl();
+    }
+
+    pub(super) fn hide_storage_records(&mut self) {
+        self.state.storage.revealed = false;
+        self.state.records_reveal_deadline = None;
+        self.state.storage.reveal_ttl_secs = 0;
+        self.clear_seed_from_clipboard();
+    }
+
+    pub(super) fn expire_record_reveal(&mut self) {
+        if self
+            .state
+            .records_reveal_deadline
+            .is_some_and(|deadline| deadline.expired())
+        {
+            self.hide_storage_records();
+            return;
+        }
+        self.refresh_record_reveal_ttl();
+    }
+
+    fn refresh_record_reveal_ttl(&mut self) {
+        self.state.storage.reveal_ttl_secs = self
+            .state
+            .records_reveal_deadline
+            .map_or(0, |deadline| deadline.remaining_secs());
     }
 
     fn request_storage_op(&mut self, op: StorageOp) {
@@ -236,6 +300,7 @@ impl AppController {
         };
         self.auth_generation = generation;
         self.state.storage.pending_label = op.label().to_owned();
+        self.state.storage.pending_danger = matches!(op, StorageOp::Delete { .. });
         self.pending_storage = Some(PendingStorage {
             op,
             inputs,
@@ -258,12 +323,17 @@ impl AppController {
     pub(super) fn clear_pending_storage(&mut self) {
         self.pending_storage = None;
         self.state.storage.pending_label.clear();
+        self.state.storage.pending_danger = false;
     }
 
     pub(super) fn reset_storage_for_new_identity(&mut self) {
         self.clear_pending_storage();
         self.storage_watch = None;
+        self.state.records_reveal_deadline = None;
         self.state.storage = StorageUi::default();
+        if self.state.selected_tab == crate::state::AppTab::Storage {
+            self.refresh_storage();
+        }
     }
 
     pub(super) fn dispatch_authorized_storage(&mut self) {

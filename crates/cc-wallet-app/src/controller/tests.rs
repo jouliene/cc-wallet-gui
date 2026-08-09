@@ -11598,3 +11598,128 @@ fn locking_forgets_every_decrypted_record() {
     assert!(c.state().storage.data_input.is_empty());
     cleanup(&dir);
 }
+
+#[test]
+fn record_contents_stay_hidden_until_the_password_reveals_them() {
+    let dir = temp_dir("storage-reveal");
+    let chain = FakeChain::default();
+    let (mut c, _mem) =
+        storage_controller(&dir, chain, vec![stored(1, "My email", "abc@gmail.com")]);
+
+    assert!(
+        !c.state().storage.revealed,
+        "a freshly opened storage never shows what the records hold"
+    );
+
+    c.handle_command(AppCommand::RevealStorageRecords);
+    settle(&mut c);
+    assert!(c.state().auth.open, "revealing asks for the password");
+    assert_eq!(c.state().auth.purpose, AuthPurpose::RevealRecords);
+    assert!(
+        !c.state().storage.revealed,
+        "asking is not the same as revealing"
+    );
+
+    authorize(&mut c);
+    assert!(c.state().storage.revealed);
+    assert!(
+        c.state().storage.reveal_ttl_secs > 0 && c.state().storage.reveal_ttl_secs <= 60,
+        "the reveal is on a countdown: {}",
+        c.state().storage.reveal_ttl_secs
+    );
+    cleanup(&dir);
+}
+
+#[test]
+fn a_revealed_record_hides_itself_again_when_its_minute_is_up() {
+    let dir = temp_dir("storage-reveal-expiry");
+    let chain = FakeChain::default();
+    let (mut c, _mem) = storage_controller(&dir, chain, vec![stored(1, "My email", "secret")]);
+
+    c.handle_command(AppCommand::RevealStorageRecords);
+    settle(&mut c);
+    authorize(&mut c);
+    assert!(c.state().storage.revealed);
+
+    c.state_mut().records_reveal_deadline = Some(Deadline::after(Duration::ZERO));
+    c.tick();
+
+    assert!(
+        !c.state().storage.revealed,
+        "an expired reveal hides the records again"
+    );
+    assert_eq!(c.state().storage.reveal_ttl_secs, 0);
+    cleanup(&dir);
+}
+
+#[test]
+fn hiding_records_also_wipes_what_was_copied_from_them() {
+    let dir = temp_dir("storage-copy-wipe");
+    let chain = FakeChain::default();
+    let (mut c, mem) =
+        storage_controller(&dir, chain, vec![stored(1, "My email", "abc@gmail.com")]);
+
+    c.handle_command(AppCommand::CopyStorageRecord(1));
+    settle(&mut c);
+    assert_eq!(clipboard_of(&mem), "abc@gmail.com");
+
+    c.handle_command(AppCommand::HideStorageRecords);
+    settle(&mut c);
+    assert_eq!(
+        clipboard_of(&mem),
+        "",
+        "a copied record is wiped from the clipboard, like the seed phrase"
+    );
+    cleanup(&dir);
+}
+
+#[test]
+fn a_copied_record_is_wiped_when_the_wallet_locks() {
+    let dir = temp_dir("storage-copy-lock");
+    let chain = FakeChain::default();
+    let (mut c, mem) =
+        storage_controller(&dir, chain, vec![stored(1, "My email", "abc@gmail.com")]);
+
+    c.handle_command(AppCommand::CopyStorageRecord(1));
+    settle(&mut c);
+    assert_eq!(clipboard_of(&mem), "abc@gmail.com");
+
+    c.handle_command(AppCommand::LockNow);
+    settle(&mut c);
+    assert_eq!(
+        clipboard_of(&mem),
+        "",
+        "locking takes the record off the clipboard with it"
+    );
+    cleanup(&dir);
+}
+
+#[test]
+fn only_deleting_a_record_is_dressed_as_dangerous() {
+    let dir = temp_dir("storage-danger");
+    let chain = FakeChain::default();
+    let (mut c, _mem) = storage_controller(&dir, chain.clone(), vec![stored(1, "note", "secret")]);
+
+    c.handle_command(AppCommand::SetStorageTitle("another".to_owned()));
+    c.handle_command(AppCommand::SetStorageData("value".to_owned()));
+    c.handle_command(AppCommand::AddStorageRecord);
+    settle(&mut c);
+    assert!(
+        !c.state().storage.pending_danger,
+        "saving a record is an ordinary action"
+    );
+    c.handle_command(AppCommand::AuthCancel);
+    settle(&mut c);
+    assert!(
+        !c.state().storage.pending_danger,
+        "cancelling clears the danger flag with the request"
+    );
+
+    c.handle_command(AppCommand::DeleteStorageRecord(1));
+    settle(&mut c);
+    assert!(
+        c.state().storage.pending_danger,
+        "deleting is the one that must not look routine"
+    );
+    cleanup(&dir);
+}

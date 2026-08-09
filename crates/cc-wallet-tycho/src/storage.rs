@@ -11,7 +11,7 @@ use crate::transport::AccountState;
 
 pub const STORAGE_CONTRACT: &str = "CC Storage";
 
-pub const STORAGE_CODE_BOC: &str = "te6ccgECCgEAAXEAART/APSkE/S88sgLAQIBYgIDAtjQ7aLt+/iRkTDg+Jhu8uBrINdJwSCRMOAg10nCX/LgbdMf0z/tRND6SNMP9ATR+JIjxwXy4GUlghBXpwABuuMPAcj6UhLLD/QAye1U+JKCEDuaygBy+wLIz4UI+lJwzwtuEssfyz/JgQCC+wAEBQIBIAYHAH74l4IJMS0AvvLgbgPTH9TRIcIA8uBmIIAQ+UBvpW+hbDHy4GhTFIAg9A5voTGaIoMIufLgZwKkAt9AFIAg9BcA3iWCEFenAAK6jklbA4IQV6cAA7qOOviXAfoA0SDCAPLgbPgnbxBYoSGCEDuaygCgvvLgasjPhQgT+lJY+gKCEFenAAPPC4rLP8mAEPsA2zHg8sBk4fiXggkxLQC+8uBuA9Mf0VADgCD0W/LgaQKlAgIBZggJAB2+sedqJofSQY6YeY+gJowAHbDRO1E0PpIMdMP9AQx0YAAdsml7UTQ+kjTDzH0BDHRg";
+pub const STORAGE_CODE_BOC: &str = "te6ccgECCwEAAY4AART/APSkE/S88sgLAQIBYgIDA/jQ7aLt+/iRkTDg+Jhu8uBrINdJwSCRMOAg10nCX/LgbdMf0z/tRND6SNMP9ATR+JIjxwXy4GUlghBXpwABuuMPAcj6UhLLD/QAye1U+JL4l/gs+CdvEFihIaCCEDuaygC+k3T7ApowghA7msoAcvsC4sjPhQj6UnDPC24SBAUGAgEgBwgAfviXggkxLQC+8uBuA9Mf1NEhwgDy4GYggBD5QG+lb6FsMfLgaFMUgCD0Dm+hMZoigwi58uBnAqQC30AUgCD0FwDeJYIQV6cAArqOSVsDghBXpwADuo46+JcB+gDRIMIA8uBs+CdvEFihIYIQO5rKAKC+8uBqyM+FCBP6Ulj6AoIQV6cAA88Liss/yYAQ+wDbMeDywGTh+JeCCTEtAL7y4G4D0x/RUAOAIPRb8uBpAqUCABTLH8s/yYEAgvsAAgFmCQoAHb6x52omh9JBjph5j6AmjAAdsNE7UTQ+kgx0w/0BDHRgAB2yaXtRND6SNMPMfQEMdGA=";
 
 static STORAGE_CODE: LazyLock<Cell> =
     LazyLock::new(|| Boc::decode_base64(STORAGE_CODE_BOC).expect("invalid CC Storage code BOC"));
@@ -268,7 +268,7 @@ mod tests {
     fn the_code_hash_matches_the_compiled_artifact() {
         assert_eq!(
             storage_code_hash(),
-            "d603f744b89bcd52344355cbfa3421cad1eaf3c3a7a91747e471d7099ef85567"
+            "7f20b33ba1f2ee78dc471a2d10bd35cf14703f1dd1a568a10a9e02b1780b3847"
         );
     }
 

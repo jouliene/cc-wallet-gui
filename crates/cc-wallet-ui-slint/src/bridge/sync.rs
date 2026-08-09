@@ -758,12 +758,14 @@ fn sync_auth(ui: &AppWindow, state: &AppState, cache: &mut UiCache) {
         AuthPurpose::Send => "send",
         AuthPurpose::Swap => "swap",
         AuthPurpose::Storage => "storage",
+        AuthPurpose::RevealRecords => "revealrecords",
         AuthPurpose::ChangePassword => "changepassword",
         AuthPurpose::RevealSeed => "revealseed",
         AuthPurpose::DeleteWallet => "deletewallet",
         AuthPurpose::ChangeSecuritySetting => "changesetting",
     };
     ui.set_auth_purpose(purpose.into());
+    ui.set_auth_danger(state.auth.purpose == AuthPurpose::Storage && state.storage.pending_danger);
     let confirm = state.swap.confirm.as_ref();
     ui.set_swap_confirm_in(match confirm {
         Some(figures) => token_amount(
@@ -806,6 +808,10 @@ fn sync_auth(ui: &AppWindow, state: &AppState, cache: &mut UiCache) {
             "Confirm swap".into(),
             "Review the swap, then confirm to submit.".into(),
         ),
+        (_, AuthPurpose::Storage) if state.storage.pending_danger => (
+            "Delete this record?".into(),
+            "The record is removed from the chain and cannot be recovered from it.".into(),
+        ),
         (AuthMode::Enter, AuthPurpose::Storage) => (
             format!("Sign — {}", state.storage.pending_label),
             "Your records are encrypted with this wallet's key. Enter your password to sign."
@@ -814,6 +820,10 @@ fn sync_auth(ui: &AppWindow, state: &AppState, cache: &mut UiCache) {
         (AuthMode::Confirm, AuthPurpose::Storage) => (
             format!("Confirm — {}", state.storage.pending_label),
             "Your records are encrypted with this wallet's key. Confirm to submit.".into(),
+        ),
+        (AuthMode::Enter, AuthPurpose::RevealRecords) => (
+            "Enter password".into(),
+            "Enter your password to show your records for a minute.".into(),
         ),
         (AuthMode::Enter, AuthPurpose::RevealSeed) => (
             "Enter password".into(),
@@ -948,6 +958,8 @@ fn sync_storage(ui: &AppWindow, state: &AppState) {
     ui.set_storage_count(storage.records.len() as i32);
     ui.set_storage_limit(i32::from(MAX_STORAGE_RECORDS));
     ui.set_storage_unreadable(storage.unreadable as i32);
+    ui.set_storage_revealed(storage.revealed);
+    ui.set_storage_reveal_ttl(storage.reveal_ttl_secs as i32);
     ui.set_storage_add_enabled(storage.add_enabled());
     ui.set_storage_form_error(storage.form_message().into());
     ui.set_storage_title_limit(MAX_RECORD_TITLE_BYTES as i32);

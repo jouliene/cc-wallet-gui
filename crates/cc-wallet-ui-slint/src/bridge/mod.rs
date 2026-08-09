@@ -106,6 +106,8 @@ struct StorageDrive {
     create: bool,
     add: Vec<(String, String)>,
     delete: Vec<u32>,
+    ask: bool,
+    reveal: bool,
     settled_at: Option<std::time::Instant>,
 }
 
@@ -134,15 +136,20 @@ impl StorageDrive {
                         .collect()
                 })
                 .unwrap_or_default(),
+            ask: var("CC_WALLET_TEST_STORAGE_ASK").is_some(),
+            reveal: var("CC_WALLET_TEST_STORAGE_REVEAL").is_some(),
             settled_at: None,
         }
     }
 
     fn idle(&self) -> bool {
-        !self.create && self.add.is_empty() && self.delete.is_empty()
+        !self.create && !self.reveal && self.add.is_empty() && self.delete.is_empty()
     }
 
-    fn authorize(controller: &mut AppController) {
+    fn authorize(&self, controller: &mut AppController) {
+        if self.ask {
+            return;
+        }
         if let Ok(pw) = std::env::var("CC_WALLET_TEST_PASSWORD") {
             controller.handle_command(AppCommand::AuthSubmit {
                 pw: Password::new(pw),
@@ -175,7 +182,7 @@ impl StorageDrive {
                 self.create = false;
             } else {
                 controller.handle_command(AppCommand::CreateStorage);
-                Self::authorize(controller);
+                self.authorize(controller);
                 self.create = false;
                 self.settled_at = Some(std::time::Instant::now());
             }
@@ -189,15 +196,21 @@ impl StorageDrive {
             controller.handle_command(AppCommand::SetStorageTitle(title));
             controller.handle_command(AppCommand::SetStorageData(data));
             controller.handle_command(AppCommand::AddStorageRecord);
-            Self::authorize(controller);
+            self.authorize(controller);
             self.settled_at = Some(std::time::Instant::now());
             return;
         }
         if !self.delete.is_empty() {
             let id = self.delete.remove(0);
             controller.handle_command(AppCommand::DeleteStorageRecord(id));
-            Self::authorize(controller);
+            self.authorize(controller);
             self.settled_at = Some(std::time::Instant::now());
+            return;
+        }
+        if self.reveal {
+            self.reveal = false;
+            controller.handle_command(AppCommand::RevealStorageRecords);
+            self.authorize(controller);
         }
     }
 }

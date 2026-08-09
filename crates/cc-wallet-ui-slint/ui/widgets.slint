@@ -508,6 +508,22 @@ export component CopyButton inherits IconButton {
     reset := Timer { interval: Motion.ack_dwell; running: false; triggered => { root.copied = false; self.running = false; } }
 }
 
+export component SecretCopyButton inherits IconButton {
+    in property <color> idle_tint: Palette.text_quiet;
+    property <bool> copied: false;
+    callback copy();
+    icon: root.copied ? @image-url("../assets/icons/check.svg") : @image-url("../assets/icons/copy.svg");
+    tint: root.copied ? Palette.positive : root.idle_tint;
+    size: Sizes.control_dense;
+    icon_size: Sizes.icon_sm;
+    clicked => {
+        root.copy();
+        root.copied = true;
+        reset.running = true;
+    }
+    reset := Timer { interval: Motion.ack_dwell; running: false; triggered => { root.copied = false; self.running = false; } }
+}
+
 export component RefreshButton inherits IconButton {
     in property <color> idle_tint: Palette.text_quiet;
     in property <bool> acknowledged: false;
@@ -790,6 +806,8 @@ export component Field inherits Rectangle {
     in property <bool> handles_escape: false;
 
     property <bool> lit: (input.has-focus || root.editing_border) && root.show_focus_border;
+    property <length> caret_margin: 6px;
+    property <length> line_height: root.font_size * 1.6;
 
     height: root.height_;
     border-radius: Radii.md;
@@ -829,15 +847,45 @@ export component Field inherits Rectangle {
         }
     }
 
+    scroll := Flickable {
+        x: root.pad_left;
+        y: root.multiline ? root.pad_left : 0px;
+        width: max(1px, parent.width - root.pad_left - root.pad_right);
+        height: root.multiline ? parent.height - 2 * root.pad_left : parent.height;
+        interactive: root.multiline;
+        viewport-width: root.multiline
+            ? self.width
+            : max(self.width, input.preferred-width + input.text-cursor-width);
+        viewport-height: root.multiline
+            ? max(self.height, input.preferred-height)
+            : self.height;
+
     input := TextInput {
         text <=> root.text;
         enabled: root.enabled;
         read-only: root.read_only;
         input-type: root.input_type;
-        x: root.pad_left;
-        y: root.multiline ? root.pad_left : 0px;
-        width: max(1px, parent.width - root.pad_left - root.pad_right);
-        height: root.multiline ? parent.height - 2 * root.pad_left : parent.height;
+        width: scroll.viewport-width;
+        height: scroll.viewport-height;
+        page-height: scroll.height;
+        cursor-position-changed(cpos) => {
+            if (cpos.x + scroll.viewport-x < root.caret_margin) {
+                scroll.viewport-x = min(0px,
+                    max(scroll.width - self.width, root.caret_margin - cpos.x));
+            } else if (cpos.x + scroll.viewport-x > scroll.width - root.caret_margin) {
+                scroll.viewport-x = min(0px,
+                    max(scroll.width - self.width,
+                        scroll.width - cpos.x - root.caret_margin));
+            }
+            if (cpos.y + scroll.viewport-y < 0px) {
+                scroll.viewport-y = min(0px,
+                    max(scroll.height - self.height, - cpos.y));
+            } else if (cpos.y + scroll.viewport-y > scroll.height - root.line_height) {
+                scroll.viewport-y = min(0px,
+                    max(scroll.height - self.height,
+                        scroll.height - cpos.y - root.line_height));
+            }
+        }
         color: Palette.text_primary;
         opacity: root.text_opacity;
         font-family: root.font_family;
@@ -886,6 +934,7 @@ export component Field inherits Rectangle {
             }
             return reject;
         }
+    }
     }
 
     if root.money_int != "": Text {

@@ -107,6 +107,7 @@ pub(crate) enum KeyAction {
         remember: bool,
         generation: u64,
     },
+    RevealRecords,
     VerifyForChangePassword,
     ChangePassword,
     RevealSeed,
@@ -122,6 +123,7 @@ impl KeyAction {
             Self::ConfirmSend { .. }
                 | Self::ConfirmSwap { .. }
                 | Self::ConfirmStorage { .. }
+                | Self::RevealRecords
                 | Self::VerifyForChangePassword
                 | Self::RevealSeed
                 | Self::DeleteWallet
@@ -726,6 +728,8 @@ impl AppController {
             AppCommand::SetStorageData(data) => self.set_storage_data(data),
             AppCommand::AddStorageRecord => self.add_storage_record(),
             AppCommand::ClearStorageForm => self.clear_storage_form(),
+            AppCommand::RevealStorageRecords => self.reveal_storage_records(),
+            AppCommand::HideStorageRecords => self.hide_storage_records(),
             AppCommand::DeleteStorageRecord(id) => self.delete_storage_record(id),
             AppCommand::CopyStorageRecord(id) => self.copy_storage_record(id),
             AppCommand::RequestRiskOverride => self.request_risk_override(),
@@ -1048,6 +1052,7 @@ impl AppController {
             self.on_resume_from_suspend();
         }
         self.poll_storage_settlement();
+        self.expire_record_reveal();
         if let Some(deadline) = self.clipboard_deadline
             && deadline.expired()
         {
@@ -1730,6 +1735,11 @@ impl AppController {
                     self.state.extend_autosign();
                 }
                 self.dispatch_authorized_swap();
+            }
+            KeyAction::RevealRecords => {
+                self.state.auth.open = false;
+                self.state.auth.error = String::new();
+                self.show_records_for_one_minute();
             }
             KeyAction::RevealSeed => {
                 self.state.auth.open = false;

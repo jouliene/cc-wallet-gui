@@ -563,6 +563,9 @@ impl AppController {
                 }
                 self.spawn_change_password(pw);
             }
+            (AuthMode::Enter, AuthPurpose::RevealRecords) => {
+                self.spawn_unlock(pw, KeyAction::RevealRecords);
+            }
             (AuthMode::Enter, AuthPurpose::RevealSeed) => {
                 self.spawn_unlock(pw, KeyAction::RevealSeed);
             }
@@ -638,6 +641,28 @@ impl AppController {
                         "Could not copy to the clipboard. Write the phrase down instead."
                             .to_owned();
                 }
+            }
+        }
+        self.refresh_seed_copy_ttl();
+    }
+
+    pub(super) fn copy_secret_to_clipboard(&mut self, secret: Zeroizing<String>) {
+        if secret.is_empty() {
+            return;
+        }
+        self.clear_seed_from_clipboard();
+        let prior_wipe_unresolved = self.clipboard_secret.is_some();
+        match self.clipboard.set(Selection::Clipboard, &secret) {
+            Ok(()) => {
+                self.extend_tracked_clipboard_secret(secret, prior_wipe_unresolved);
+                self.clipboard_copy_explicit = true;
+                self.state.clipboard_notice.clear();
+            }
+            Err(error) => {
+                eprintln!("cc-wallet: could not copy to the clipboard: {error}");
+                self.clipboard_secret = None;
+                self.clipboard_deadline = None;
+                self.state.clipboard_notice = "Could not copy to the clipboard.".to_owned();
             }
         }
         self.refresh_seed_copy_ttl();

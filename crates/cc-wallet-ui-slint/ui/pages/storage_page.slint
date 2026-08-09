@@ -1,11 +1,12 @@
 import { Theme } from "../theme.slint";
-import { Palette, Fonts, Radii, Space, Motion } from "../design_tokens.slint";
-import { Icon, Card, CardHeader, MicroLabel, PrimaryButton, GhostButton, IconButton, CopyButton, Field, EmptyState, InlineError, Amount, UserActivity, ClipboardBridge } from "../widgets.slint";
+import { Palette, Fonts, Radii, Space, Motion, Sizes } from "../design_tokens.slint";
+import { Icon, Card, CardHeader, MicroLabel, PrimaryButton, GhostButton, IconButton, CopyButton, SecretCopyButton, Field, EmptyState, InlineError, Amount, UserActivity, ClipboardBridge } from "../widgets.slint";
 import { StorageRow, TokenAmount } from "../models.slint";
 
 component RecordRow inherits Rectangle {
     in property <StorageRow> record;
     in property <bool> busy;
+    in property <bool> revealed;
     in property <length> number_w;
     in property <length> title_w;
     callback delete_record(int);
@@ -55,12 +56,18 @@ component RecordRow inherits Rectangle {
         VerticalLayout {
             alignment: center;
             horizontal-stretch: 1;
-            Text {
+            if root.revealed: Text {
                 text: root.record.data;
                 color: Palette.text_secondary;
                 font-family: Fonts.mono;
                 font-size: Fonts.small;
                 overflow: elide;
+            }
+            if !root.revealed: Text {
+                text: "••••••••••••";
+                color: Palette.text_quiet;
+                font-family: Fonts.mono;
+                font-size: Fonts.small;
             }
         }
 
@@ -68,14 +75,23 @@ component RecordRow inherits Rectangle {
             alignment: center;
             HorizontalLayout {
                 spacing: Space.s_4;
-                CopyButton {
-                    clicked => { root.copy_record(root.record.id); }
+                alignment: end;
+                VerticalLayout {
+                    alignment: center;
+                    SecretCopyButton {
+                        copy => { root.copy_record(root.record.id); }
+                    }
                 }
-                IconButton {
-                    icon: @image-url("../../assets/icons/trash.svg");
-                    tint: Palette.negative;
-                    enabled: !root.busy;
-                    clicked => { root.delete_record(root.record.id); }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: @image-url("../../assets/icons/trash.svg");
+                        tint: Palette.negative;
+                        size: Sizes.control_dense;
+                        icon_size: Sizes.icon_sm;
+                        enabled: !root.busy;
+                        clicked => { root.delete_record(root.record.id); }
+                    }
                 }
             }
         }
@@ -96,6 +112,8 @@ export component StoragePage inherits VerticalLayout {
     in property <int> count;
     in property <int> limit;
     in property <int> unreadable;
+    in property <bool> revealed;
+    in property <int> reveal_ttl;
     in property <[StorageRow]> records;
     in property <bool> add_enabled;
     in property <string> form_error;
@@ -110,6 +128,8 @@ export component StoragePage inherits VerticalLayout {
     callback refresh_storage();
     callback add_record();
     callback clear_form();
+    callback reveal_records();
+    callback hide_records();
     callback delete_record(int);
     callback copy_record(int);
     callback title_edited(string);
@@ -132,6 +152,22 @@ export component StoragePage inherits VerticalLayout {
                 HorizontalLayout {
                     spacing: Space.s_8;
                     alignment: end;
+                    if root.exists && root.count > 0: VerticalLayout {
+                        alignment: center;
+                        GhostButton {
+                            label: root.revealed
+                                ? ("Hide records  " + root.reveal_ttl + "s")
+                                : "Reveal records";
+                            has_icon: true;
+                            icon: root.revealed
+                                ? @image-url("../../assets/icons/eye-off.svg")
+                                : @image-url("../../assets/icons/eye.svg");
+                            clicked => {
+                                UserActivity.ping();
+                                if (root.revealed) { root.hide_records(); } else { root.reveal_records(); }
+                            }
+                        }
+                    }
                     VerticalLayout {
                         alignment: center;
                         IconButton {
@@ -246,7 +282,13 @@ export component StoragePage inherits VerticalLayout {
                         spacing: Space.s_12;
                         VerticalLayout { alignment: center; width: 52px; MicroLabel { text: "#"; } }
                         VerticalLayout { alignment: center; width: 220px; MicroLabel { text: "NAME"; } }
-                        VerticalLayout { alignment: center; horizontal-stretch: 1; MicroLabel { text: "RECORD"; } }
+                        VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 1;
+                        MicroLabel {
+                            text: root.revealed ? "RECORD" : "RECORD — hidden";
+                        }
+                    }
                         VerticalLayout { alignment: center; width: 72px; }
                     }
                     Rectangle {
@@ -274,6 +316,7 @@ export component StoragePage inherits VerticalLayout {
                         for row in root.records: RecordRow {
                             record: row;
                             busy: root.busy;
+                            revealed: root.revealed;
                             number_w: 52px;
                             title_w: 220px;
                             delete_record(id) => { UserActivity.ping(); root.delete_record(id); }

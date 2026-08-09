@@ -50,6 +50,7 @@ export component AuthModal inherits Rectangle {
     callback submit();
     callback cancel();
     callback set_allow_unbounced(bool);
+    in property <bool> danger: false;
 
     property <string> cta:
         root.mode == "create" ? "Create & continue"
@@ -59,7 +60,10 @@ export component AuthModal inherits Rectangle {
         : (root.purpose == "changepassword" ? "Continue"
         : (root.purpose == "deletewallet" ? "Delete wallet"
         : (root.purpose == "revealseed" ? "Reveal"
-        : (root.purpose == "changesetting" ? "Confirm" : "Unlock")))))));
+        : (root.purpose == "changesetting" ? "Confirm"
+        : (root.purpose == "revealrecords" ? "Reveal"
+        : (root.purpose == "storage" ? (root.danger ? "Delete record" : "Sign & save")
+        : "Unlock")))))))));
     property <bool> pw_visible: false;
     property <bool> recipient_needs_ack: root.auth_recipient_ack_label != "";
     property <bool> can_submit: !root.busy
@@ -96,7 +100,11 @@ export component AuthModal inherits Rectangle {
             spacing: Space.s_16;
 
             DialogHeader {
-                icon: @image-url("../../assets/icons/lock.svg");
+                icon: root.danger
+                    ? @image-url("../../assets/icons/trash.svg")
+                    : @image-url("../../assets/icons/lock.svg");
+                badge_bg: root.danger ? Palette.negative_quiet : Palette.accent_quiet;
+                badge_tint: root.danger ? Palette.negative : Palette.accent_text;
                 title: root.title;
                 subtitle: root.subtitle;
             }
@@ -361,6 +369,7 @@ export component AuthModal inherits Rectangle {
                 PrimaryButton {
                     label: root.busy ? "Verifying…" : root.cta;
                     height: 40px;
+                    bg: root.danger ? Palette.negative_fill : Palette.accent_fill;
                     enabled: root.can_submit;
                     clicked => { root.submit(); }
                 }

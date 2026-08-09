@@ -110,6 +110,7 @@ pub enum AuthPurpose {
     Send,
     Swap,
     Storage,
+    RevealRecords,
     ChangePassword,
     RevealSeed,
     DeleteWallet,
@@ -214,6 +215,9 @@ pub struct StorageUi {
     pub data_input: String,
     pub form_error: String,
     pub notice: String,
+    pub revealed: bool,
+    pub reveal_ttl_secs: u32,
+    pub pending_danger: bool,
 }
 
 impl StorageUi {
@@ -340,6 +344,7 @@ pub struct AppState {
     pub trace_hash: String,
     pub swap: SwapUi,
     pub storage: StorageUi,
+    pub records_reveal_deadline: Option<Deadline>,
 }
 
 impl Default for AppState {
@@ -430,6 +435,7 @@ impl Default for AppState {
             trace_hash: String::new(),
             swap: SwapUi::default(),
             storage: StorageUi::default(),
+            records_reveal_deadline: None,
         }
     }
 }

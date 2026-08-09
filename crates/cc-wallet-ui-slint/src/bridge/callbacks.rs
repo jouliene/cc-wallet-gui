@@ -172,6 +172,8 @@ pub(super) fn connect_callbacks(
     on0!(on_create_storage, AppCommand::CreateStorage);
     on0!(on_add_storage_record, AppCommand::AddStorageRecord);
     on0!(on_clear_storage_form, AppCommand::ClearStorageForm);
+    on0!(on_reveal_storage_records, AppCommand::RevealStorageRecords);
+    on0!(on_hide_storage_records, AppCommand::HideStorageRecords);
     on1!(
         on_storage_title_edited,
         t,

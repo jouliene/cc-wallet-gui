@@ -174,6 +174,7 @@ export component AppWindow inherits Window {
     in property <string> auth_recipient_notice: "";
     in property <string> auth_recipient_ack_label: "";
     in property <string> auth_error: "";
+    in property <bool> auth_danger: false;
     in property <bool> auth_send_options_editable: false;
     in-out property <string> auth_pw: "";
     in-out property <string> auth_pw2: "";
@@ -231,6 +232,8 @@ export component AppWindow inherits Window {
     in property <int> storage_count: 0;
     in property <int> storage_limit: 512;
     in property <int> storage_unreadable: 0;
+    in property <bool> storage_revealed: false;
+    in property <int> storage_reveal_ttl: 0;
     in property <[StorageRow]> storage_records: [];
     in property <bool> storage_add_enabled: false;
     in property <string> storage_form_error: "";
@@ -245,6 +248,8 @@ export component AppWindow inherits Window {
     callback create_storage();
     callback add_storage_record();
     callback clear_storage_form();
+    callback reveal_storage_records();
+    callback hide_storage_records();
     callback delete_storage_record(int);
     callback copy_storage_record(int);
     callback storage_title_edited(string);
@@ -561,6 +566,8 @@ export component AppWindow inherits Window {
                 count: root.storage_count;
                 limit: root.storage_limit;
                 unreadable: root.storage_unreadable;
+                revealed: root.storage_revealed;
+                reveal_ttl: root.storage_reveal_ttl;
                 records: root.storage_records;
                 add_enabled: root.storage_add_enabled;
                 form_error: root.storage_form_error;
@@ -574,6 +581,8 @@ export component AppWindow inherits Window {
                 refresh_storage => { root.refresh_storage(); }
                 add_record => { root.add_storage_record(); }
                 clear_form => { root.clear_storage_form(); }
+                reveal_records => { root.reveal_storage_records(); }
+                hide_records => { root.hide_storage_records(); }
                 delete_record(id) => { root.delete_storage_record(id); }
                 copy_record(id) => { root.copy_storage_record(id); }
                 title_edited(t) => { root.storage_title_edited(t); }
@@ -646,6 +655,7 @@ export component AppWindow inherits Window {
         auth_recipient_notice: root.auth_recipient_notice;
         auth_recipient_ack_label: root.auth_recipient_ack_label;
         error: root.auth_error;
+        danger: root.auth_danger;
         autolock_mins: root.autolock_mins;
         busy: root.key_busy;
         send_options_editable: root.auth_send_options_editable;
