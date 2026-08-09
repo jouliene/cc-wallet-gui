@@ -12,7 +12,10 @@ component RecordRow inherits Rectangle {
     callback delete_record(int);
     callback copy_record(int);
 
-    height: 54px;
+    // A record may be several lines long, and a record you cannot read in full
+    // is not much use — so the row grows to fit one, while a single-line record
+    // keeps the compact height that lets more of them fit on screen.
+    height: max(44px, body.preferred-height);
     background: ta.has-hover ? Palette.hover_row : transparent;
     animate background { duration: Motion.base; easing: Motion.curve; }
 
@@ -24,13 +27,15 @@ component RecordRow inherits Rectangle {
         background: Palette.border_subtle;
     }
 
-    HorizontalLayout {
+    body := HorizontalLayout {
         padding-left: Space.s_16;
         padding-right: Space.s_8;
+        padding-top: Space.s_12;
+        padding-bottom: Space.s_12;
         spacing: Space.s_12;
 
         VerticalLayout {
-            alignment: center;
+            alignment: start;
             width: root.number_w;
             Text {
                 text: root.record.number;
@@ -41,7 +46,7 @@ component RecordRow inherits Rectangle {
         }
 
         VerticalLayout {
-            alignment: center;
+            alignment: start;
             width: root.title_w;
             Text {
                 text: root.record.title;
@@ -49,19 +54,19 @@ component RecordRow inherits Rectangle {
                 font-family: Fonts.ui;
                 font-weight: Fonts.semibold;
                 font-size: Fonts.body;
-                overflow: elide;
+                wrap: word-wrap;
             }
         }
 
         VerticalLayout {
-            alignment: center;
+            alignment: start;
             horizontal-stretch: 1;
             if root.revealed: Text {
                 text: root.record.data;
                 color: Palette.text_secondary;
                 font-family: Fonts.mono;
                 font-size: Fonts.small;
-                overflow: elide;
+                wrap: word-wrap;
             }
             if !root.revealed: Text {
                 text: "••••••••••••";
@@ -72,26 +77,20 @@ component RecordRow inherits Rectangle {
         }
 
         VerticalLayout {
-            alignment: center;
+            alignment: start;
             HorizontalLayout {
                 spacing: Space.s_4;
                 alignment: end;
-                VerticalLayout {
-                    alignment: center;
-                    SecretCopyButton {
-                        copy => { root.copy_record(root.record.id); }
-                    }
+                SecretCopyButton {
+                    copy => { root.copy_record(root.record.id); }
                 }
-                VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: @image-url("../../assets/icons/trash.svg");
-                        tint: Palette.negative;
-                        size: Sizes.control_dense;
-                        icon_size: Sizes.icon_sm;
-                        enabled: !root.busy;
-                        clicked => { root.delete_record(root.record.id); }
-                    }
+                IconButton {
+                    icon: @image-url("../../assets/icons/trash.svg");
+                    tint: Palette.negative;
+                    size: Sizes.control_dense;
+                    icon_size: Sizes.icon_sm;
+                    enabled: !root.busy;
+                    clicked => { root.delete_record(root.record.id); }
                 }
             }
         }
@@ -314,21 +313,23 @@ export component StoragePage inherits VerticalLayout {
 
                 if root.count > 0: hold := Rectangle {
                     vertical-stretch: 1;
-                    // A row only partly under the fade is still a row you cannot
-                    // read, so it counts. Rounding to nearest called that zero
-                    // and the hint contradicted itself.
-                    property <int> below: max(0,
-                        ceil((list.viewport-height + list.viewport-y - self.height) / 54px));
+                    // Measured against the LIST's own height: taking it from the
+                    // wrapper left the hint claiming there was more after the
+                    // list had already reached its end.
+                    property <bool> more_below:
+                        list.viewport-height - list.height + list.viewport-y > 1px;
                     list := Flickable {
-                    viewport-height: root.count * 54px;
-                    VerticalLayout {
+                    width: parent.width;
+                    height: parent.height;
+                    viewport-height: rows.preferred-height;
+                    rows := VerticalLayout {
                         alignment: start;
                         for row in root.records: RecordRow {
                             record: row;
                             busy: root.busy;
                             revealed: root.revealed;
-                            number_w: 52px;
-                            title_w: 220px;
+                            number_w: 44px;
+                            title_w: 210px;
                             delete_record(id) => { UserActivity.ping(); root.delete_record(id); }
                             copy_record(id) => { root.copy_record(id); }
                         }
@@ -338,7 +339,7 @@ export component StoragePage inherits VerticalLayout {
                     // Anything below the fold is invisible otherwise, so the
                     // list says so: the rows fade out under a count of what is
                     // still down there, and both go away at the bottom.
-                    if hold.below > 0: Rectangle {
+                    if hold.more_below: Rectangle {
                         y: parent.height - self.height;
                         height: 44px;
                         background: @linear-gradient(180deg,
@@ -369,7 +370,7 @@ export component StoragePage inherits VerticalLayout {
                                             }
                                         }
                                         Text {
-                                            text: hold.below + " more below";
+                                            text: "More below";
                                             color: Palette.text_quiet;
                                             font-family: Fonts.ui;
                                             font-weight: Fonts.bold;
@@ -426,12 +427,15 @@ export component StoragePage inherits VerticalLayout {
                 hairline: true;
             }
             VerticalLayout {
-                padding: Space.s_16;
-                spacing: Space.s_10;
+                padding-left: Space.s_16;
+                padding-right: Space.s_16;
+                padding-top: Space.s_10;
+                padding-bottom: Space.s_10;
+                spacing: Space.s_6;
 
                 HorizontalLayout {
                     spacing: Space.s_12;
-                    height: 118px;
+                    height: 96px;
                     VerticalLayout {
                         width: 300px;
                         alignment: start;
@@ -472,7 +476,7 @@ export component StoragePage inherits VerticalLayout {
                             placeholder: "86594423664";
                             font_family: Fonts.mono;
                             multiline: true;
-                            height_: 92px;
+                            height_: 70px;
                             edited(t) => { root.data_edited(t); }
                         }
                     }
@@ -495,7 +499,7 @@ export component StoragePage inherits VerticalLayout {
                 }
 
                 Rectangle {
-                    height: 18px;
+                    height: 16px;
                     if root.form_error != "": InlineError { text: root.form_error; }
                 }
             }
