@@ -148,7 +148,7 @@ impl AppController {
             AppEvent::SubscriptionUpdate { generation, update } => {
                 if generation == self.subscription_generation {
                     self.state.subscription_status = "account update received".to_owned();
-                    let _ = update;
+                    self.record_account_announcement(update.max_lt);
                     self.expedite_journal_reconciliation();
                     self.fetch_transactions(generation);
                     self.auto_refresh_wallet(generation);

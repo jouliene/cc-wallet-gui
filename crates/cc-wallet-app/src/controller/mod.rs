@@ -213,6 +213,7 @@ struct LoadRuntime {
 struct SessionRuntime {
     pending_sends: Vec<(u64, Option<Instant>)>,
     pending_externals: Vec<(Digest32, Instant)>,
+    announcements: Vec<(u64, Instant)>,
     awaiting_send_lt: Option<u64>,
     in_flight_record_id: Option<RecordId>,
     dest_check_task: Option<tokio::task::JoinHandle<()>>,

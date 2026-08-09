@@ -3124,6 +3124,8 @@ fn optimistic_pending_row_is_shown_then_reconciled_by_the_confirmed_tx() {
     c.arm_awaiting_send_finality();
     assert!(c.session.pending_sends[0].1.is_some());
 
+    c.record_account_announcement(8_000_000);
+
     let confirmed = ActivityEvent {
         tx_hash: optional_digest("realtx"),
         counterparty: "0:other".to_owned(),
@@ -3139,7 +3141,10 @@ fn optimistic_pending_row_is_shown_then_reconciled_by_the_confirmed_tx() {
     let row = &c.state().activity[0];
     assert!(!row.pending);
     assert_eq!(row.lt, 8_000_000);
-    assert!(row.finality_ms.is_some());
+    assert!(
+        row.finality_ms.is_some(),
+        "the subscription announced this transaction, so the row can say how long it took"
+    );
     assert!(c.session.pending_sends.is_empty());
     cleanup(&dir);
 }
@@ -3222,15 +3227,19 @@ fn rpc_confirmed_activity_is_saved_before_send_reenables() {
     assert!(c.state().send_form.destination.is_empty());
     assert!(c.state().send_form.amount.is_empty());
     assert!(!c.state().send_enabled());
-    let observed_finality = c
-        .state()
-        .activity
-        .iter()
-        .find(|event| event.lt == pending_lt)
-        .and_then(|event| event.finality_ms)
-        .expect("RPC reconciliation stamps finality before terminal persistence");
+    assert!(
+        c.state()
+            .activity
+            .iter()
+            .find(|event| event.lt == pending_lt)
+            .and_then(|event| event.finality_ms)
+            .is_none(),
+        "reading the transaction back over RPC is us going to look, not the chain \
+         telling us — only the subscription stops the clock"
+    );
 
     std::thread::sleep(Duration::from_millis(5));
+    c.record_account_announcement(44);
     c.merge_activity(vec![ActivityEvent {
         tx_hash: Some(tx_hash),
         counterparty: SEND_DEST.to_owned(),
@@ -3245,10 +3254,9 @@ fn rpc_confirmed_activity_is_saved_before_send_reenables() {
     assert!(c.save_task.is_none());
     assert!(!c.dirty);
     assert!(c.save_deadline.is_none());
-    assert_eq!(
-        c.state().activity[0].finality_ms,
-        Some(observed_finality),
-        "Activity merge must preserve the pre-fsync RPC observation latency"
+    assert!(
+        c.state().activity[0].finality_ms.is_some(),
+        "once the subscription announced it, the row reports how long that took"
     );
     c.handle_command(AppCommand::SetSendDestination(SEND_DEST.to_owned()));
     c.handle_command(AppCommand::SetSendAmount("1.0".to_owned()));
@@ -11172,6 +11180,7 @@ fn a_swaps_own_row_reports_its_finality_like_any_other_send() {
     }]);
     assert_eq!(c.session.pending_externals.len(), 1);
 
+    c.record_account_announcement(50);
     c.merge_activity(vec![swap_out_event(
         50,
         "swap-ext",
@@ -11624,6 +11633,42 @@ fn a_record_in_flight_looks_for_its_own_transaction_the_way_a_transfer_does() {
 }
 
 #[test]
+fn a_row_the_subscription_never_announced_reports_no_finality() {
+    let dir = temp_dir("finality-needs-a-subscription");
+    let chain = FakeChain::default();
+    let (mut c, _mem) = storage_controller(&dir, chain, vec![stored(1, "one", "a")]);
+
+    // An announcement from before the message went out belongs to someone
+    // else's transaction and cannot time ours.
+    c.record_account_announcement(70);
+    dispatch_record(&mut c, "quiet-ext");
+
+    // The row turns up in a read we went and made ourselves, with the
+    // subscription silent throughout.
+    c.merge_activity(vec![ActivityEvent {
+        direction: ActivityDirection::Out,
+        tx_hash: optional_digest("quiet-tx"),
+        counterparty: STORAGE_ADDR.to_owned(),
+        ext_msg_hash: optional_digest("quiet-ext"),
+        int_msg_hash: optional_digest("quiet-int"),
+        ..ActivityEvent::test_stub(70, 1_700_000_000)
+    }]);
+
+    let row = c
+        .state()
+        .activity
+        .iter()
+        .find(|event| event.ext_msg_hash == optional_digest("quiet-ext"))
+        .expect("the transaction is in history");
+    assert!(
+        row.finality_ms.is_none(),
+        "how long our own poll took to notice is not how long the chain took, \
+         so the row says nothing rather than something untrue"
+    );
+    cleanup(&dir);
+}
+
+#[test]
 fn a_records_own_row_reports_its_finality_like_any_other_send() {
     let dir = temp_dir("storage-finality");
     let chain = FakeChain::default();
@@ -11649,6 +11694,7 @@ fn a_records_own_row_reports_its_finality_like_any_other_send() {
         "a record on the wire is timed from the moment it went out"
     );
 
+    c.record_account_announcement(60);
     c.merge_activity(vec![ActivityEvent {
         direction: ActivityDirection::Out,
         tx_hash: optional_digest("storage-tx"),

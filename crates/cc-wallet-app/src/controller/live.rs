@@ -36,6 +36,8 @@ impl Drop for FetchCompletionGuard {
     }
 }
 
+const ANNOUNCEMENTS_KEPT: usize = 32;
+
 impl AppController {
     fn reset_stranded_destination_check(&mut self) {
         if matches!(
@@ -500,68 +502,54 @@ impl AppController {
         }
     }
 
-    pub(super) fn stamp_pending_rpc_finality(
-        &mut self,
-        ext_msg_hashes: &[cc_wallet_domain::Digest32],
-        observed_at: Instant,
-    ) {
-        let finalities = self
-            .session
-            .pending_sends
-            .iter()
-            .filter_map(|(lt, started_at)| {
-                let started_at = (*started_at)?;
-                let matches = self.state.activity.iter().any(|event| {
-                    event.lt == *lt
-                        && event
-                            .ext_msg_hash
-                            .as_ref()
-                            .is_some_and(|hash| ext_msg_hashes.contains(hash))
-                });
-                matches.then(|| {
-                    (
-                        *lt,
-                        u64::try_from(
-                            observed_at
-                                .saturating_duration_since(started_at)
-                                .as_millis(),
-                        )
-                        .unwrap_or(u64::MAX),
-                    )
-                })
-            })
-            .collect::<Vec<_>>();
-        for (lt, finality_ms) in finalities {
-            if let Some(event) = self
-                .state
-                .activity
-                .iter_mut()
-                .find(|event| event.lt == lt && event.pending)
-                && event.finality_ms.is_none()
-            {
-                event.finality_ms = Some(finality_ms);
-            }
+    /// Every account update the subscription pushed, and the moment it arrived.
+    /// This is the only clock finality is allowed to stop against: a number read
+    /// off one of our own polls would say how long we took to go and look, not
+    /// how long the network took to accept the message.
+    pub(super) fn record_account_announcement(&mut self, max_lt: u64) {
+        self.session.announcements.push((max_lt, Instant::now()));
+        if self.session.announcements.len() > ANNOUNCEMENTS_KEPT {
+            self.session.announcements.remove(0);
         }
     }
 
-    fn stamp_external_finality(&mut self, event: &mut ActivityEvent) {
-        if event.finality_ms.is_some() {
-            return;
-        }
-        let Some(hash) = event.ext_msg_hash.as_ref() else {
-            return;
-        };
-        let Some(index) = self
+    /// When this message went out — from whichever ledger holds it. A transfer
+    /// is timed through the optimistic row being replaced here; a swap or a
+    /// record is timed by its own external hash.
+    fn broadcast_started_at(
+        &self,
+        hash: &cc_wallet_domain::Digest32,
+        replaced: &[(u64, u64, Option<u64>)],
+    ) -> Option<Instant> {
+        if let Some((_, started_at)) = self
             .session
             .pending_externals
             .iter()
-            .position(|(pending, _)| pending == hash)
-        else {
-            return;
-        };
-        let (_, started_at) = self.session.pending_externals.remove(index);
-        event.finality_ms =
-            Some(u64::try_from(started_at.elapsed().as_millis()).unwrap_or(u64::MAX));
+            .find(|(pending, _)| pending == hash)
+        {
+            return Some(*started_at);
+        }
+        self.session
+            .pending_sends
+            .iter()
+            .filter(|(lt, _)| replaced.iter().any(|(replaced_lt, _, _)| replaced_lt == lt))
+            .filter_map(|(_, started_at)| *started_at)
+            .min()
+    }
+
+    /// How long from putting the message on the wire to the subscription saying
+    /// the account had reached this transaction. No announcement covering it
+    /// means we never heard the chain accept it, and the row stays blank rather
+    /// than reporting when a poll happened to notice.
+    fn announced_finality(&self, started_at: Instant, lt: u64) -> Option<u64> {
+        let announced_at = self
+            .session
+            .announcements
+            .iter()
+            .filter(|(max_lt, _)| *max_lt >= lt)
+            .map(|(_, at)| *at)
+            .min()?;
+        u64::try_from(announced_at.checked_duration_since(started_at)?.as_millis()).ok()
     }
 
     pub(super) fn discard_awaiting_send(&mut self) {
@@ -602,41 +590,8 @@ impl AppController {
                 optimistic_confirmation_merged |= !removed.is_empty();
                 if event.finality_ms.is_none() {
                     event.finality_ms = self
-                        .session
-                        .pending_sends
-                        .iter()
-                        .filter_map(|(lt, _)| {
-                            removed
-                                .iter()
-                                .find(|(removed_lt, _, _)| removed_lt == lt)
-                                .and_then(|(_, _, finality_ms)| *finality_ms)
-                        })
-                        .max()
-                        .or_else(|| {
-                            self.session
-                                .pending_sends
-                                .iter()
-                                .filter(|(lt, _)| {
-                                    removed.iter().any(|(removed_lt, _, _)| removed_lt == lt)
-                                })
-                                .filter_map(|(_, started_at)| *started_at)
-                                .map(|started_at| {
-                                    u64::try_from(started_at.elapsed().as_millis())
-                                        .unwrap_or(u64::MAX)
-                                })
-                                .max()
-                        })
-                        .or_else(|| {
-                            removed
-                                .iter()
-                                .map(|(_, sent_at, _)| {
-                                    event
-                                        .time_unix
-                                        .saturating_sub(*sent_at)
-                                        .saturating_mul(1_000)
-                                })
-                                .max()
-                        });
+                        .broadcast_started_at(&hash, &removed)
+                        .and_then(|started_at| self.announced_finality(started_at, event.lt));
                 }
                 self.state.activity.retain(|held| {
                     !(held.tx_hash.is_none() && held.ext_msg_hash.as_ref() == Some(&hash))
@@ -644,16 +599,17 @@ impl AppController {
                 self.session
                     .pending_sends
                     .retain(|(lt, _)| !removed.iter().any(|(removed_lt, _, _)| removed_lt == lt));
+                self.session
+                    .pending_externals
+                    .retain(|(pending, _)| pending != &hash);
             }
-            self.stamp_external_finality(&mut event);
             self.state.activity.push(event);
             changed = true;
         }
-        let finality_changed = self.backfill_rpc_finality();
         if changed {
             self.reconcile_swap_receipt();
         }
-        if changed || finality_changed {
+        if changed {
             self.sort_activity();
             self.cap_history();
             if optimistic_confirmation_merged {

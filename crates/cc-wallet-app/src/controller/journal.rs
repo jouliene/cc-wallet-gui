@@ -141,7 +141,6 @@ impl AppController {
     }
 
     pub(super) fn recover_restored_delivery_state(&mut self) -> bool {
-        let finality_changed = self.backfill_rpc_finality();
         let recoveries: Vec<(RecordId, DeliveryEvidence)> = self
             .journal
             .records()
@@ -174,9 +173,6 @@ impl AppController {
             })
             .collect();
         if recoveries.is_empty() {
-            if finality_changed {
-                self.save_history();
-            }
             self.refresh_journal_policy();
             return true;
         }
@@ -195,46 +191,6 @@ impl AppController {
         let saved = self.persist_journal_barrier();
         self.refresh_journal_policy();
         saved
-    }
-
-    pub(super) fn backfill_rpc_finality(&mut self) -> bool {
-        let confirmations: Vec<(Digest32, Digest32, u64)> = self
-            .journal
-            .records()
-            .iter()
-            .filter_map(|record| {
-                let tx = record.delivery_events().iter().rev().find_map(|event| {
-                    match event.evidence() {
-                        DeliveryEvidence::EndpointReportedSuccess { tx }
-                        | DeliveryEvidence::EndpointReportedFailedOnChain { tx } => Some(tx),
-                        _ => None,
-                    }
-                })?;
-                let sent_at = u64::from(record.expire_at().saturating_sub(DEFAULT_TTL_SECS));
-                Some((tx.tx_hash().clone(), tx.ext_msg_hash().clone(), sent_at))
-            })
-            .collect();
-
-        let mut changed = false;
-        for event in &mut self.state.activity {
-            if event.finality_ms.is_some() {
-                continue;
-            }
-            let Some((_, _, sent_at)) = confirmations.iter().find(|(tx_hash, ext_hash, _)| {
-                event.tx_hash.as_ref() == Some(tx_hash)
-                    || event.ext_msg_hash.as_ref() == Some(ext_hash)
-            }) else {
-                continue;
-            };
-            event.finality_ms = Some(
-                event
-                    .time_unix
-                    .saturating_sub(*sent_at)
-                    .saturating_mul(1_000),
-            );
-            changed = true;
-        }
-        changed
     }
 
     pub(super) fn apply_prepared_send(
@@ -645,16 +601,6 @@ impl AppController {
         if changed {
             self.journal = candidate_journal;
         }
-        let observed_hashes = matched_records
-            .iter()
-            .filter_map(|record_id| {
-                self.journal
-                    .record(record_id)
-                    .map(|record| record.ext_msg_hash().clone())
-            })
-            .collect::<Vec<_>>();
-        self.stamp_pending_rpc_finality(&observed_hashes, Instant::now());
-        let finality_changed = self.backfill_rpc_finality();
         if changed && !self.persist_journal_barrier() {
             self.invalidate_pending_risk_after_journal_change();
             self.refresh_journal_policy();
@@ -662,9 +608,6 @@ impl AppController {
         }
         if changed {
             self.invalidate_pending_risk_after_journal_change();
-        }
-        if finality_changed && !changed {
-            self.save_history();
         }
         if accepted_match {
             if matches!(
