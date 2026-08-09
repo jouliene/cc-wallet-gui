@@ -8,7 +8,9 @@ component RecordRow inherits Rectangle {
     in property <bool> busy;
     in property <bool> revealed;
     in property <length> number_w;
+    in property <length> actions_w;
     in property <length> title_w;
+    in property <length> data_w;
     in property <length> col_gap;
     callback delete_record(int);
     callback copy_record(int);
@@ -16,7 +18,7 @@ component RecordRow inherits Rectangle {
     // A record may be several lines long, and a record you cannot read in full
     // is not much use — so the row grows to fit one, while a single-line record
     // keeps the compact height that lets more of them fit on screen.
-    height: max(44px, body.preferred-height);
+    height: max(Sizes.control_dense + 2 * Space.s_10, body.preferred-height);
     background: ta.has-hover ? Palette.hover_row : transparent;
     animate background { duration: Motion.base; easing: Motion.curve; }
 
@@ -61,7 +63,7 @@ component RecordRow inherits Rectangle {
 
         VerticalLayout {
             alignment: start;
-            horizontal-stretch: 1;
+            width: root.data_w;
             if root.revealed: Text {
                 text: root.record.data;
                 color: Palette.text_secondary;
@@ -79,6 +81,7 @@ component RecordRow inherits Rectangle {
 
         VerticalLayout {
             alignment: start;
+            width: root.actions_w;
             HorizontalLayout {
                 spacing: Space.s_4;
                 alignment: end;
@@ -141,9 +144,31 @@ export component StoragePage inherits VerticalLayout {
 
     // The heading row and the record rows read these same three, so a column
     // and its label can never end up starting in different places.
-    property <length> col_number_w: 44px;
-    property <length> col_title_w: 210px;
+    // The columns are sized by what they hold, not by numbers picked against one
+    // screen: the ordinal fits three digits of the mono face, the actions fit
+    // their two buttons, and the two text columns divide whatever is left over,
+    // so a wider window widens the reading area instead of the margins.
+    //
+    // The share is measured off the page width rather than left to the layout,
+    // because a text reports the width it would take on ONE line: one very long
+    // record would otherwise claim the row and squeeze the name to nothing.
+    property <length> col_number_w: 4 * Theme.mono_char;
+    property <length> col_actions_w: 2 * Sizes.control_dense + Space.s_4;
     property <length> col_gap: Space.s_12;
+    property <length> col_free_w: max(0px, root.width
+        - Space.s_16 - Space.s_8
+        - root.col_number_w - root.col_actions_w
+        - 3 * root.col_gap);
+    property <length> col_title_w: root.col_free_w / 4;
+    property <length> col_data_w: root.col_free_w - root.col_title_w;
+
+    property <length> form_actions_w: 132px;
+    property <length> form_free_w: max(0px, root.width
+        - 2 * Space.s_16
+        - root.form_actions_w
+        - 2 * root.col_gap);
+    property <length> form_title_w: root.form_free_w / 4;
+    property <length> form_data_w: root.form_free_w - root.form_title_w;
 
     Card {
         vertical-stretch: 1;
@@ -288,10 +313,10 @@ export component StoragePage inherits VerticalLayout {
                         }
                         VerticalLayout {
                             alignment: center;
-                            horizontal-stretch: 1;
+                            width: root.col_data_w;
                             MicroLabel { text: "RECORD"; }
                         }
-                        VerticalLayout { alignment: center; width: 72px; }
+                        VerticalLayout { alignment: center; width: root.col_actions_w; }
                     }
                     Rectangle {
                         y: parent.height - 1px;
@@ -328,7 +353,9 @@ export component StoragePage inherits VerticalLayout {
                             busy: root.busy;
                             revealed: root.revealed;
                             number_w: root.col_number_w;
+                            actions_w: root.col_actions_w;
                             title_w: root.col_title_w;
+                            data_w: root.col_data_w;
                             col_gap: root.col_gap;
                             delete_record(id) => { UserActivity.ping(); root.delete_record(id); }
                             copy_record(id) => { root.copy_record(id); }
@@ -437,7 +464,7 @@ export component StoragePage inherits VerticalLayout {
                     spacing: Space.s_12;
                     height: 96px;
                     VerticalLayout {
-                        width: 300px;
+                        width: root.form_title_w;
                         alignment: start;
                         spacing: Space.s_4;
                         HorizontalLayout {
@@ -458,7 +485,7 @@ export component StoragePage inherits VerticalLayout {
                         }
                     }
                     VerticalLayout {
-                        horizontal-stretch: 1;
+                        width: root.form_data_w;
                         alignment: start;
                         spacing: Space.s_4;
                         HorizontalLayout {
@@ -483,7 +510,7 @@ export component StoragePage inherits VerticalLayout {
                     VerticalLayout {
                         alignment: start;
                         spacing: Space.s_8;
-                        width: 132px;
+                        width: root.form_actions_w;
                         Rectangle { height: 18px; }
                         PrimaryButton {
                             label: root.busy ? root.pending_label : "Add record";

@@ -630,7 +630,7 @@ export component Amount inherits HorizontalLayout {
 export component MaxChip inherits Rectangle {
     callback clicked();
     in property <bool> enabled_: true;
-    width: 44px;
+    width: Sizes.max_chip_w;
     height: 24px;
     border-radius: Radii.sm;
     background: ta.has-hover ? Palette.accent_quiet_hover : Palette.accent_quiet;

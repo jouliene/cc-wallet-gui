@@ -5,11 +5,20 @@ export global Theme {
     out property <color> text_3: #8A93A6;
 
     out property <length> wallet_status_w: 90px;
-    out property <length> strip_address_w: 632px;
+    // The account strip divides its slack instead of pinning a width: the ratio
+    // is the one the design was drawn at, so a wide window looks unchanged while
+    // a narrow one elides the address rather than colliding with the name.
+    out property <float> strip_name_stretch: 2;
+    out property <float> strip_address_stretch: 5;
 
     out property <length> window_w: 1180px;
     out property <length> window_h: 820px;
-    out property <length> window_min_h: 720px;
+    out property <length> window_min_w: 900px;
+    out property <length> window_min_h: 520px;
+    // Every page is laid out to be complete at this height. A shorter window
+    // scrolls the page rather than squeezing its lists down to nothing, which
+    // is what lets the window itself fit a screen it was never sized for.
+    out property <length> page_min_h: 640px;
     out property <length> topnav_h: 60px;
     out property <length> card_header_h: 60px;
     out property <length> activity_filter_h: 46px;
@@ -20,9 +29,13 @@ export global Theme {
     out property <length> send_btn_h: 48px;
     out property <length> pw_field_h: 46px;
     out property <length> asset_list_max_h: 236px;
-    out property <length> assets_panel_w: 427px;
     out property <length> token_selector_w: 150px;
-    out property <length> send_form_col_w: 462px;
+    // What the swap form needs before it starts clipping: a token selector, a
+    // MAX chip and enough room left to read the amount being typed.
+    out property <length> swap_form_min_w: root.token_selector_w
+        + Sizes.max_chip_w
+        + 14 * root.mono_char
+        + 5 * Space.s_16;
     out property <length> menu_overhang: 4px;
 
     out property <length> activity_col_gap: Space.s_12;
@@ -40,6 +53,12 @@ export global Theme {
         + root.activity_amount_token_gap_w
         + root.activity_amount_token_avatar_w
         + root.activity_amount_token_symbol_w;
+    // What one asset row needs to stay readable — avatar, a token name, and a
+    // full amount — so the panel is never squeezed below its own content.
+    out property <length> assets_panel_min_w: Sizes.control_large
+        + 10 * root.mono_char
+        + root.activity_amount_value_w
+        + 4 * Space.s_12;
     out property <length> activity_fee_w: 12 * root.mono_char + 2 * root.mono_group;
     out property <length> activity_final_w: 52px + Space.s_6 + Sizes.icon_sm;
     out property <length> explorer_amount_w: 226px;

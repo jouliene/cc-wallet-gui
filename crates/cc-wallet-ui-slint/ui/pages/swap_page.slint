@@ -444,8 +444,8 @@ export component SwapPage inherits VerticalLayout {
         spacing: Space.stack_gap;
 
         VerticalLayout {
-            horizontal-stretch: 1;
-            min-width: Theme.assets_panel_w;
+            horizontal-stretch: 3;
+            min-width: Theme.assets_panel_min_w;
             alignment: start;
             ReservesCard {
                 pool_ready: root.pool_ready;
@@ -460,7 +460,8 @@ export component SwapPage inherits VerticalLayout {
         }
 
         Rectangle {
-            width: 470px;
+            horizontal-stretch: 2;
+            min-width: Theme.swap_form_min_w;
             form_column := VerticalLayout {
                 width: parent.width;
                         spacing: Space.stack_gap;

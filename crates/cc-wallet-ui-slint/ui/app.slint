@@ -30,7 +30,7 @@ export component AppWindow inherits Window {
     default-font-family: Fonts.ui;
     preferred-width: Theme.window_w;
     preferred-height: Theme.window_h;
-    min-width: Theme.window_w;
+    min-width: Theme.window_min_w;
     min-height: Theme.window_min_h;
     background: Palette.surface_base;
 
@@ -394,7 +394,7 @@ export component AppWindow inherits Window {
                 width: content_area.width;
             if root.selected_tab == "Wallet": WalletPage {
                 width: holder.width;
-                page_height: scroll.height;
+                page_height: max(scroll.height, Theme.page_min_h);
                 has_wallet: root.has_wallet;
                 address: root.wallet_address;
                 wallet_status: root.wallet_status;
@@ -455,7 +455,7 @@ export component AppWindow inherits Window {
             }
             if root.selected_tab == "Swap": SwapPage {
                 width: holder.width;
-                page_height: scroll.height;
+                page_height: max(scroll.height, Theme.page_min_h);
                 has_wallet: root.has_wallet;
                 pool_ready: root.swap_pool_ready;
                 pool_loading: root.swap_pool_loading;
@@ -501,7 +501,7 @@ export component AppWindow inherits Window {
             }
             if root.selected_tab == "Contacts": ContactsPage {
                 width: holder.width;
-                page_height: scroll.height;
+                page_height: max(scroll.height, Theme.page_min_h);
                 contacts: root.contacts;
                 contact_count: root.contact_count;
                 save_contact(idx, n, a, t) => { root.save_contact(idx, n, a, t); }
@@ -517,7 +517,7 @@ export component AppWindow inherits Window {
             }
             if root.selected_tab == "Explorer": ExplorerPage {
                 width: holder.width;
-                page_height: scroll.height;
+                page_height: max(scroll.height, Theme.page_min_h);
                 clock_needle_angle: root.clock_needle_angle;
                 clock_elect_start: root.clock_elect_start;
                 clock_elect_end: root.clock_elect_end;
@@ -552,7 +552,7 @@ export component AppWindow inherits Window {
             }
             if root.selected_tab == "Storage": StoragePage {
                 width: holder.width;
-                page_height: scroll.height;
+                page_height: max(scroll.height, Theme.page_min_h);
                 has_wallet: root.has_wallet;
                 address: root.storage_address;
                 exists: root.storage_exists;

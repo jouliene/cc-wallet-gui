@@ -76,6 +76,10 @@ export component WalletPage inherits VerticalLayout {
     property <length> overview_h: root.overview_badge + Space.s_4 + 2 * Space.s_16;
     property <length> mid_row_h: 320px;
     property <length> activity_min_h: 110px;
+    property <length> book_popup_w: 320px;
+    property <length> book_popup_h: 336px;
+    property <length> party_popup_w: 300px;
+    property <length> popup_margin: Space.s_12;
     height: max(root.page_height, root.overview_h + Space.stack_gap + root.mid_row_h + Space.stack_gap + root.activity_min_h);
     spacing: Space.stack_gap;
 
@@ -105,7 +109,7 @@ export component WalletPage inherits VerticalLayout {
         height: root.mid_row_h;
         spacing: Space.stack_gap;
         Rectangle {
-            width: max(Theme.assets_panel_w, (root.width - Space.stack_gap) * 36%);
+            width: max(Theme.assets_panel_min_w, (root.width - Space.stack_gap) * 36%);
             AssetsCard {
                 assets: root.assets;
                 asset_count: root.asset_count;
@@ -170,14 +174,14 @@ export component WalletPage inherits VerticalLayout {
 
     book_popup := PopupWindow {
         x: root.clamp_len(
-            send.recip_abs_x + send.recip_w - 320px - root.absolute-position.x,
-            12px,
-            root.width - 320px - 12px);
+            send.recip_abs_x + send.recip_w - root.book_popup_w - root.absolute-position.x,
+            root.popup_margin,
+            root.width - root.book_popup_w - root.popup_margin);
         y: root.clamp_len(
             send.recip_abs_y + send.recip_h + 6px - root.absolute-position.y,
-            12px,
-            root.height - 336px - 12px);
-        width: 320px;
+            root.popup_margin,
+            root.height - root.book_popup_h - root.popup_margin);
+        width: root.book_popup_w;
         close-policy: close-on-click-outside;
         book_focus := FocusScope {
             init => { self.focus(); }
@@ -282,14 +286,14 @@ export component WalletPage inherits VerticalLayout {
 
     af_party_popup := PopupWindow {
         x: root.clamp_len(
-            activity_card.party_pill_abs_x + activity_card.party_pill_w - 300px - root.absolute-position.x,
-            12px,
-            root.width - 300px - 12px);
+            activity_card.party_pill_abs_x + activity_card.party_pill_w - root.party_popup_w - root.absolute-position.x,
+            root.popup_margin,
+            root.width - root.party_popup_w - root.popup_margin);
         y: root.clamp_len(
             activity_card.party_pill_abs_y + activity_card.party_pill_h + 6px - root.absolute-position.y,
-            12px,
-            root.height - root.af_party_popup_h - 12px);
-        width: 300px;
+            root.popup_margin,
+            root.height - root.af_party_popup_h - root.popup_margin);
+        width: root.party_popup_w;
         close-policy: close-on-click-outside;
         FocusScope {
             init => { self.focus(); }

@@ -25,7 +25,7 @@ export component OverviewStrip inherits Card {
         padding-right: Space.s_16;
         spacing: Space.s_16;
         wallet_switcher := Rectangle {
-            horizontal-stretch: 1;
+            horizontal-stretch: Theme.strip_name_stretch;
             min-width: 0px;
             border-radius: Radii.md;
             background: root.menu_open ? Palette.surface_inset : transparent;
@@ -77,7 +77,8 @@ export component OverviewStrip inherits Card {
         }
         Rectangle { width: 1px; background: Palette.border_subtle; }
         VerticalLayout {
-            width: Theme.strip_address_w;
+            horizontal-stretch: Theme.strip_address_stretch;
+            min-width: 0px;
             alignment: center;
             spacing: Space.s_4;
             MicroLabel { text: "ADDRESS"; }
@@ -323,7 +324,10 @@ export component SendCard inherits Card {
             HorizontalLayout {
                 spacing: Space.s_16;
                 VerticalLayout {
-                    width: Theme.send_form_col_w;
+                    // Amount and comment divide the row in the proportion the
+                    // form was drawn at, so both shrink together.
+                    horizontal-stretch: 7;
+                    min-width: 0px;
                     spacing: Space.s_8;
                     HorizontalLayout {
                         height: Sizes.label_row_h;
@@ -340,7 +344,12 @@ export component SendCard inherits Card {
                         spacing: Space.s_10;
                         Rectangle {
                             horizontal-stretch: 1;
+                            min-width: 0px;
                             height: Theme.amount_h;
+                            // The clear and MAX chips ride on top of the field,
+                            // so the text has to stop where they begin: one
+                            // width drives the inset, the position and the box.
+                            property <length> actions_w: Sizes.control_dense + Space.s_4 + Sizes.max_chip_w;
                             amount_field := Field {
                                 text <=> root.amount;
                                 enabled: !root.form_locked;
@@ -354,12 +363,12 @@ export component SendCard inherits Card {
                                 font_weight: Fonts.regular;
                                 text_opacity: Fade.muted;
                                 money_int: AmountFormat.int_part(root.amount);
-                                pad_right: 108px;
+                                pad_right: parent.actions_w + Space.s_6 + Space.s_24;
                                 edited(t) => { root.amount_edited(t); }
                             }
                             HorizontalLayout {
-                                x: parent.width - 102px;
-                                width: 96px;
+                                x: parent.width - parent.actions_w - Space.s_6;
+                                width: parent.actions_w;
                                 height: Theme.amount_h;
                                 alignment: end;
                                 spacing: Space.s_4;
@@ -416,7 +425,8 @@ export component SendCard inherits Card {
                 }
 
                 VerticalLayout {
-                    horizontal-stretch: 1;
+                    horizontal-stretch: 5;
+                    min-width: 0px;
                     spacing: Space.s_8;
                     HorizontalLayout {
                         height: Sizes.label_row_h;
