@@ -981,7 +981,6 @@ fn sync_storage(ui: &AppWindow, state: &AppState, cache: &mut UiCache) {
             .iter()
             .map(|record| StorageRow {
                 id: record.id as i32,
-                number: format!("#{}", record.id).into(),
                 title: record.title.clone().into(),
                 data: record.data.clone().into(),
             })
