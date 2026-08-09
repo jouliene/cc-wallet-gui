@@ -186,96 +186,116 @@ export component StoragePage inherits VerticalLayout {
                 }
             }
 
-            Rectangle {
-                height: 26px;
-                if root.error != "": HorizontalLayout {
-                    padding-left: Space.s_16;
-                    padding-right: Space.s_16;
-                    VerticalLayout { alignment: center; InlineError { text: root.error; } }
+            if root.exists: Rectangle {
+                background: Palette.surface_inset;
+                height: zone.preferred-height;
+                Rectangle {
+                    y: parent.height - 1px;
+                    height: 1px;
+                    background: Palette.border_subtle;
                 }
-                if root.error == "" && root.notice != "": HorizontalLayout {
+                zone := VerticalLayout {
+                    padding-left: Space.s_16;
+                    padding-right: Space.s_12;
+                    padding-top: Space.s_8;
+                    padding-bottom: Space.s_8;
+                    spacing: Space.s_2;
+
+                    HorizontalLayout {
+                        height: Theme.account_list_row_h;
+                        spacing: Space.s_0;
+                        VerticalLayout {
+                            alignment: center;
+                            width: Theme.account_label_w;
+                            FieldLabel { text: "Address"; }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: root.address;
+                                color: Palette.text_value;
+                                font-family: Fonts.mono;
+                                font-size: Fonts.small;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            padding-left: Space.s_6;
+                            CopyButton { value: root.address; }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            IconButton {
+                                icon: @image-url("../../assets/icons/external-link.svg");
+                                size: Sizes.control_dense;
+                                icon_size: Sizes.icon_sm;
+                                clicked => { root.open_in_explorer(root.address, ""); }
+                            }
+                        }
+                        Rectangle { horizontal-stretch: 1; min-width: 0px; }
+                    }
+
+                    HorizontalLayout {
+                        height: Theme.account_list_row_h;
+                        spacing: Space.s_0;
+                        VerticalLayout {
+                            alignment: center;
+                            width: Theme.account_label_w;
+                            FieldLabel { text: "Balance"; }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            Amount { amount: root.balance; tint: Palette.value_in; }
+                        }
+                        Rectangle { horizontal-stretch: 1; min-width: 0px; }
+                    }
+
+                    Rectangle {
+                        height: 18px;
+                        if root.error != "": HorizontalLayout {
+                            VerticalLayout { alignment: center; InlineError { text: root.error; } }
+                        }
+                        if root.error == "" && root.notice != "": HorizontalLayout {
+                            VerticalLayout {
+                                alignment: center;
+                                Text {
+                                    text: root.notice;
+                                    color: Palette.text_quiet;
+                                    font-family: Fonts.ui;
+                                    font-size: Fonts.small;
+                                }
+                            }
+                        }
+                        if root.error == "" && root.notice == "" && root.unreadable > 0: HorizontalLayout {
+                            VerticalLayout {
+                                alignment: center;
+                                Text {
+                                    text: root.unreadable + " record(s) here were written by a different wallet and cannot be read.";
+                                    color: Palette.negative;
+                                    font-family: Fonts.ui;
+                                    font-size: Fonts.small;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !root.exists && (root.error != "" || root.notice != ""): Rectangle {
+                height: 26px;
+                HorizontalLayout {
                     padding-left: Space.s_16;
                     padding-right: Space.s_16;
                     VerticalLayout {
                         alignment: center;
-                        Text {
+                        if root.error != "": InlineError { text: root.error; }
+                        if root.error == "": Text {
                             text: root.notice;
                             color: Palette.text_quiet;
                             font-family: Fonts.ui;
                             font-size: Fonts.small;
                         }
                     }
-                }
-                if root.error == "" && root.notice == "" && root.unreadable > 0: HorizontalLayout {
-                    padding-left: Space.s_16;
-                    padding-right: Space.s_16;
-                    VerticalLayout {
-                        alignment: center;
-                        Text {
-                            text: root.unreadable + " record(s) here could not be decrypted by this wallet.";
-                            color: Palette.negative;
-                            font-family: Fonts.ui;
-                            font-size: Fonts.small;
-                        }
-                    }
-                }
-            }
-
-            if root.exists: VerticalLayout {
-                padding-left: Space.s_16;
-                padding-right: Space.s_16;
-                padding-bottom: Space.s_10;
-                spacing: Space.s_0;
-
-                HorizontalLayout {
-                    height: Theme.account_list_row_h;
-                    spacing: Space.s_0;
-                    VerticalLayout {
-                        alignment: center;
-                        width: Theme.account_label_w;
-                        FieldLabel { text: "Address"; }
-                    }
-                    VerticalLayout {
-                        alignment: center;
-                        padding-left: Space.s_14;
-                        Text {
-                            text: root.address;
-                            color: Palette.text_value;
-                            font-family: Fonts.mono;
-                            font-size: Fonts.small;
-                        }
-                    }
-                    VerticalLayout {
-                        alignment: center;
-                        padding-left: Space.s_6;
-                        CopyButton { value: root.address; }
-                    }
-                    VerticalLayout {
-                        alignment: center;
-                        IconButton {
-                            icon: @image-url("../../assets/icons/external-link.svg");
-                            size: Sizes.control_dense;
-                            icon_size: Sizes.icon_sm;
-                            clicked => { root.open_in_explorer(root.address, ""); }
-                        }
-                    }
-                    Rectangle { horizontal-stretch: 1; min-width: 0px; }
-                }
-
-                HorizontalLayout {
-                    height: Theme.account_list_row_h;
-                    spacing: Space.s_0;
-                    VerticalLayout {
-                        alignment: center;
-                        width: Theme.account_label_w;
-                        FieldLabel { text: "Balance"; }
-                    }
-                    VerticalLayout {
-                        alignment: center;
-                        padding-left: Space.s_14;
-                        Amount { amount: root.balance; tint: Palette.value_in; }
-                    }
-                    Rectangle { horizontal-stretch: 1; min-width: 0px; }
                 }
             }
 
@@ -389,7 +409,6 @@ export component StoragePage inherits VerticalLayout {
                         title_field := Field {
                             text <=> root.title_input;
                             placeholder: "Inna's phone";
-                            enabled: !root.busy;
                             edited(t) => { root.title_edited(t); }
                             accepted => { if (root.add_enabled) { root.add_record(); } }
                         }
@@ -411,7 +430,6 @@ export component StoragePage inherits VerticalLayout {
                         Field {
                             text <=> root.data_input;
                             placeholder: "86594423664";
-                            enabled: !root.busy;
                             font_family: Fonts.mono;
                             multiline: true;
                             height_: 92px;

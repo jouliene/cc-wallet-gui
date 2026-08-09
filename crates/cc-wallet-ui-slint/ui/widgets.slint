@@ -855,7 +855,7 @@ export component Field inherits Rectangle {
         y: root.multiline ? root.pad_left : 0px;
         width: max(1px, parent.width - root.pad_left - root.pad_right);
         height: root.multiline ? parent.height - 2 * root.pad_left : parent.height;
-        interactive: root.multiline;
+        interactive: false;
         viewport-width: root.multiline
             ? self.width
             : max(self.width, input.preferred-width + input.text-cursor-width);

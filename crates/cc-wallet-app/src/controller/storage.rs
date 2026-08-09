@@ -368,10 +368,15 @@ impl AppController {
         op: StorageOp,
         result: Result<CandidateBroadcastOutcome, ChainError>,
     ) {
+        // Even a result this session can no longer act on has to release the
+        // page: `busy` gates the form, and leaving it set would lock the user
+        // out of typing with nothing left to clear it.
+        self.state.storage.busy = false;
+        self.state.storage.pending_label.clear();
+        self.state.busy = false;
         if generation != self.session_generation {
             return;
         }
-        self.state.storage.busy = false;
         self.state.storage.pending_label.clear();
         self.state.busy = false;
         match result {

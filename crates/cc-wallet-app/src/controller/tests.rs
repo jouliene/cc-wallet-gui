@@ -11774,3 +11774,25 @@ fn a_save_in_flight_does_not_add_or_remove_anything_on_the_page() {
     );
     cleanup(&dir);
 }
+
+#[test]
+fn a_result_this_session_cannot_use_still_unlocks_the_form() {
+    let dir = temp_dir("storage-busy-release");
+    let chain = FakeChain::default();
+    let (mut c, _mem) = storage_controller(&dir, chain, vec![stored(1, "one", "a")]);
+
+    c.state_mut().storage.busy = true;
+    // A generation this session will never match: the result is discarded, but
+    // the page must not stay locked because of it.
+    c.apply_event(AppEvent::StorageFinished {
+        generation: u64::MAX,
+        op: StorageOp::Delete { id: 1 },
+        result: Err(ChainError::Wallet("gone".to_owned())),
+    });
+
+    assert!(
+        !c.state().storage.busy,
+        "a stale result must not leave the page busy forever"
+    );
+    cleanup(&dir);
+}

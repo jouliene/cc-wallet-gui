@@ -277,9 +277,10 @@ component TxListRow inherits Rectangle {
             vertical-alignment: center;
         }
         Rectangle {
-            width: Theme.activity_type_w;
+            width: Theme.activity_col_gap + Theme.activity_type_w;
             HorizontalLayout {
                 alignment: start;
+                padding-left: Theme.activity_col_gap;
                 VerticalLayout {
                     alignment: center;
                     Chip {
@@ -297,7 +298,7 @@ component TxListRow inherits Rectangle {
         HorizontalLayout {
             horizontal-stretch: 1;
             spacing: Space.s_8;
-            padding-right: Space.s_8;
+            padding-left: Theme.activity_col_gap;
             if root.item.party_name != "": Text {
                 text: root.item.party_name;
                 color: Palette.text_secondary;
@@ -881,13 +882,17 @@ export component ExplorerPage inherits VerticalLayout {
                     { label: "TIME", x: Theme.activity_row_pad, width: Theme.activity_time_w },
                     {
                         label: "TYPE",
-                        x: Theme.activity_row_pad + Theme.activity_time_w,
+                        x: Theme.activity_row_pad + Theme.activity_time_w + Theme.activity_col_gap,
                         width: Theme.activity_type_w,
                     },
                     {
                         label: "FROM / TO",
-                        x: Theme.activity_row_pad + Theme.activity_time_w + Theme.activity_type_w,
-                        width: self.width - Theme.explorer_hash_w - Theme.explorer_fee_w - Theme.explorer_amount_w - (Theme.activity_row_pad + Theme.activity_time_w + Theme.activity_type_w),
+                        x: Theme.activity_row_pad + Theme.activity_time_w + Theme.activity_type_w
+                            + 2 * Theme.activity_col_gap,
+                        width: self.width - Theme.explorer_hash_w - Theme.explorer_fee_w
+                            - Theme.explorer_amount_w
+                            - (Theme.activity_row_pad + Theme.activity_time_w
+                                + Theme.activity_type_w + 2 * Theme.activity_col_gap),
                     },
                     {
                         label: "VALUE",
