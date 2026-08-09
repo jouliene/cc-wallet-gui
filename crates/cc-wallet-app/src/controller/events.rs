@@ -150,6 +150,7 @@ impl AppController {
                     self.state.subscription_status = "account update received".to_owned();
                     self.record_account_announcement(update.max_lt);
                     self.expedite_journal_reconciliation();
+                    self.expedite_storage_settlement();
                     self.fetch_transactions(generation);
                     self.auto_refresh_wallet(generation);
                 }

@@ -11633,6 +11633,31 @@ fn a_record_in_flight_looks_for_its_own_transaction_the_way_a_transfer_does() {
 }
 
 #[test]
+fn an_announcement_makes_a_settling_record_look_again_at_once() {
+    let dir = temp_dir("storage-expedite");
+    let chain = FakeChain::default();
+    let (mut c, _mem) = storage_controller(&dir, chain, vec![stored(1, "one", "a")]);
+
+    dispatch_record(&mut c, "expedite-ext");
+    assert!(c.storage_watch.is_some(), "the record is being watched");
+    let read = c.storage_seq;
+
+    c.apply_event(AppEvent::SubscriptionUpdate {
+        generation: c.subscription_generation,
+        update: cc_wallet_chain::AccountUpdate {
+            max_lt: 99,
+            gen_utime: None,
+        },
+    });
+    assert!(
+        c.storage_seq > read,
+        "the account moved, so the storage is read again there and then rather \
+         than at the end of a poll interval"
+    );
+    cleanup(&dir);
+}
+
+#[test]
 fn a_row_the_subscription_never_announced_reports_no_finality() {
     let dir = temp_dir("finality-needs-a-subscription");
     let chain = FakeChain::default();

@@ -123,6 +123,18 @@ impl AppController {
         }
     }
 
+    /// A record is only done when the contract has run and our own account has
+    /// taken the change back — and that second transaction is announced on the
+    /// same subscription. So an announcement is the moment to look again,
+    /// rather than sitting out the rest of a poll interval that was only ever a
+    /// fallback for a silent subscription.
+    pub(super) fn expedite_storage_settlement(&mut self) {
+        if self.storage_watch.is_none() || self.state.storage.loading {
+            return;
+        }
+        self.refresh_storage();
+    }
+
     pub(super) fn poll_storage_settlement(&mut self, now: Instant) {
         let Some(watch) = self.storage_watch.as_ref() else {
             return;
