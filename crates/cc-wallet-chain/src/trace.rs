@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use cc_wallet_domain::{AssetMovement, Digest32};
 use cc_wallet_tycho::{
     ChainMessage, ChainTransaction, ContractAt, MsgKind, contract_name, external_method,
-    internal_method, internal_reply,
+    internal_method,
 };
 
 use crate::activity::message_movements;
@@ -286,19 +286,16 @@ fn message_op(message: &ChainMessage, src: ContractAt, dst: ContractAt) -> Strin
     }
 }
 
-/// Names an internal message by the operation it carries.
+/// Names an internal message by the operation it carries, asking whichever end
+/// of the message knows that op.
 ///
-/// The receiver is asked first, because an op sent TO a contract is a call on
-/// it. Only if the receiver knows nothing of the op is the SENDER asked — the
-/// message is then that contract answering. A contract whose answer carries a
-/// distinct op needs nothing more, since the name already reads as an answer;
-/// one that echoes the op it is answering about says so through
-/// `internal_reply`, or the same name lands on arrows going both ways.
+/// The name is the method the op IS, never a gloss on what the message is doing
+/// with it — so METHOD always says the same thing as RAW OP, for every contract
+/// alike, including ones added later that this code has never heard of. A
+/// contract that answers by echoing the op it was called with therefore shows
+/// that same name on the way back; the arrow already says which way it went.
 fn internal_op_name(src: ContractAt, dst: ContractAt, op: u32) -> Option<String> {
-    if let Some(called) = internal_method(dst, op) {
-        return Some(called.to_owned());
-    }
-    internal_reply(src, op)
+    internal_method(dst, op)
         .or_else(|| internal_method(src, op))
         .map(str::to_owned)
 }
@@ -803,9 +800,9 @@ mod tests {
 }
 
 #[cfg(test)]
-mod reply_naming_tests {
+mod op_naming_tests {
     use super::*;
-    use cc_wallet_tycho::{storage_code_hash, storage_put_body};
+    use cc_wallet_tycho::{storage_code_hash, storage_delete_body};
 
     fn int_msg(body: cc_wallet_tycho::Cell) -> ChainMessage {
         ChainMessage {
@@ -827,28 +824,30 @@ mod reply_naming_tests {
         }
     }
 
+    /// The method shown must be the op that is actually in the message, whoever
+    /// sent it — otherwise METHOD and RAW OP would tell different stories about
+    /// the same arrow, and every new contract would need its own special case.
     #[test]
-    fn a_call_is_named_for_the_contract_it_is_sent_to() {
+    fn method_says_the_same_thing_as_raw_op_in_either_direction() {
         let code = storage_code_hash();
-        let name = message_op(
-            &int_msg(storage_put_body(1, 1, b"x").unwrap()),
-            ContractAt::default(),
-            ContractAt::by_code(&code),
-        );
-        assert_eq!(name, "put_record");
-    }
+        let message = int_msg(storage_delete_body(1, 1).unwrap());
+        let known = ContractAt::by_code(&code);
+        let raw = message_raw_op(&message, known);
 
-    #[test]
-    fn a_contract_answering_with_the_same_op_is_not_named_a_second_call() {
-        // The storage echoes the op it is answering about, so the change it
-        // sends back carries OP_PUT. Reading that as "put_record" made the
-        // diagram show the same call twice, in opposite directions.
-        let code = storage_code_hash();
-        let name = message_op(
-            &int_msg(storage_put_body(1, 1, b"x").unwrap()),
-            ContractAt::by_code(&code),
-            ContractAt::default(),
+        assert_eq!(
+            message_op(&message, ContractAt::default(), known),
+            "delete_record"
         );
-        assert_eq!(name, "put_record change");
+        assert_eq!(
+            message_op(&message, known, ContractAt::default()),
+            "delete_record",
+            "a contract answering with the op it was called with is still that op"
+        );
+        assert_eq!(raw, "op 0x57a70002");
+        assert_eq!(
+            message_raw_op(&message, ContractAt::default()),
+            raw,
+            "and the raw op does not depend on who is asked either"
+        );
     }
 }

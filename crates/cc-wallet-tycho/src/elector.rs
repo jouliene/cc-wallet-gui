@@ -29,7 +29,6 @@ pub fn elector_spec() -> ContractSpec {
         decode_data: decode_elector_data,
         external_method: |_body| None,
         internal_method: elector_internal_method,
-        internal_reply: |_| None,
     }
 }
 
