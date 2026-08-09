@@ -174,7 +174,6 @@ export component StoragePage inherits VerticalLayout {
     // still ends where the NAME column ends.
     property <length> form_title_w: root.col_number_w + root.col_gap + root.col_title_w;
     property <length> form_btn_h: 40px;
-    property <length> form_record_h: Theme.field_h + Space.s_8 + root.form_btn_h;
 
     property <bool> has_footer_msg:
         root.error != "" || root.notice != "" || root.unreadable > 0;
@@ -470,7 +469,7 @@ export component StoragePage inherits VerticalLayout {
                 HorizontalLayout {
                     spacing: root.col_gap;
 
-                    VerticalLayout {
+                    form_left := VerticalLayout {
                         width: root.form_title_w;
                         alignment: start;
                         spacing: Space.s_4;
@@ -494,8 +493,8 @@ export component StoragePage inherits VerticalLayout {
                             edited(t) => { root.title_edited(t); }
                             accepted => { if (root.add_enabled) { root.add_record(); } }
                         }
-                        Rectangle { height: Space.s_8; }
                         HorizontalLayout {
+                            padding-top: Space.s_4;
                             spacing: Space.s_8;
                             PrimaryButton {
                                 horizontal-stretch: 1;
@@ -538,7 +537,7 @@ export component StoragePage inherits VerticalLayout {
                             placeholder: "Anything you want kept private — a password, a number, a note";
                             font_family: Fonts.mono;
                             multiline: true;
-                            height_: root.form_record_h;
+                            height_: form_left.preferred-height - Sizes.label_row_h - Space.s_4;
                             edited(t) => { root.data_edited(t); }
                         }
                     }

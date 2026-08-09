@@ -46,9 +46,13 @@ no number yet, and its field still ends where the NAME column ends.
 6. **The footer rule only when there is something to say.** The reserve stays,
    so nothing jumps; the hairline arrives with the message.
 7. **Add a record reads like Send.** Left column is the short field with its
-   buttons under it, right column is the tall field whose height comes from
-   that stack — `field_h + s_8 + form_btn_h`, exactly how COMMENT is sized
-   against AMOUNT + Send. Both columns end on the same line. The pinned 96px
+   buttons under it, right column is the tall field whose height is *read off*
+   that stack — `form_left.preferred-height - label_row_h - s_4` — rather than
+   restated as `field_h + s_8 + form_btn_h`. Restating it is what let the two
+   columns disagree: the layout's own 4px spacing lands on both sides of an
+   explicit 8px spacer, so the left stack came out 122 against the right's 114
+   and the buttons hung below the field. Derived, they cannot drift. Both
+   columns end on the same line. The pinned 96px
    row height, the hand-rolled 18px label spacer and the 132px action column
    are gone; the form error lives in a `label_row_h` reserve on the fields' own
    left edge.
