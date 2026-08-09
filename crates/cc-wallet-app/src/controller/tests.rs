@@ -11401,6 +11401,13 @@ fn settle(c: &mut AppController) {
     c.pump_events();
 }
 
+fn add_record(c: &mut AppController, title: &str, data: &str) {
+    c.handle_command(AppCommand::SetStorageTitle(title.to_owned()));
+    c.handle_command(AppCommand::SetStorageData(data.to_owned()));
+    c.handle_command(AppCommand::AddStorageRecord);
+    settle(c);
+}
+
 fn authorize(c: &mut AppController) {
     c.handle_command(AppCommand::AuthSubmit {
         pw: Password::new(String::from_utf8(PW.to_vec()).unwrap()),
@@ -11562,6 +11569,42 @@ fn deleting_names_the_record_and_refuses_one_that_is_not_there() {
     authorize(&mut c);
 
     assert_eq!(chain.storage_ops(), vec![StorageOp::Delete { id: 4 }]);
+    cleanup(&dir);
+}
+
+#[test]
+fn signing_a_record_can_stay_unlocked_the_way_signing_a_transfer_can() {
+    let dir = temp_dir("storage-remember");
+    let chain = FakeChain::default();
+    let (mut c, _mem) = storage_controller(&dir, chain.clone(), Vec::new());
+
+    add_record(&mut c, "first", "a");
+    authorize(&mut c);
+    assert!(
+        !c.state().within_autosign(),
+        "an unticked 'stay unlocked' leaves the next record asking again"
+    );
+
+    add_record(&mut c, "second", "b");
+    assert_eq!(c.state().auth.mode, AuthMode::Enter, "it asks again");
+    c.handle_command(AppCommand::AuthSubmit {
+        pw: Password::new(String::from_utf8(PW.to_vec()).unwrap()),
+        pw2: Password::new(String::new()),
+        remember: true,
+    });
+    c.pump_key();
+    c.pump_events();
+    assert!(
+        c.state().within_autosign(),
+        "ticking it opens the same auto-sign window a transfer opens"
+    );
+
+    add_record(&mut c, "third", "c");
+    assert_eq!(
+        c.state().auth.mode,
+        AuthMode::Confirm,
+        "and the next record only asks to be confirmed"
+    );
     cleanup(&dir);
 }
 

@@ -54,7 +54,10 @@ export component AuthModal inherits Rectangle {
 
     property <string> cta:
         root.mode == "create" ? "Create & continue"
-        : (root.mode == "confirm" ? (root.purpose == "swap" ? "Confirm & swap" : "Confirm & send")
+        : (root.mode == "confirm"
+            ? (root.purpose == "swap" ? "Confirm & swap"
+            : (root.purpose == "storage" ? (root.danger ? "Confirm & delete" : "Confirm & save")
+            : "Confirm & send"))
         : (root.purpose == "swap" ? "Sign & swap"
         : (root.purpose == "send" ? "Sign & send"
         : (root.purpose == "changepassword" ? "Continue"
@@ -341,7 +344,8 @@ export component AuthModal inherits Rectangle {
 
             if root.error != "": InlineError { text: root.error; }
 
-            if (root.purpose == "send" || root.purpose == "swap") && root.mode != "confirm": HorizontalLayout {
+            if (root.purpose == "send" || root.purpose == "swap" || root.purpose == "storage")
+                && root.mode != "confirm": HorizontalLayout {
                 spacing: Space.s_10;
                 Checkbox {
                     checked: root.remember;
