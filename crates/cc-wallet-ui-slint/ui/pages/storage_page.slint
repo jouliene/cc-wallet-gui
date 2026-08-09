@@ -142,7 +142,7 @@ export component StoragePage inherits VerticalLayout {
         vertical-stretch: 1;
         VerticalLayout {
             CardHeader {
-                icon: @image-url("../../assets/icons/lock.svg");
+                icon: @image-url("../../assets/icons/vault.svg");
                 title: "Storage";
                 subtitle: root.exists
                     ? (root.count + " of " + root.limit + " records, encrypted with this wallet's key")
@@ -245,7 +245,7 @@ export component StoragePage inherits VerticalLayout {
                 vertical-stretch: 1;
                 padding: Space.s_24;
                 EmptyState {
-                    icon: @image-url("../../assets/icons/lock.svg");
+                    icon: @image-url("../../assets/icons/vault.svg");
                     title: root.loading ? "Looking for your storage…" : "No storage yet";
                     subtitle: "Create one to keep notes, logins and numbers on chain. Every record is encrypted on this machine before it is sent — the chain only ever sees ciphertext.";
                     HorizontalLayout {

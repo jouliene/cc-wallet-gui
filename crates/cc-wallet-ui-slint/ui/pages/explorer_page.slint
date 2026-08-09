@@ -1026,7 +1026,8 @@ export component ExplorerPage inherits VerticalLayout {
                     }
                 }
                 if !root.trace_loading && root.trace_error == "" && root.trace_edges.length > 0: VerticalLayout {
-                    padding-left: Space.s_16; padding-right: Space.s_16; padding-top: Space.s_4;
+                    padding-left: Space.s_16; padding-right: Space.s_16;
+                    padding-top: Space.s_4; padding-bottom: Space.card_pad_v;
                     TraceDiagram {
                         parties: root.trace_parties;
                         edges: root.trace_edges;
