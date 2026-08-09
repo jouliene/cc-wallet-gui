@@ -11796,3 +11796,34 @@ fn a_result_this_session_cannot_use_still_unlocks_the_form() {
     );
     cleanup(&dir);
 }
+
+#[test]
+fn a_copied_record_is_wiped_on_the_same_timer_as_the_recovery_phrase() {
+    let dir = temp_dir("storage-copy-ttl");
+    let chain = FakeChain::default();
+    let (mut c, mem) =
+        storage_controller(&dir, chain, vec![stored(1, "My email", "abc@gmail.com")]);
+
+    c.handle_command(AppCommand::CopyStorageRecord(1));
+    settle(&mut c);
+    assert_eq!(clipboard_of(&mem), "abc@gmail.com");
+
+    let armed = c
+        .clipboard_deadline
+        .expect("copying a record arms the wipe, exactly as copying the phrase does");
+    assert!(
+        armed.remaining_secs() > 55 && armed.remaining_secs() <= 60,
+        "the record gets the recovery phrase's own minute, not a different one: {}s",
+        armed.remaining_secs()
+    );
+
+    c.clipboard_deadline = Some(Deadline::after(Duration::ZERO));
+    c.tick();
+
+    assert_eq!(
+        clipboard_of(&mem),
+        "",
+        "the timer takes the record off the clipboard without anyone asking"
+    );
+    cleanup(&dir);
+}
