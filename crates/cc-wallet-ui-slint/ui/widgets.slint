@@ -428,11 +428,14 @@ export component GhostButton inherits Rectangle {
         padding-right: root.pad_h;
         spacing: Space.s_6;
         alignment: center;
-        if root.has_icon: Icon {
-            source: root.icon;
-            tint: root.enabled ? root.text_color : Palette.text_quiet;
-            width: 15px;
-            height: 15px;
+        if root.has_icon: VerticalLayout {
+            alignment: center;
+            Icon {
+                source: root.icon;
+                tint: root.enabled ? root.text_color : Palette.text_quiet;
+                width: 15px;
+                height: 15px;
+            }
         }
         Text {
             text: root.label;

@@ -11723,3 +11723,54 @@ fn only_deleting_a_record_is_dressed_as_dangerous() {
     );
     cleanup(&dir);
 }
+
+#[test]
+fn leaving_the_storage_page_hides_the_records_again() {
+    let dir = temp_dir("storage-leave");
+    let chain = FakeChain::default();
+    let (mut c, mem) =
+        storage_controller(&dir, chain, vec![stored(1, "My email", "abc@gmail.com")]);
+
+    c.handle_command(AppCommand::RevealStorageRecords);
+    settle(&mut c);
+    authorize(&mut c);
+    assert!(c.state().storage.revealed);
+    c.handle_command(AppCommand::CopyStorageRecord(1));
+    settle(&mut c);
+    assert_eq!(clipboard_of(&mem), "abc@gmail.com");
+
+    c.handle_command(AppCommand::SelectTab(AppTab::Wallet));
+    settle(&mut c);
+
+    assert!(
+        !c.state().storage.revealed,
+        "walking away from the page puts the records back behind the password"
+    );
+    assert_eq!(
+        clipboard_of(&mem),
+        "",
+        "and takes what was copied off the clipboard with it"
+    );
+    cleanup(&dir);
+}
+
+#[test]
+fn a_save_in_flight_does_not_add_or_remove_anything_on_the_page() {
+    let dir = temp_dir("storage-no-jitter");
+    let chain = FakeChain::default();
+    let (mut c, _mem) = storage_controller(&dir, chain, vec![stored(1, "one", "a")]);
+
+    // The row that reports progress is always present, so a notice appearing or
+    // clearing can never change the page's layout under the user's cursor.
+    let rows_before = c.state().storage.records.len();
+    c.handle_command(AppCommand::SetStorageTitle("two".to_owned()));
+    c.handle_command(AppCommand::SetStorageData("b".to_owned()));
+    c.handle_command(AppCommand::AddStorageRecord);
+    settle(&mut c);
+    assert_eq!(
+        c.state().storage.records.len(),
+        rows_before,
+        "an unconfirmed save must not insert a row that later disappears"
+    );
+    cleanup(&dir);
+}

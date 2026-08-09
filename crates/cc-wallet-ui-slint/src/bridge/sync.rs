@@ -595,7 +595,7 @@ pub(super) fn sync_ui(ui: &AppWindow, state: &AppState, form_locked: bool, cache
 
     render_explorer_account(ui, state, cache, now);
     sync_swap(ui, state, cache);
-    sync_storage(ui, state);
+    sync_storage(ui, state, cache);
 
     if state.risk_review_open != cache.risk_was_open {
         ui.set_risk_typed_confirmation(SharedString::new());
@@ -945,7 +945,7 @@ fn tab_label(tab: AppTab) -> &'static str {
     }
 }
 
-fn sync_storage(ui: &AppWindow, state: &AppState) {
+fn sync_storage(ui: &AppWindow, state: &AppState, cache: &mut UiCache) {
     let storage = &state.storage;
     ui.set_storage_address(storage.address.clone().into());
     ui.set_storage_exists(storage.exists);
@@ -974,17 +974,36 @@ fn sync_storage(ui: &AppWindow, state: &AppState) {
         ui.set_storage_data_input(storage.data_input.clone().into());
     }
 
-    let rows: Vec<StorageRow> = storage
-        .records
-        .iter()
-        .map(|record| StorageRow {
-            id: record.id as i32,
-            number: format!("#{}", record.id).into(),
-            title: record.title.clone().into(),
-            data: record.data.clone().into(),
-        })
-        .collect();
-    ui.set_storage_records(ModelRc::from(Rc::new(VecModel::from(rows))));
+    let rows_hash = storage_rows_hash(storage);
+    if cache.storage_rows_hash != rows_hash {
+        cache.storage_rows_hash = rows_hash;
+        let rows: Vec<StorageRow> = storage
+            .records
+            .iter()
+            .map(|record| StorageRow {
+                id: record.id as i32,
+                number: format!("#{}", record.id).into(),
+                title: record.title.clone().into(),
+                data: record.data.clone().into(),
+            })
+            .collect();
+        ui.set_storage_records(ModelRc::from(Rc::new(VecModel::from(rows))));
+    }
+}
+
+/// Rebuilding the row model recreates the rows, and with them any state the row
+/// itself owns — the copy button's "copied" tick most visibly. So the model is
+/// replaced only when what it would show actually changed.
+fn storage_rows_hash(storage: &cc_wallet_app::StorageUi) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    storage.revealed.hash(&mut hasher);
+    for record in &storage.records {
+        record.id.hash(&mut hasher);
+        record.title.hash(&mut hasher);
+        record.data.hash(&mut hasher);
+    }
+    hasher.finish()
 }
 
 fn sync_swap(ui: &AppWindow, state: &AppState, cache: &mut UiCache) {

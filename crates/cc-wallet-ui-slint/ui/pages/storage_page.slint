@@ -1,6 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Palette, Fonts, Radii, Space, Motion, Sizes } from "../design_tokens.slint";
-import { Icon, Card, CardHeader, MicroLabel, PrimaryButton, GhostButton, IconButton, CopyButton, SecretCopyButton, Field, EmptyState, InlineError, Amount, UserActivity, ClipboardBridge } from "../widgets.slint";
+import { Icon, Card, CardHeader, MicroLabel, FieldLabel, PrimaryButton, GhostButton, IconButton, CopyButton, SecretCopyButton, Field, EmptyState, InlineError, Amount, UserActivity, ClipboardBridge } from "../widgets.slint";
 import { StorageRow, TokenAmount } from "../models.slint";
 
 component RecordRow inherits Rectangle {
@@ -152,12 +152,19 @@ export component StoragePage inherits VerticalLayout {
                 HorizontalLayout {
                     spacing: Space.s_8;
                     alignment: end;
+                    if root.exists && root.count > 0 && root.revealed: VerticalLayout {
+                        alignment: center;
+                        Text {
+                            text: root.reveal_ttl + "s";
+                            color: Palette.text_quiet;
+                            font-family: Fonts.mono;
+                            font-size: Fonts.small;
+                        }
+                    }
                     if root.exists && root.count > 0: VerticalLayout {
                         alignment: center;
                         GhostButton {
-                            label: root.revealed
-                                ? ("Hide records  " + root.reveal_ttl + "s")
-                                : "Reveal records";
+                            label: root.revealed ? "Hide records" : "Reveal records";
                             has_icon: true;
                             icon: root.revealed
                                 ? @image-url("../../assets/icons/eye-off.svg")
@@ -179,76 +186,96 @@ export component StoragePage inherits VerticalLayout {
                 }
             }
 
-            if root.exists: Rectangle {
-                height: 46px;
-                background: Palette.surface_inset;
-                Rectangle {
-                    y: parent.height - 1px;
-                    height: 1px;
-                    background: Palette.border_subtle;
-                }
-                HorizontalLayout {
+            Rectangle {
+                height: 26px;
+                if root.error != "": HorizontalLayout {
                     padding-left: Space.s_16;
-                    padding-right: Space.s_8;
-                    spacing: Space.s_8;
-                    VerticalLayout { alignment: center; MicroLabel { text: "ADDRESS"; } }
+                    padding-right: Space.s_16;
+                    VerticalLayout { alignment: center; InlineError { text: root.error; } }
+                }
+                if root.error == "" && root.notice != "": HorizontalLayout {
+                    padding-left: Space.s_16;
+                    padding-right: Space.s_16;
                     VerticalLayout {
                         alignment: center;
                         Text {
+                            text: root.notice;
+                            color: Palette.text_quiet;
+                            font-family: Fonts.ui;
+                            font-size: Fonts.small;
+                        }
+                    }
+                }
+                if root.error == "" && root.notice == "" && root.unreadable > 0: HorizontalLayout {
+                    padding-left: Space.s_16;
+                    padding-right: Space.s_16;
+                    VerticalLayout {
+                        alignment: center;
+                        Text {
+                            text: root.unreadable + " record(s) here could not be decrypted by this wallet.";
+                            color: Palette.negative;
+                            font-family: Fonts.ui;
+                            font-size: Fonts.small;
+                        }
+                    }
+                }
+            }
+
+            if root.exists: VerticalLayout {
+                padding-left: Space.s_16;
+                padding-right: Space.s_16;
+                padding-bottom: Space.s_10;
+                spacing: Space.s_0;
+
+                HorizontalLayout {
+                    height: Theme.account_list_row_h;
+                    spacing: Space.s_0;
+                    VerticalLayout {
+                        alignment: center;
+                        width: Theme.account_label_w;
+                        FieldLabel { text: "Address"; }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        padding-left: Space.s_14;
+                        Text {
                             text: root.address;
-                            color: Palette.text_secondary;
+                            color: Palette.text_value;
                             font-family: Fonts.mono;
                             font-size: Fonts.small;
                         }
                     }
                     VerticalLayout {
                         alignment: center;
-                        CopyButton { clicked => { ClipboardBridge.copy_text(root.address); } }
+                        padding-left: Space.s_6;
+                        CopyButton { value: root.address; }
                     }
                     VerticalLayout {
                         alignment: center;
                         IconButton {
                             icon: @image-url("../../assets/icons/external-link.svg");
+                            size: Sizes.control_dense;
+                            icon_size: Sizes.icon_sm;
                             clicked => { root.open_in_explorer(root.address, ""); }
                         }
                     }
-                    Rectangle { horizontal-stretch: 1; }
-                    VerticalLayout { alignment: center; MicroLabel { text: "BALANCE"; } }
+                    Rectangle { horizontal-stretch: 1; min-width: 0px; }
+                }
+
+                HorizontalLayout {
+                    height: Theme.account_list_row_h;
+                    spacing: Space.s_0;
                     VerticalLayout {
                         alignment: center;
-                        Amount { amount: root.balance; font_size: Fonts.small; }
+                        width: Theme.account_label_w;
+                        FieldLabel { text: "Balance"; }
                     }
-                    Rectangle { width: Space.s_8; }
-                }
-            }
-
-            if root.error != "": VerticalLayout {
-                padding: Space.s_12;
-                InlineError { text: root.error; }
-            }
-
-            if root.notice != "" && root.error == "": VerticalLayout {
-                padding-left: Space.s_16;
-                padding-right: Space.s_16;
-                padding-top: Space.s_8;
-                Text {
-                    text: root.notice;
-                    color: Palette.text_quiet;
-                    font-family: Fonts.ui;
-                    font-size: Fonts.small;
-                }
-            }
-
-            if root.unreadable > 0: VerticalLayout {
-                padding-left: Space.s_16;
-                padding-right: Space.s_16;
-                padding-top: Space.s_8;
-                Text {
-                    text: root.unreadable + " record(s) on chain could not be decrypted by this wallet.";
-                    color: Palette.negative;
-                    font-family: Fonts.ui;
-                    font-size: Fonts.small;
-                    wrap: word-wrap;
+                    VerticalLayout {
+                        alignment: center;
+                        padding-left: Space.s_14;
+                        Amount { amount: root.balance; tint: Palette.value_in; }
+                    }
+                    Rectangle { horizontal-stretch: 1; min-width: 0px; }
                 }
             }
 

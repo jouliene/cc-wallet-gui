@@ -642,6 +642,9 @@ impl AppController {
             AppCommand::SwitchToWallet(name) => self.switch_to_wallet(name),
             AppCommand::DeleteWallet => self.delete_wallet(),
             AppCommand::SelectTab(tab) => {
+                if self.state.selected_tab == AppTab::Storage && tab != AppTab::Storage {
+                    self.hide_storage_records();
+                }
                 self.state.selected_tab = tab;
                 if tab == AppTab::Explorer {
                     self.clock_refresh_at = None;

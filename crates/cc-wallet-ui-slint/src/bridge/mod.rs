@@ -224,6 +224,7 @@ struct UiCache {
     contacts: Vec<AddressBookEntry>,
     contacts_rev: u64,
     activity_hash: u64,
+    storage_rows_hash: u64,
     explorer_account_hash: u64,
     explorer_txs_hash: u64,
     explorer_trace_hash: u64,
