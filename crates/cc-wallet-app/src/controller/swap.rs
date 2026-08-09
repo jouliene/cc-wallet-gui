@@ -8,7 +8,7 @@ use cc_wallet_domain::{
 };
 
 use super::AppController;
-use crate::event::{AppEvent, SwapDispatch};
+use crate::event::{AppEvent, BroadcastDispatch};
 use crate::state::{
     AuthModal, AuthMode, AuthPurpose, SWAP_MAX_NATIVE_RESERVE, SwapFigures, SwapReceipt,
 };
@@ -331,7 +331,7 @@ impl AppController {
                     let broadcast_started_at = Instant::now();
                     broadcast_all_candidates(chain.as_ref(), &prepared)
                         .await
-                        .map(|outcome| SwapDispatch {
+                        .map(|outcome| BroadcastDispatch {
                             outcome,
                             ext_msg_hash,
                             broadcast_started_at,
@@ -346,7 +346,7 @@ impl AppController {
     pub(super) fn apply_swap_finished(
         &mut self,
         generation: u64,
-        result: Result<SwapDispatch, ChainError>,
+        result: Result<BroadcastDispatch, ChainError>,
     ) {
         if generation != self.session_generation {
             return;
@@ -357,7 +357,7 @@ impl AppController {
         match result {
             Ok(dispatch) if broadcast_reached_node(&dispatch.outcome) => {
                 self.session
-                    .pending_swaps
+                    .pending_externals
                     .push((dispatch.ext_msg_hash.clone(), dispatch.broadcast_started_at));
                 self.state.swap.receipt = intent.map(|intent| SwapReceipt {
                     sent: intent.sent,

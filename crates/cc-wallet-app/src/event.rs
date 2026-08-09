@@ -160,7 +160,7 @@ pub enum AppEvent {
     },
     SwapFinished {
         generation: u64,
-        result: Result<SwapDispatch, ChainError>,
+        result: Result<BroadcastDispatch, ChainError>,
     },
     StorageLoaded {
         generation: u64,
@@ -175,13 +175,16 @@ pub enum AppEvent {
     StorageFinished {
         generation: u64,
         op: StorageOp,
-        result: Result<CandidateBroadcastOutcome, ChainError>,
+        result: Result<BroadcastDispatch, ChainError>,
     },
     Error(String),
 }
 
+/// An external message this wallet put on the wire, and when it went. Both the
+/// swap and the storage pages hand one back so the row it becomes in Activity
+/// can be told how long the chain took to accept it.
 #[derive(Debug)]
-pub struct SwapDispatch {
+pub struct BroadcastDispatch {
     pub outcome: CandidateBroadcastOutcome,
     pub ext_msg_hash: Digest32,
     pub broadcast_started_at: Instant,

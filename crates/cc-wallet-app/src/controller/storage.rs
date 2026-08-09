@@ -5,7 +5,7 @@ use cc_wallet_domain::{StorageOp, StorageSnapshot, WalletInputs, next_free_id, v
 use zeroize::Zeroizing;
 
 use super::AppController;
-use crate::event::AppEvent;
+use crate::event::{AppEvent, BroadcastDispatch};
 use crate::state::{AuthModal, AuthMode, AuthPurpose, Deadline, StorageUi};
 
 pub(super) struct PendingStorage {
@@ -351,7 +351,17 @@ impl AppController {
         let dispatched = op.clone();
         self.runtime.spawn(async move {
             let result = match chain.prepare_storage_op(inputs, dispatched.clone()).await {
-                Ok(prepared) => broadcast_all_candidates(chain.as_ref(), &prepared).await,
+                Ok(prepared) => {
+                    let ext_msg_hash = prepared.external_hash().clone();
+                    let broadcast_started_at = Instant::now();
+                    broadcast_all_candidates(chain.as_ref(), &prepared)
+                        .await
+                        .map(|outcome| BroadcastDispatch {
+                            outcome,
+                            ext_msg_hash,
+                            broadcast_started_at,
+                        })
+                }
                 Err(error) => Err(error),
             };
             let _ = tx.send(AppEvent::StorageFinished {
@@ -366,7 +376,7 @@ impl AppController {
         &mut self,
         generation: u64,
         op: StorageOp,
-        result: Result<CandidateBroadcastOutcome, ChainError>,
+        result: Result<BroadcastDispatch, ChainError>,
     ) {
         // Even a result this session can no longer act on has to release the
         // page: `busy` gates the form, and leaving it set would lock the user
@@ -380,7 +390,13 @@ impl AppController {
         self.state.storage.pending_label.clear();
         self.state.busy = false;
         match result {
-            Ok(outcome) if broadcast_reached_node(&outcome) => {
+            Ok(dispatch) if broadcast_reached_node(&dispatch.outcome) => {
+                // The row this message becomes in Activity is owed a finality
+                // reading like any other transfer, and the only thing that can
+                // tie the two together is the hash we just put on the wire.
+                self.session
+                    .pending_externals
+                    .push((dispatch.ext_msg_hash, dispatch.broadcast_started_at));
                 self.state.storage.notice = match &op {
                     StorageOp::Create => "Creating the storage on chain…".to_owned(),
                     StorageOp::Put { id, .. } => format!("Saving record #{id}…"),
@@ -401,10 +417,10 @@ impl AppController {
                 self.fetch_transactions(self.subscription_generation);
                 self.refresh_storage();
             }
-            Ok(outcome) => {
+            Ok(dispatch) => {
                 self.state.storage.error = format!(
                     "The storage request did not reach the network: {}",
-                    outcome_detail(&outcome)
+                    outcome_detail(&dispatch.outcome)
                 );
             }
             Err(error) => {

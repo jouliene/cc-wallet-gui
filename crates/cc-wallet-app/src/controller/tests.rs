@@ -10896,7 +10896,7 @@ fn dispatch_swap(c: &mut AppController, ext: &str, out_units: u128) {
     let generation = c.session_generation;
     c.apply_event(AppEvent::SwapFinished {
         generation,
-        result: Ok(crate::event::SwapDispatch {
+        result: Ok(crate::event::BroadcastDispatch {
             outcome: CandidateBroadcastOutcome::NodeResponseObserved {
                 request_id: "req".to_owned(),
                 response: cc_wallet_domain::NodeResponseKind::Acknowledged,
@@ -11158,7 +11158,7 @@ fn a_swaps_own_row_reports_its_finality_like_any_other_send() {
     let (mut c, _fake) = ready_to_swap(&dir);
     dispatch_swap(&mut c, "swap-ext", 9_066_108_938);
     assert_eq!(
-        c.session.pending_swaps.len(),
+        c.session.pending_externals.len(),
         1,
         "a broadcast swap is timed from the moment it went out"
     );
@@ -11170,7 +11170,7 @@ fn a_swaps_own_row_reports_its_finality_like_any_other_send() {
         int_msg_hash: optional_digest("other-int"),
         ..ActivityEvent::test_stub(30, 1_700_000_000)
     }]);
-    assert_eq!(c.session.pending_swaps.len(), 1);
+    assert_eq!(c.session.pending_externals.len(), 1);
 
     c.merge_activity(vec![swap_out_event(
         50,
@@ -11191,7 +11191,7 @@ fn a_swaps_own_row_reports_its_finality_like_any_other_send() {
         "a swap is our own send, so its row says how long it took to appear"
     );
     assert!(
-        c.session.pending_swaps.is_empty(),
+        c.session.pending_externals.is_empty(),
         "a swap that has been seen is no longer waiting to be timed"
     );
 
@@ -11276,7 +11276,7 @@ fn a_swap_that_never_reached_the_node_reports_the_failure_and_opens_no_receipt()
     let generation = c.session_generation;
     c.apply_event(AppEvent::SwapFinished {
         generation,
-        result: Ok(crate::event::SwapDispatch {
+        result: Ok(crate::event::BroadcastDispatch {
             outcome: CandidateBroadcastOutcome::NotTransmitted {
                 detail: "no route to the node".to_owned(),
                 retry_next_candidate: false,
@@ -11569,6 +11569,58 @@ fn deleting_names_the_record_and_refuses_one_that_is_not_there() {
     authorize(&mut c);
 
     assert_eq!(chain.storage_ops(), vec![StorageOp::Delete { id: 4 }]);
+    cleanup(&dir);
+}
+
+#[test]
+fn a_records_own_row_reports_its_finality_like_any_other_send() {
+    let dir = temp_dir("storage-finality");
+    let chain = FakeChain::default();
+    let (mut c, _mem) = storage_controller(&dir, chain, vec![stored(1, "one", "a")]);
+    let generation = c.session_generation;
+
+    c.apply_event(AppEvent::StorageFinished {
+        generation,
+        op: StorageOp::Delete { id: 1 },
+        result: Ok(crate::event::BroadcastDispatch {
+            outcome: CandidateBroadcastOutcome::NodeResponseObserved {
+                request_id: "req".to_owned(),
+                response: cc_wallet_domain::NodeResponseKind::Acknowledged,
+                detail: "acknowledged".to_owned(),
+            },
+            ext_msg_hash: digest("storage-ext"),
+            broadcast_started_at: Instant::now(),
+        }),
+    });
+    assert_eq!(
+        c.session.pending_externals.len(),
+        1,
+        "a record on the wire is timed from the moment it went out"
+    );
+
+    c.merge_activity(vec![ActivityEvent {
+        direction: ActivityDirection::Out,
+        tx_hash: optional_digest("storage-tx"),
+        counterparty: STORAGE_ADDR.to_owned(),
+        ext_msg_hash: optional_digest("storage-ext"),
+        int_msg_hash: optional_digest("storage-int"),
+        ..ActivityEvent::test_stub(60, 1_700_000_000)
+    }]);
+
+    let row = c
+        .state()
+        .activity
+        .iter()
+        .find(|event| event.ext_msg_hash == optional_digest("storage-ext"))
+        .expect("the record's own transaction is in history");
+    assert!(
+        row.finality_ms.is_some(),
+        "writing a record is our own send, so its row says how long it took to appear"
+    );
+    assert!(
+        c.session.pending_externals.is_empty(),
+        "a record that has been seen is no longer waiting to be timed"
+    );
     cleanup(&dir);
 }
 

@@ -544,7 +544,7 @@ impl AppController {
         }
     }
 
-    fn stamp_swap_finality(&mut self, event: &mut ActivityEvent) {
+    fn stamp_external_finality(&mut self, event: &mut ActivityEvent) {
         if event.finality_ms.is_some() {
             return;
         }
@@ -553,13 +553,13 @@ impl AppController {
         };
         let Some(index) = self
             .session
-            .pending_swaps
+            .pending_externals
             .iter()
             .position(|(pending, _)| pending == hash)
         else {
             return;
         };
-        let (_, started_at) = self.session.pending_swaps.remove(index);
+        let (_, started_at) = self.session.pending_externals.remove(index);
         event.finality_ms =
             Some(u64::try_from(started_at.elapsed().as_millis()).unwrap_or(u64::MAX));
     }
@@ -645,7 +645,7 @@ impl AppController {
                     .pending_sends
                     .retain(|(lt, _)| !removed.iter().any(|(removed_lt, _, _)| removed_lt == lt));
             }
-            self.stamp_swap_finality(&mut event);
+            self.stamp_external_finality(&mut event);
             self.state.activity.push(event);
             changed = true;
         }
