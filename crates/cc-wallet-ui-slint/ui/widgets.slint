@@ -811,6 +811,10 @@ export component Field inherits Rectangle {
     property <bool> lit: (input.has-focus || root.editing_border) && root.show_focus_border;
     property <length> caret_margin: 6px;
     property <length> line_height: root.font_size * 1.6;
+    property <length> inner_w: max(1px, root.width - root.pad_left - root.pad_right);
+    property <length> inner_h: max(1px, root.height - (root.multiline ? 2 * root.pad_left : 0px));
+    property <length> caret_x: 0px;
+    property <length> caret_y: 0px;
 
     height: root.height_;
     border-radius: Radii.md;
@@ -850,43 +854,35 @@ export component Field inherits Rectangle {
         }
     }
 
-    scroll := Flickable {
-        x: root.pad_left;
-        y: root.multiline ? root.pad_left : 0px;
-        width: max(1px, parent.width - root.pad_left - root.pad_right);
-        height: root.multiline ? parent.height - 2 * root.pad_left : parent.height;
-        interactive: false;
-        viewport-width: root.multiline
-            ? self.width
-            : max(self.width, input.preferred-width + input.text-cursor-width);
-        viewport-height: root.multiline
-            ? max(self.height, input.preferred-height)
-            : self.height;
-
     input := TextInput {
         text <=> root.text;
         enabled: root.enabled;
         read-only: root.read_only;
         input-type: root.input_type;
-        width: scroll.viewport-width;
-        height: scroll.viewport-height;
-        page-height: scroll.height;
+        x: root.pad_left + (root.multiline
+            ? 0px
+            : min(0px, max(root.inner_w - self.width - self.text-cursor-width, root.caret_x)));
+        y: root.multiline
+            ? root.pad_left + min(0px, max(root.inner_h - self.height, root.caret_y))
+            : 0px;
+        width: root.multiline
+            ? root.inner_w
+            : max(root.inner_w - self.text-cursor-width, self.preferred-width);
+        height: root.multiline ? max(root.inner_h, self.preferred-height) : parent.height;
+        page-height: root.inner_h;
         cursor-position-changed(cpos) => {
-            if (cpos.x + scroll.viewport-x < root.caret_margin) {
-                scroll.viewport-x = min(0px,
-                    max(scroll.width - self.width, root.caret_margin - cpos.x));
-            } else if (cpos.x + scroll.viewport-x > scroll.width - root.caret_margin) {
-                scroll.viewport-x = min(0px,
-                    max(scroll.width - self.width,
-                        scroll.width - cpos.x - root.caret_margin));
-            }
-            if (cpos.y + scroll.viewport-y < 0px) {
-                scroll.viewport-y = min(0px,
-                    max(scroll.height - self.height, - cpos.y));
-            } else if (cpos.y + scroll.viewport-y > scroll.height - root.line_height) {
-                scroll.viewport-y = min(0px,
-                    max(scroll.height - self.height,
-                        scroll.height - cpos.y - root.line_height));
+            if (root.multiline) {
+                if (cpos.y + root.caret_y < 0px) {
+                    root.caret_y = - cpos.y;
+                } else if (cpos.y + root.caret_y > root.inner_h - root.line_height) {
+                    root.caret_y = root.inner_h - cpos.y - root.line_height;
+                }
+            } else {
+                if (cpos.x + root.caret_x < root.caret_margin) {
+                    root.caret_x = root.caret_margin - cpos.x;
+                } else if (cpos.x + root.caret_x > root.inner_w - root.caret_margin) {
+                    root.caret_x = root.inner_w - cpos.x - root.caret_margin;
+                }
             }
         }
         color: Palette.text_primary;
@@ -937,7 +933,6 @@ export component Field inherits Rectangle {
             }
             return reject;
         }
-    }
     }
 
     if root.money_int != "": Text {
