@@ -403,9 +403,9 @@ impl AppController {
                     .pending_externals
                     .push((dispatch.ext_msg_hash, dispatch.broadcast_started_at));
                 self.state.storage.notice = match &op {
-                    StorageOp::Create => "Creating the storage on chain…".to_owned(),
-                    StorageOp::Put { id, .. } => format!("Saving record #{id}…"),
-                    StorageOp::Delete { id } => format!("Deleting record #{id}…"),
+                    StorageOp::Create => "Creating the storage on chain".to_owned(),
+                    StorageOp::Put { id, .. } => format!("Saving record #{id}"),
+                    StorageOp::Delete { id } => format!("Deleting record #{id}"),
                 };
                 if matches!(op, StorageOp::Put { .. }) {
                     self.state.storage.title_input.clear();

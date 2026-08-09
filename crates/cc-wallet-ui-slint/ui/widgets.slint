@@ -1,4 +1,4 @@
-import { Theme } from "theme.slint";
+import { Theme, Anim } from "theme.slint";
 import { TokenAmount } from "models.slint";
 import { Palette, Fonts, Elevation, Motion, Radii, Sizes, Space, Fade } from "design_tokens.slint";
 
@@ -624,6 +624,26 @@ export component Amount inherits HorizontalLayout {
         font-weight: Fonts.semibold;
         font-size: Fonts.micro;
         vertical-alignment: center;
+    }
+}
+
+// Work the chain has taken but not yet finished, in the one shape the app uses
+// for it: a comet ring in the waiting colour. The software renderer cannot spin
+// an image, so the ring is eight dots whose brightness chases a global angle.
+export component PendingRing inherits Rectangle {
+    in property <length> size_: Sizes.icon_sm;
+    in property <color> tint: Palette.warning;
+    width: root.size_;
+    height: root.size_;
+    for i in 8: Rectangle {
+        property <angle> a: i * 45deg;
+        width: root.size_ / 5.4;
+        height: self.width;
+        border-radius: self.height / 2;
+        background: root.tint;
+        x: root.size_ / 2 + (root.size_ / 3) * Math.cos(self.a) - self.width / 2;
+        y: root.size_ / 2 + (root.size_ / 3) * Math.sin(self.a) - self.height / 2;
+        opacity: 1.0 - (Math.mod((Anim.spin - self.a) / 1deg, 360) / 360) * 0.82;
     }
 }
 

@@ -1,6 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Palette, Fonts, Radii, Space, Motion, Sizes } from "../design_tokens.slint";
-import { Icon, Card, CardHeader, MicroLabel, FieldLabel, PrimaryButton, GhostButton, IconButton, CopyButton, SecretCopyButton, Field, EmptyState, InlineError, Amount, RefreshButton, UserActivity, ClipboardBridge } from "../widgets.slint";
+import { Icon, Card, CardHeader, MicroLabel, FieldLabel, PrimaryButton, GhostButton, IconButton, CopyButton, SecretCopyButton, Field, EmptyState, InlineError, Amount, RefreshButton, PendingRing, UserActivity, ClipboardBridge } from "../widgets.slint";
 import { StorageRow, TokenAmount } from "../models.slint";
 
 component RecordRow inherits Rectangle {
@@ -432,11 +432,23 @@ export component StoragePage inherits VerticalLayout {
                     VerticalLayout {
                         alignment: center;
                         if root.error != "": InlineError { text: root.error; }
-                        if root.error == "" && root.notice != "": Text {
-                            text: root.notice;
-                            color: Palette.text_quiet;
-                            font-family: Fonts.ui;
-                            font-size: Fonts.small;
+                        if root.error == "" && root.notice != "": HorizontalLayout {
+                            spacing: Space.s_6;
+                            alignment: start;
+                            VerticalLayout {
+                                alignment: center;
+                                PendingRing { }
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                Text {
+                                    text: root.notice;
+                                    color: Palette.warning;
+                                    font-family: Fonts.ui;
+                                    font-weight: Fonts.semibold;
+                                    font-size: Fonts.small;
+                                }
+                            }
                         }
                         if root.error == "" && root.notice == "" && root.unreadable > 0: Text {
                             text: root.unreadable + " record(s) here were written by a different wallet and cannot be read.";
