@@ -9,6 +9,7 @@ component RecordRow inherits Rectangle {
     in property <bool> revealed;
     in property <length> number_w;
     in property <length> title_w;
+    in property <length> col_gap;
     callback delete_record(int);
     callback copy_record(int);
 
@@ -32,7 +33,7 @@ component RecordRow inherits Rectangle {
         padding-right: Space.s_8;
         padding-top: Space.s_12;
         padding-bottom: Space.s_12;
-        spacing: Space.s_12;
+        spacing: root.col_gap;
 
         VerticalLayout {
             alignment: start;
@@ -137,6 +138,12 @@ export component StoragePage inherits VerticalLayout {
     height: root.page_height;
     padding-top: Space.s_4;
     spacing: Space.s_16;
+
+    // The heading row and the record rows read these same three, so a column
+    // and its label can never end up starting in different places.
+    property <length> col_number_w: 44px;
+    property <length> col_title_w: 210px;
+    property <length> col_gap: Space.s_12;
 
     Card {
         vertical-stretch: 1;
@@ -268,16 +275,22 @@ export component StoragePage inherits VerticalLayout {
                     HorizontalLayout {
                         padding-left: Space.s_16;
                         padding-right: Space.s_8;
-                        spacing: Space.s_12;
-                        VerticalLayout { alignment: center; width: 52px; MicroLabel { text: "#"; } }
-                        VerticalLayout { alignment: center; width: 220px; MicroLabel { text: "NAME"; } }
+                        spacing: root.col_gap;
                         VerticalLayout {
-                        alignment: center;
-                        horizontal-stretch: 1;
-                        MicroLabel {
-                            text: root.revealed ? "RECORD" : "RECORD — hidden";
+                            alignment: center;
+                            width: root.col_number_w;
+                            MicroLabel { text: "#"; }
                         }
-                    }
+                        VerticalLayout {
+                            alignment: center;
+                            width: root.col_title_w;
+                            MicroLabel { text: "NAME"; }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 1;
+                            MicroLabel { text: "RECORD"; }
+                        }
                         VerticalLayout { alignment: center; width: 72px; }
                     }
                     Rectangle {
@@ -314,8 +327,9 @@ export component StoragePage inherits VerticalLayout {
                             record: row;
                             busy: root.busy;
                             revealed: root.revealed;
-                            number_w: 44px;
-                            title_w: 210px;
+                            number_w: root.col_number_w;
+                            title_w: root.col_title_w;
+                            col_gap: root.col_gap;
                             delete_record(id) => { UserActivity.ping(); root.delete_record(id); }
                             copy_record(id) => { root.copy_record(id); }
                         }
