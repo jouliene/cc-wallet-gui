@@ -452,7 +452,7 @@ export component StoragePage inherits VerticalLayout {
                         }
                         title_field := Field {
                             text <=> root.title_input;
-                            placeholder: "Inna's phone";
+                            placeholder: "Name this record";
                             edited(t) => { root.title_edited(t); }
                             accepted => { if (root.add_enabled) { root.add_record(); } }
                         }
@@ -473,7 +473,7 @@ export component StoragePage inherits VerticalLayout {
                         }
                         Field {
                             text <=> root.data_input;
-                            placeholder: "86594423664";
+                            placeholder: "Anything you want kept private — a password, a number, a note";
                             font_family: Fonts.mono;
                             multiline: true;
                             height_: 70px;
