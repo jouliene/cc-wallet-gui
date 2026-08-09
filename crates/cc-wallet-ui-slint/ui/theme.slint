@@ -28,8 +28,12 @@ export global Theme {
     out property <length> amount_h: 46px;
     out property <length> send_btn_h: 48px;
     out property <length> pw_field_h: 46px;
-    out property <length> asset_list_max_h: 236px;
+    out property <length> asset_list_max_h: 258px;
     out property <length> token_selector_w: 150px;
+    // One width for the Send button and for the column under it: what a
+    // checkbox plus "Send encrypted" needs, and what puts the comment field's
+    // right edge on the token selector's.
+    out property <length> send_btn_w: 124px;
     // What the swap form needs before it starts clipping: a token selector, a
     // MAX chip and enough room left to read the amount being typed.
     out property <length> swap_form_min_w: root.token_selector_w

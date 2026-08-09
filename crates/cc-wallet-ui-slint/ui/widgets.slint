@@ -10,6 +10,7 @@ export struct EditFmt {
 export global AmountFormat {
     callback regroup(text: string, cursor: int) -> EditFmt;
     pure callback int_part(string) -> string;
+    pure callback fit_fraction(frac: string, groups: int) -> string;
 }
 
 export global ClipboardBridge {
@@ -595,8 +596,13 @@ export component Amount inherits HorizontalLayout {
         font-size: root.font_size;
         vertical-alignment: center;
     }
+    // The integer is never cut; the fraction gives way instead, and only at a
+    // group boundary. How many groups fit is a question about the room the row
+    // has, which this widget cannot ask without its answer changing the room —
+    // so whoever owns that width counts the groups and says.
+    in property <int> frac_groups: -1;
     Text {
-        text: root.amount.amount_frac;
+        text: root.frac_groups < 0 ? root.amount.amount_frac : AmountFormat.fit_fraction(root.amount.amount_frac, root.frac_groups);
         color: root.tint;
         opacity: Fade.muted;
         font-family: Fonts.mono;

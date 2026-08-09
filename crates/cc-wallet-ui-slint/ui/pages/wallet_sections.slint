@@ -172,6 +172,16 @@ export component AssetsCard inherits Card {
     in property <[AssetRow]> assets;
     in property <int> asset_count;
     callback select_asset(int);
+
+    // The card's own width comes from the page, so it is the one place in this
+    // column that can decide anything without asking its contents.
+    property <length> row_avatar_w: 32px;
+    property <length> row_free_w: max(0px, root.width
+        - 2 * Space.s_12
+        - 2 * Space.s_12
+        - root.row_avatar_w
+        - 2 * Space.s_12);
+    property <length> row_char_w: Fonts.balance * 0.6;
     VerticalLayout {
         CardHeader {
             icon: @image-url("../../assets/icons/assets.svg");
@@ -182,9 +192,12 @@ export component AssetsCard inherits Card {
             vertical-stretch: 1;
             VerticalLayout {
                 padding: Space.s_12;
-                ScrollView {
+                asset_list := ScrollView {
                     max-height: Theme.asset_list_max_h;
                     viewport-height: root.assets.length * 59px - 5px;
+                    // The rows divide themselves by the width they are given,
+                    // so the width they are given must not come back from them.
+                    viewport-width: asset_list.width;
                     scrolled => { UserActivity.ping(); }
                     vertical-scrollbar-policy: ScrollBarPolicy.always-off;
                     horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
@@ -192,6 +205,9 @@ export component AssetsCard inherits Card {
                         spacing: Space.row_gap;
                         for a in root.assets: AssetListRow {
                             asset: a;
+                            free_w: root.row_free_w;
+                            char_w: root.row_char_w;
+                            avatar_w: root.row_avatar_w;
                             clicked => { if a.sendable { root.select_asset(a.control_id); } }
                         }
                     }
@@ -321,14 +337,8 @@ export component SendCard inherits Card {
                 }
             }
 
-            HorizontalLayout {
-                spacing: Space.s_16;
-                VerticalLayout {
-                    // Amount and comment divide the row in the proportion the
-                    // form was drawn at, so both shrink together.
-                    horizontal-stretch: 7;
-                    min-width: 0px;
-                    spacing: Space.s_8;
+            VerticalLayout {
+                spacing: Space.s_8;
                     HorizontalLayout {
                         height: Sizes.label_row_h;
                         spacing: Space.s_8;
@@ -350,6 +360,13 @@ export component SendCard inherits Card {
                             // so the text has to stop where they begin: one
                             // width drives the inset, the position and the box.
                             property <length> actions_w: Sizes.control_dense + Space.s_4 + Sizes.max_chip_w;
+                            // The step down is a question about this field's
+                            // room, not about a count of characters someone
+                            // measured once against a narrower field. Mono
+                            // digits are 0.6 of their size, so the answer is
+                            // arithmetic and follows the field when it grows.
+                            property <length> number_room: parent.width - Space.s_12 - self.actions_w - Space.s_6 - Space.s_24;
+                            property <length> number_w: root.amount.character-count * 0.6px;
                             amount_field := Field {
                                 text <=> root.amount;
                                 enabled: !root.form_locked;
@@ -357,9 +374,11 @@ export component SendCard inherits Card {
                                 placeholder: "0.0";
                                 height_: Theme.amount_h;
                                 font_family: Fonts.mono;
-                                font_size: root.amount.character-count > 19
-                                    ? Fonts.amount_tightest
-                                    : (root.amount.character-count > 16 ? Fonts.amount_tight : Fonts.amount);
+                                font_size: parent.number_w * (Fonts.amount / 1px) <= parent.number_room
+                                    ? Fonts.amount
+                                    : (parent.number_w * (Fonts.amount_tight / 1px) <= parent.number_room
+                                        ? Fonts.amount_tight
+                                        : Fonts.amount_tightest);
                                 font_weight: Fonts.regular;
                                 text_opacity: Fade.muted;
                                 money_int: AmountFormat.int_part(root.amount);
@@ -414,18 +433,24 @@ export component SendCard inherits Card {
                             }
                             TouchArea { enabled: !root.form_locked; mouse-cursor: pointer; clicked => { root.open_token(); } }
                         }
+                        // The ticker is already in the selector to its left, so
+                        // the button carries neither it nor an icon, and it takes
+                        // the field's height rather than the taller button one:
+                        // beside a 46px field the two would not line up.
+                        PrimaryButton {
+                            width: Theme.send_btn_w;
+                            height_: Theme.amount_h;
+                            label: "Send";
+                            enabled: root.send_enabled;
+                            clicked => { root.request_send(); }
+                        }
                     }
+            }
 
-                    PrimaryButton {
-                        height_: Theme.send_btn_h;
-                        label: "Send " + root.sel_symbol;
-                        enabled: root.send_enabled;
-                        clicked => { root.request_send(); }
-                    }
-                }
-
+            HorizontalLayout {
+                spacing: Space.s_10;
                 VerticalLayout {
-                    horizontal-stretch: 5;
+                    horizontal-stretch: 1;
                     min-width: 0px;
                     spacing: Space.s_8;
                     HorizontalLayout {
@@ -445,15 +470,22 @@ export component SendCard inherits Card {
                         }
                     }
                     Field {
-                        vertical-stretch: 1;
                         text <=> root.comment;
                         enabled: !root.form_locked;
                         multiline: true;
                         placeholder: "Optional note sent with the transfer";
-                        height_: Theme.amount_h + Space.s_8 + Theme.send_btn_h;
+                        height_: Theme.field_h;
                         font_size: Fonts.body;
                         edited(t) => { root.comment_edited(t); }
                     }
+                }
+
+                // Held for the encrypt toggle. It is what puts the comment's
+                // right edge on the token selector's, so the column exists
+                // whether or not anything stands in it yet.
+                VerticalLayout {
+                    width: Theme.send_btn_w;
+                    alignment: end;
                 }
             }
 

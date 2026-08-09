@@ -7,7 +7,7 @@ use cc_wallet_app::{
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use zeroize::Zeroizing;
 
-use super::render::{party_pill_label, regroup_amount, ungroup_amount};
+use super::render::{fit_fraction, party_pill_label, regroup_amount, ungroup_amount};
 use super::sync::sync_ui;
 use super::{
     ActivityFilters, AmountFormat, AppWindow, ClipboardBridge, EditFmt, UiCache, UserActivity,
@@ -103,6 +103,8 @@ pub(super) fn connect_callbacks(
             Some((int, _)) => int.into(),
             None => text,
         });
+    ui.global::<AmountFormat>()
+        .on_fit_fraction(|frac, groups| fit_fraction(frac.as_str(), groups).into());
     ui.global::<AmountFormat>().on_regroup(|text, cursor| {
         let f = regroup_amount(text.as_str(), cursor);
         EditFmt {

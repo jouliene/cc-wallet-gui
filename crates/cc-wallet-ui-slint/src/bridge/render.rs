@@ -1694,14 +1694,18 @@ mod helper_tests {
             .expect("Amount ends before MaxChip")
             .0;
         let (integer, fraction) = amount
-            .split_once("text: root.amount.amount_frac;")
+            .split_once("text: root.frac_groups < 0")
             .expect("the fraction run follows the integer run");
         assert!(
             !integer.contains("overflow:"),
             "the integer run must never elide — a balance that loses a digit before the \
              point is a different number"
         );
-        assert!(fraction.contains("overflow: root.elide_fraction ? elide : clip;"));
+        assert!(
+            fraction.contains("AmountFormat.fit_fraction("),
+            "the fraction gives way by whole groups, decided by whoever owns the width; \
+             letting the Text elide instead cuts a group in half and reads as another number"
+        );
         assert!(fraction.contains("min-width: root.elide_fraction ? 0px : self.preferred-width;"));
 
         let asset_row = rows
@@ -1713,8 +1717,13 @@ mod helper_tests {
             .0;
         assert!(asset_row.contains("elide_fraction: true;"));
         assert!(
-            asset_row.contains("min-width: 0px;"),
-            "the name column has to be allowed to shrink, or the row pushes the balance out"
+            asset_row.contains("name_min_w: 96px;"),
+            "the name column shrinks, but not past being a name; below this the row reads \
+             as a balance with no owner"
+        );
+        assert!(
+            asset_row.contains("frac_groups: root.frac_groups;"),
+            "the row owns the width, so the row is what counts the groups"
         );
         assert!(asset_row.contains("font_size: Fonts.balance;"));
     }
@@ -2170,5 +2179,55 @@ mod seed_exposure_tests {
         assert_eq!(e.words[2].as_str(), "three");
         assert_eq!(e.words[3].as_str(), "four");
         assert!(e.words[4..].iter().all(|w| w.is_empty()));
+    }
+}
+
+/// A fraction cut to whole groups. The caller says how many three-digit groups
+/// it has room for; anything dropped is owed an ellipsis, so a reader can tell
+/// a rounded figure from a complete one. Cutting mid-group would read as a
+/// different number.
+pub(super) fn fit_fraction(frac: &str, groups: i32) -> String {
+    let Some(digits) = frac.strip_prefix('.') else {
+        return frac.to_owned();
+    };
+    let all: Vec<&str> = digits.split(FRAC_GROUP).collect();
+    let keep = groups.max(0) as usize;
+    if keep >= all.len() {
+        return frac.to_owned();
+    }
+    if keep == 0 {
+        return "…".to_owned();
+    }
+    format!(".{}…", all[..keep].join(FRAC_GROUP))
+}
+
+#[cfg(test)]
+mod fraction_fit_tests {
+    use super::*;
+
+    const FRAC: &str = ".704\u{2004}769\u{2004}361";
+
+    #[test]
+    fn a_fraction_that_fits_is_left_alone() {
+        assert_eq!(fit_fraction(FRAC, 3), FRAC);
+        assert_eq!(fit_fraction(FRAC, 9), FRAC);
+    }
+
+    #[test]
+    fn a_fraction_is_cut_at_a_group_and_says_so() {
+        assert_eq!(fit_fraction(FRAC, 2), ".704\u{2004}769…");
+        assert_eq!(fit_fraction(FRAC, 1), ".704…");
+    }
+
+    #[test]
+    fn no_room_for_a_group_leaves_the_integer_alone_and_nothing_else() {
+        assert_eq!(fit_fraction(FRAC, 0), "…");
+        assert_eq!(fit_fraction(FRAC, -1), "…");
+    }
+
+    #[test]
+    fn something_that_is_not_a_fraction_is_not_touched() {
+        assert_eq!(fit_fraction("", 1), "");
+        assert_eq!(fit_fraction("704", 1), "704");
     }
 }
