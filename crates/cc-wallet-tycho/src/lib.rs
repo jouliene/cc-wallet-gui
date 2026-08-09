@@ -29,6 +29,10 @@ pub use emulator::{
     emulate_external_message, prepare_emulation_config, shard_account_for_emulation,
     validate_emulation_input_sizes,
 };
+pub use encrypted_comment::{
+    ENCRYPTED_COMMENT_OP, EncryptedComment, MAX_ENCRYPTED_COMMENT_BYTES, comment_aad,
+    encrypted_comment_payload, parse_encrypted_comment,
+};
 pub use everwallet::{
     AccountInspection, CLOCK_SKEW_MARGIN_SECS, COMMENT_OP, DEFAULT_SEND_FLAGS, DEFAULT_TTL_SECS,
     DEFAULT_WORKCHAIN, EVER_WALLET_CODE_BOC, EVER_WALLET_CONTRACT, EverTransfer, EverWallet,

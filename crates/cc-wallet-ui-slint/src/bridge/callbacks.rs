@@ -98,6 +98,7 @@ pub(super) fn connect_callbacks(
         t,
         AppCommand::SetSendComment(t.to_string())
     );
+    on1!(on_set_encrypt, on, AppCommand::SetEncryptComment(on));
     ui.global::<AmountFormat>()
         .on_int_part(|text| match text.as_str().split_once('.') {
             Some((int, _)) => int.into(),
@@ -928,9 +929,11 @@ mod tests {
             "the asset/activity ScrollViews ping"
         );
         assert_eq!(
-            sections.matches("UserActivity.ping();").count(),
+            sections.matches(scroll).count(),
             2,
-            "the asset and activity ScrollViews each ping"
+            "the asset and activity ScrollViews each ping — counted by the handler that \
+             matters, not by every ping on the page, so a new control that also keeps the \
+             session awake does not read as a regression"
         );
 
         let contacts = include_str!("../../ui/pages/contacts_page.slint");

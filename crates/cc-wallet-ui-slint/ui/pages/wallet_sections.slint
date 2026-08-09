@@ -1,6 +1,6 @@
 import { Theme, Status } from "../theme.slint";
 import { Palette, Fade, Fonts, Radii, Sizes, Space, Motion } from "../design_tokens.slint";
-import { AmountFormat, Icon, Avatar, Card, CardHeader, MicroLabel, IconButton, Field, StatusDot, GhostButton, EmptyState, ClipboardBridge, UserActivity, MaxChip, TableHeader, PrimaryButton, InlineError } from "../widgets.slint";
+import { AmountFormat, Icon, Avatar, Card, CardHeader, MicroLabel, IconButton, Field, StatusDot, GhostButton, EmptyState, ClipboardBridge, UserActivity, MaxChip, TableHeader, PrimaryButton, InlineError, Checkbox } from "../widgets.slint";
 import { AssetRow, ActivityRow } from "../models.slint";
 import { AssetListRow, ActivityListRow, SegBtn } from "wallet_components.slint";
 import { ScrollView } from "std-widgets.slint";
@@ -224,6 +224,9 @@ export component SendCard inherits Card {
     in-out property <string> comment;
     in property <int> comment_bytes;
     in property <int> comment_limit;
+    in property <bool> encrypt_available;
+    in property <bool> encrypt_on;
+    in property <string> encrypt_hint;
     in property <bool> send_enabled;
     in property <bool> form_locked;
     in property <bool> insufficient_balance;
@@ -239,6 +242,7 @@ export component SendCard inherits Card {
     callback recipient_edited(string);
     callback amount_edited(string);
     callback comment_edited(string);
+    callback set_encrypt(bool);
     callback clear_recipient();
     callback max_amount();
     callback request_send();
@@ -480,12 +484,42 @@ export component SendCard inherits Card {
                     }
                 }
 
-                // Held for the encrypt toggle. It is what puts the comment's
-                // right edge on the token selector's, so the column exists
-                // whether or not anything stands in it yet.
+                // Sits under the Send button and shares its width, which is
+                // what puts the comment's right edge on the token selector's.
                 VerticalLayout {
                     width: Theme.send_btn_w;
                     alignment: end;
+                    Rectangle {
+                        height: Theme.field_h;
+                        opacity: root.encrypt_available ? 1.0 : Fade.disabled;
+                        HorizontalLayout {
+                            spacing: Space.s_8;
+                            alignment: start;
+                            VerticalLayout {
+                                alignment: center;
+                                Checkbox {
+                                    checked: root.encrypt_on;
+                                    enabled: root.encrypt_available && !root.form_locked;
+                                    toggled(v) => { UserActivity.ping(); root.set_encrypt(v); }
+                                }
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                Text {
+                                    text: "Send encrypted";
+                                    color: Palette.text_secondary;
+                                    font-family: Fonts.ui;
+                                    font-weight: Fonts.medium;
+                                    font-size: Fonts.small;
+                                }
+                            }
+                        }
+                        TouchArea {
+                            enabled: root.encrypt_available && !root.form_locked;
+                            mouse-cursor: pointer;
+                            clicked => { UserActivity.ping(); root.set_encrypt(!root.encrypt_on); }
+                        }
+                    }
                 }
             }
 

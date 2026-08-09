@@ -26,6 +26,9 @@ export component WalletPage inherits VerticalLayout {
     in-out property <string> comment;
     in property <int> comment_bytes;
     in property <int> comment_limit;
+    in property <bool> encrypt_available;
+    in property <bool> encrypt_on;
+    in property <string> encrypt_hint;
     in property <bool> send_enabled;
     in property <bool> send_form_locked;
     in property <bool> insufficient_balance;
@@ -56,6 +59,7 @@ export component WalletPage inherits VerticalLayout {
     callback recipient_edited(string);
     callback amount_edited(string);
     callback comment_edited(string);
+    callback set_encrypt(bool);
     callback clear_recipient();
     callback pick_contact(string);
     callback select_send_token(int);
@@ -125,6 +129,10 @@ export component WalletPage inherits VerticalLayout {
             comment <=> root.comment;
             comment_bytes: root.comment_bytes;
             comment_limit: root.comment_limit;
+            encrypt_available: root.encrypt_available;
+            encrypt_on: root.encrypt_on;
+            encrypt_hint: root.encrypt_hint;
+            set_encrypt(v) => { root.set_encrypt(v); }
             send_enabled: root.send_enabled;
             form_locked: root.send_form_locked;
             insufficient_balance: root.insufficient_balance;

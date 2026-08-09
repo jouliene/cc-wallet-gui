@@ -28,9 +28,18 @@ pub const COMMENT_ROOT_BYTES: usize = 123;
 
 pub const COMMENT_CELL_BYTES: usize = 127;
 
-pub const COMMENT_CELLS: usize = 4;
+/// What a comment may carry. The chain permits far more; this is what it is
+/// worth paying for at 8000 nano a byte in forward fees. The message builder in
+/// `cc-wallet-tycho` holds the same figure, and a test in `cc-wallet-chain` —
+/// the one crate that sees both — keeps them from drifting apart.
+pub const MAX_COMMENT_BYTES: usize = 1024;
 
-pub const MAX_COMMENT_BYTES: usize = COMMENT_ROOT_BYTES + COMMENT_CELLS * COMMENT_CELL_BYTES;
+pub const COMMENT_CELLS: usize =
+    (MAX_COMMENT_BYTES - COMMENT_ROOT_BYTES).div_ceil(COMMENT_CELL_BYTES);
+
+/// The same budget less what sealing spends out of it: a version byte, the
+/// sender's key, the nonce and the tag.
+pub const MAX_ENCRYPTED_COMMENT_BYTES: usize = MAX_COMMENT_BYTES - 57 - 16;
 
 pub fn truncate_comment(text: &str) -> &str {
     if text.len() <= MAX_COMMENT_BYTES {
@@ -50,6 +59,10 @@ pub struct SendForm {
     pub amount: String,
     #[serde(default)]
     pub comment: String,
+    /// Whether the comment should travel sealed. It belongs to one recipient,
+    /// so editing the address puts it back to false.
+    #[serde(default)]
+    pub encrypt: bool,
 }
 
 impl Default for SendForm {
@@ -59,6 +72,7 @@ impl Default for SendForm {
             destination: String::new(),
             amount: String::new(),
             comment: String::new(),
+            encrypt: false,
         }
     }
 }
@@ -77,6 +91,12 @@ pub struct SendRequest {
     value: AssetAmount,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     comment: String,
+    /// The key the comment is sealed to, when it is sealed. One field rather
+    /// than a flag and a key that could disagree: sealed means there is a key,
+    /// and a key means it is sealed. Absent from anything written before the
+    /// wallet could seal, which is what those transfers were.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    encrypt_to: Option<[u8; 32]>,
 }
 
 #[derive(Deserialize)]
@@ -86,13 +106,19 @@ struct SendRequestWire {
     value: AssetAmount,
     #[serde(default)]
     comment: String,
+    #[serde(default)]
+    encrypt_to: Option<[u8; 32]>,
 }
 
 impl<'de> Deserialize<'de> for SendRequest {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let wire = SendRequestWire::deserialize(deserializer)?;
         Self::new(wire.destination, wire.value)
-            .map(|request| request.with_comment(&wire.comment))
+            .map(|request| {
+                request
+                    .with_comment(&wire.comment)
+                    .sealed_to(wire.encrypt_to)
+            })
             .map_err(serde::de::Error::custom)
     }
 }
@@ -115,6 +141,7 @@ impl SendRequest {
             destination,
             value,
             comment: String::new(),
+            encrypt_to: None,
         })
     }
 
@@ -126,6 +153,16 @@ impl SendRequest {
 
     pub fn comment(&self) -> &str {
         &self.comment
+    }
+
+    pub fn encrypt_to(&self) -> Option<&[u8; 32]> {
+        self.encrypt_to.as_ref()
+    }
+
+    #[must_use]
+    pub fn sealed_to(mut self, key: Option<[u8; 32]>) -> Self {
+        self.encrypt_to = key;
+        self
     }
 
     pub fn native(destination: impl Into<String>, units: u128) -> WalletResult<Self> {
@@ -240,6 +277,7 @@ mod tests {
             destination: DEST.to_owned(),
             amount: "1.2".to_owned(),
             comment: String::new(),
+            encrypt: false,
         };
         let request = form.request().unwrap();
         assert_eq!(request.asset_id(), AssetId::Native);
@@ -248,19 +286,19 @@ mod tests {
 
     #[test]
     fn a_comment_is_measured_in_bytes_and_cut_on_a_character_boundary() {
-        assert_eq!(MAX_COMMENT_BYTES, 631);
+        assert_eq!(MAX_COMMENT_BYTES, 1024);
 
         let ascii = "x".repeat(MAX_COMMENT_BYTES + 10);
         assert_eq!(truncate_comment(&ascii).len(), MAX_COMMENT_BYTES);
 
-        let cyrillic = "я".repeat(400);
+        let cyrillic = "я".repeat(700);
         let cut = truncate_comment(&cyrillic);
         assert!(cut.len() <= MAX_COMMENT_BYTES);
         assert_eq!(
             cut.chars().count(),
             MAX_COMMENT_BYTES / 2,
-            "a Cyrillic letter spends two bytes, so 631 bytes is 315 of them and the \
-             odd byte is left rather than splitting one in half"
+            "a Cyrillic letter spends two bytes, so the budget holds half as many of \
+             them and an odd byte is left rather than splitting one in half"
         );
         assert!(cut.chars().all(|c| c == 'я'));
 
@@ -269,6 +307,7 @@ mod tests {
             destination: DEST.to_owned(),
             amount: "1".to_owned(),
             comment: format!("  {}  ", "e".repeat(MAX_COMMENT_BYTES + 5)),
+            encrypt: false,
         };
         assert_eq!(form.request().unwrap().comment().len(), MAX_COMMENT_BYTES);
     }
@@ -280,6 +319,7 @@ mod tests {
             destination: DEST.to_owned(),
             amount: "340282366920938463463374607431.768211456".to_owned(),
             comment: String::new(),
+            encrypt: false,
         };
         let request = form.request().unwrap();
         assert_eq!(request.asset_id(), AssetId::CurrencyCollection(2));

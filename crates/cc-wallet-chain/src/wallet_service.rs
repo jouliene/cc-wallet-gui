@@ -27,10 +27,11 @@ use cc_wallet_tycho::{
     BroadcastAcknowledgement, CcdexAsset, ChainTransaction, CoinSupply, EmulationConfig,
     EverTransfer, EverWallet, KeyPair, LocalReason, MsgKind, ResponseKind, STORAGE_TARGET_BALANCE,
     Seed, SendAttemptOutcome, StdAddr, SubscriptionEvent, Transport, WalletState,
-    account_subscription_loop, comment_payload, elector_election_stake, emulate_external_message,
-    key_block_supply, parse_transaction, pool_storage_from_account, prepare_emulation_config,
-    shard_account_for_emulation, storage_address, storage_delete_body, storage_from_account,
-    storage_put_body, swap_body, validate_emulation_input_sizes,
+    account_subscription_loop, comment_aad, comment_payload, elector_election_stake,
+    emulate_external_message, encrypted_comment_payload, key_block_supply, parse_transaction,
+    pool_storage_from_account, prepare_emulation_config, shard_account_for_emulation,
+    storage_address, storage_delete_body, storage_from_account, storage_put_body, swap_body,
+    validate_emulation_input_sizes,
 };
 use cc_wallet_vault::{open_record, seal_record};
 use sha2::{Digest, Sha256};
@@ -98,6 +99,22 @@ const STORAGE_DEPLOY_GAS: u128 = 50_000_000;
 
 const STORAGE_OP_GAS: u128 = 60_000_000;
 
+fn seal_comment(
+    seal: &CommentSeal<'_>,
+    recipient_key: &[u8; 32],
+    request: &SendRequest,
+) -> ChainResult<cc_wallet_tycho::Cell> {
+    let key = seal
+        .keys
+        .comment_secret_for(recipient_key)
+        .map_err(|error| ChainError::invalid_input(error.to_string()))?;
+    let aad = comment_aad(seal.sender, request.destination());
+    let sealed = seal_record(&key, &aad, request.comment().as_bytes())
+        .map_err(|error| ChainError::wallet(error.to_string()))?;
+    encrypted_comment_payload(&seal.keys.public_key_bytes(), &sealed)
+        .map_err(|error| ChainError::invalid_input(error.to_string()))
+}
+
 fn emulation_balance_floor(transfer_native: u128) -> ChainResult<u128> {
     let min_balance = transfer_native
         .checked_add(FEE_ESTIMATE_BALANCE_HEADROOM)
@@ -110,8 +127,17 @@ fn emulation_balance_floor(transfer_native: u128) -> ChainResult<u128> {
 
 static MONOTONIC_ORIGIN: LazyLock<Instant> = LazyLock::new(Instant::now);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// What a recipient's account says about itself: whether it can be sent to at
+/// all, and whether it publishes a key a comment could be encrypted to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct DestinationReport {
+    pub status: DestinationAccountStatus,
+    pub encrypt_key: Option<[u8; 32]>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DestinationAccountStatus {
+    #[default]
     NonExist,
     Uninit,
     Frozen,
@@ -511,6 +537,7 @@ impl TychoWalletService {
         let seed = normalize_and_validate_inputs(&inputs)?;
         validate_chain_request(ticket.request())?;
 
+        let keys = self.keypair_for(seed)?;
         let (mut wallet, transport) = self.build_wallet(&inputs, seed)?;
         if wallet.address_string() != ticket.sender_address() {
             return Err(ChainError::InvalidInput(
@@ -564,7 +591,14 @@ impl TychoWalletService {
             .resolve_send_route()
             .await
             .map_err(ChainError::wallet)?;
-        let transfer = build_transfer(ticket.request(), ticket.bounce())?;
+        let transfer = build_transfer(
+            ticket.request(),
+            ticket.bounce(),
+            Some(CommentSeal {
+                keys: &keys,
+                sender: &wallet.address_string(),
+            }),
+        )?;
         let prepared = wallet
             .prepare_send_currency(&transfer, signature_context)
             .map_err(ChainError::wallet)?;
@@ -781,14 +815,14 @@ impl TychoWalletService {
         &self,
         inputs: &EndpointAddressInputs,
         address: String,
-    ) -> ChainResult<DestinationAccountStatus> {
+    ) -> ChainResult<DestinationReport> {
         let address = canonicalize_recipient(&address).map_err(ChainError::invalid_input)?;
         let transport = self.transport_for(inputs.endpoint())?;
         let state = transport
             .get_account_state(&address)
             .await
             .map_err(ChainError::wallet)?;
-        Ok(match state.account() {
+        let status = match state.account() {
             None => DestinationAccountStatus::NonExist,
             Some(account) => match account.state.status() {
                 AccountStatus::Active => DestinationAccountStatus::Active,
@@ -796,6 +830,16 @@ impl TychoWalletService {
                 AccountStatus::Uninit => DestinationAccountStatus::Uninit,
                 AccountStatus::NotExists => DestinationAccountStatus::NonExist,
             },
+        };
+        // The same read already in flight answers both questions, so asking
+        // whether a comment can be encrypted costs no second round trip.
+        let encrypt_key = AccountInspection::from_account_state(&state, Some(&address))
+            .ok()
+            .flatten()
+            .and_then(|inspection| inspection.signing_key);
+        Ok(DestinationReport {
+            status,
+            encrypt_key,
         })
     }
 
@@ -1143,6 +1187,7 @@ impl TychoWalletService {
     ) -> ChainResult<FeeEstimate> {
         let seed = normalize_and_validate_inputs(&inputs)?;
         validate_chain_request(&request)?;
+        let keys = self.keypair_for(seed)?;
         let (mut wallet, transport) = self.build_wallet(&inputs, seed)?;
 
         let config = self.blockchain_config(&transport).await?;
@@ -1169,7 +1214,14 @@ impl TychoWalletService {
             .map_err(ChainError::wallet)?;
         let deploy = !wallet.state().is_active();
 
-        let transfer = build_transfer(&request, bounce)?;
+        let transfer = build_transfer(
+            &request,
+            bounce,
+            Some(CommentSeal {
+                keys: &keys,
+                sender: &wallet.address_string(),
+            }),
+        )?;
         let prepared = wallet
             .prepare_send_currency(&transfer, signature_context)
             .map_err(ChainError::wallet)?;
@@ -1807,7 +1859,7 @@ pub trait ChainService: Send + Sync {
         &'a self,
         inputs: &'a EndpointAddressInputs,
         address: String,
-    ) -> ChainFuture<'a, DestinationAccountStatus>;
+    ) -> ChainFuture<'a, DestinationReport>;
     fn load_transactions<'a>(
         &'a self,
         inputs: &'a EndpointAddressInputs,
@@ -2004,7 +2056,7 @@ impl ChainService for TychoWalletService {
         &'a self,
         inputs: &'a EndpointAddressInputs,
         address: String,
-    ) -> ChainFuture<'a, DestinationAccountStatus> {
+    ) -> ChainFuture<'a, DestinationReport> {
         Box::pin(TychoWalletService::check_destination(self, inputs, address))
     }
 
@@ -2355,16 +2407,37 @@ fn fee_within_bounds(fee: u128) -> bool {
     (FEE_ESTIMATE_FLOOR_NANOS..=maximum).contains(&fee)
 }
 
-fn build_transfer(request: &SendRequest, bounce: bool) -> ChainResult<EverTransfer> {
+/// Our own side of a sealed comment: the keys to agree with, and the address
+/// the ciphertext is bound to. The other side travels with the request.
+struct CommentSeal<'a> {
+    keys: &'a KeyPair,
+    sender: &'a str,
+}
+
+fn build_transfer(
+    request: &SendRequest,
+    bounce: bool,
+    seal: Option<CommentSeal<'_>>,
+) -> ChainResult<EverTransfer> {
     let mut transfer = EverTransfer::new(request.destination())
         .map_err(ChainError::invalid_input)?
         .bounce(bounce)
         .flags(SAFE_SEND_FLAGS);
     if !request.comment().is_empty() {
-        transfer = transfer.payload(
-            comment_payload(request.comment())
+        let payload = match (request.encrypt_to(), seal) {
+            (Some(recipient), Some(seal)) => seal_comment(&seal, recipient, request)?,
+            // Asking to seal with no way to seal would send in the clear what
+            // was meant to be private, so it does not send at all.
+            (Some(_), None) => {
+                return Err(ChainError::wallet(
+                    "this transfer asks for a sealed comment but carries no key to seal with"
+                        .to_owned(),
+                ));
+            }
+            (None, _) => comment_payload(request.comment())
                 .map_err(|error| ChainError::invalid_input(error.to_string()))?,
-        );
+        };
+        transfer = transfer.payload(payload);
     }
     match request.value().asset_id() {
         AssetId::Native => transfer
@@ -2942,11 +3015,71 @@ mod tests {
     }
 
     #[test]
+    fn a_sealed_comment_leaves_no_plaintext_in_the_message() {
+        let sender = KeyPair::from_secret_bytes([9u8; 32]);
+        let recipient = KeyPair::from_secret_bytes([11u8; 32]);
+        let text = "rent for July, flat 4";
+        let request = SendRequest::native(DEST, 1_000)
+            .unwrap()
+            .with_comment(text)
+            .sealed_to(Some(recipient.public_key_bytes()));
+
+        let transfer = build_transfer(
+            &request,
+            true,
+            Some(CommentSeal {
+                keys: &sender,
+                sender: "0:1111111111111111111111111111111111111111111111111111111111111111",
+            }),
+        )
+        .expect("a sealed transfer builds");
+        let body = transfer.build_internal_message().unwrap();
+        let raw = tycho_types::boc::Boc::encode(&body);
+        assert!(
+            !raw.windows(text.len()).any(|w| w == text.as_bytes()),
+            "the comment must not appear in what goes on the wire"
+        );
+
+        let parsed = cc_wallet_tycho::parse_encrypted_comment(transfer.payload_cell().unwrap())
+            .expect("the body parses")
+            .expect("it is a sealed comment");
+        assert_eq!(
+            parsed.sender_key,
+            sender.public_key_bytes(),
+            "the recipient learns whose key to agree with from the message itself"
+        );
+
+        // The recipient reaches the same key from their own side and reads it.
+        let key = recipient
+            .comment_secret_for(&sender.public_key_bytes())
+            .unwrap();
+        let aad = comment_aad(
+            "0:1111111111111111111111111111111111111111111111111111111111111111",
+            request.destination(),
+        );
+        let opened = open_record(&key, &aad, &parsed.sealed).expect("it opens");
+        assert_eq!(String::from_utf8(opened.to_vec()).unwrap(), text);
+    }
+
+    #[test]
+    fn a_transfer_that_asks_to_seal_with_no_key_does_not_go_out_in_the_clear() {
+        let request = SendRequest::native(DEST, 1_000)
+            .unwrap()
+            .with_comment("private")
+            .sealed_to(Some([3u8; 32]));
+
+        assert!(
+            build_transfer(&request, true, None).is_err(),
+            "sending it unsealed would publish what was meant to be private"
+        );
+    }
+
+    #[test]
     fn transfers_use_safe_flags_and_the_requested_bounce() {
-        let bounceable = build_transfer(&native_request(1_000), true).unwrap();
+        let bounceable = build_transfer(&native_request(1_000), true, None).unwrap();
         let bounceable_cell = bounceable.build_internal_message().unwrap();
 
-        let non_bounceable = build_transfer(&native_request(1_000), false).unwrap();
+        let non_bounceable = build_transfer(&native_request(1_000), false, None).unwrap();
         let non_bounceable_cell = non_bounceable.build_internal_message().unwrap();
 
         assert_eq!(

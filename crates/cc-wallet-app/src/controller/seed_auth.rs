@@ -262,7 +262,7 @@ impl AppController {
             return;
         }
         self.state.allow_unbounced = false;
-        let request = match self.state.send_form.request() {
+        let request = match self.state.send_request() {
             Ok(request) => request,
             Err(error) => {
                 self.state.set_error(error.to_string());

@@ -186,7 +186,7 @@ impl AppController {
             self.set_max_amount();
             return;
         }
-        let request = match self.state.send_form.request() {
+        let request = match self.state.send_request() {
             Ok(request) => request,
             Err(_) => {
                 if self.state.fee_estimate.is_some() || self.state.fee_estimating {
@@ -349,7 +349,7 @@ impl AppController {
         let Ok(inputs) = self.wallet_inputs() else {
             return;
         };
-        let Ok(request) = self.state.send_form.request() else {
+        let Ok(request) = self.state.send_request() else {
             return;
         };
         let Some(sender_address) = self
@@ -409,7 +409,7 @@ impl AppController {
         let tx = self.tx.clone();
         let chain = self.chain.clone();
         self.session.dest_check_task = Some(self.runtime.spawn(async move {
-            let status = tokio::time::timeout(
+            let report = tokio::time::timeout(
                 std::time::Duration::from_secs(12),
                 chain.check_destination(&inputs, address.clone()),
             )
@@ -420,7 +420,7 @@ impl AppController {
                 generation,
                 seq,
                 address,
-                status,
+                report,
             });
         }));
     }

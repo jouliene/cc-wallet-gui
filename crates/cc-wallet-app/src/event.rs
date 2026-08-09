@@ -2,8 +2,7 @@ use std::time::Instant;
 
 use cc_wallet_chain::{
     AccountInspection, AccountTrace, AccountTxPage, AccountUpdate, CandidateBroadcastOutcome,
-    ChainError, DestinationAccountStatus, FeeEstimate, NetworkStats, PoolSnapshot,
-    PreparedChainSend,
+    ChainError, DestinationReport, FeeEstimate, NetworkStats, PoolSnapshot, PreparedChainSend,
 };
 use cc_wallet_domain::{
     ActivityEvent, Digest32, EndpointTransactionEvidence, StorageOp, StorageSnapshot,
@@ -64,7 +63,7 @@ pub enum AppEvent {
         generation: u64,
         seq: u64,
         address: String,
-        status: Option<DestinationAccountStatus>,
+        report: Option<DestinationReport>,
     },
     ValidatorClockLoaded {
         generation: u64,

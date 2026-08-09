@@ -226,6 +226,14 @@ impl KeyPair {
     ///
     /// It reuses the signing key, because a wallet publishes no other: the
     /// recipient's account carries the key it signs with and nothing else.
+    /// The same agreement from a key as it appears on chain — raw bytes out of
+    /// an account — so callers need no signature types of their own.
+    pub fn comment_secret_for(&self, their_key: &[u8; 32]) -> Result<Zeroizing<[u8; 32]>> {
+        let their_key =
+            VerifyingKey::from_bytes(their_key).map_err(CryptoError::InvalidPublicKey)?;
+        Ok(self.comment_secret(&their_key))
+    }
+
     pub fn comment_secret(&self, their_key: &VerifyingKey) -> Zeroizing<[u8; 32]> {
         crate::encrypted_comment::shared_secret(&self.secret.to_scalar(), their_key)
     }

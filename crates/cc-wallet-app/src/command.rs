@@ -148,6 +148,7 @@ pub enum AppCommand {
     SetSendDestination(String),
     SetSendAmount(String),
     SetSendComment(String),
+    SetEncryptComment(bool),
     SetMaxAmount,
     SetAllowUnbounced(bool),
     RequestSend,
@@ -223,6 +224,7 @@ impl AppCommand {
             | Self::SetSendDestination(_)
             | Self::SetSendAmount(_)
             | Self::SetSendComment(_)
+            | Self::SetEncryptComment(_)
             | Self::SetMaxAmount
             | Self::SetAllowUnbounced(_)
             | Self::SetSwapFromToken(_)
@@ -322,6 +324,7 @@ impl AppCommand {
             | Self::SetSendDestination(_)
             | Self::SetSendAmount(_)
             | Self::SetSendComment(_)
+            | Self::SetEncryptComment(_)
             | Self::SetMaxAmount
             | Self::SetAllowUnbounced(_)
             | Self::RequestSend

@@ -67,7 +67,11 @@ export component AppWindow inherits Window {
     in-out property <string> amount: "";
     in-out property <string> comment: "";
     in property <int> comment_bytes;
-    in property <int> comment_limit: 631;
+    in property <int> comment_limit: 1024;
+    in property <bool> encrypt_available;
+    in property <bool> encrypt_on;
+    in property <string> encrypt_hint;
+    callback set_encrypt(bool);
     in property <bool> send_enabled: false;
     in property <bool> send_form_locked: false;
     in property <bool> insufficient_balance: false;
@@ -411,6 +415,10 @@ export component AppWindow inherits Window {
                 comment <=> root.comment;
                 comment_bytes: root.comment_bytes;
                 comment_limit: root.comment_limit;
+                encrypt_available: root.encrypt_available;
+                encrypt_on: root.encrypt_on;
+                encrypt_hint: root.encrypt_hint;
+                set_encrypt(v) => { root.set_encrypt(v); }
                 send_enabled: root.send_enabled;
                 send_form_locked: root.send_form_locked;
                 insufficient_balance: root.insufficient_balance;

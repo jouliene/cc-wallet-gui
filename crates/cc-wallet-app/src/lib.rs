@@ -12,11 +12,11 @@ pub use cc_wallet_chain::{
 };
 pub use cc_wallet_domain::{
     ActivityDirection, ActivityEvent, AddressBookEntry, AssetAmount, AssetId, AssetMeta,
-    AssetMovement, AssetTone, CcAmount, Digest32, MAX_COMMENT_BYTES, MAX_RECORD_DATA_BYTES,
-    MAX_RECORD_TITLE_BYTES, MAX_SLIPPAGE_BPS, SeedPhrase, SendToken, StorageRecord, WalletSnapshot,
-    all_supported_assets, asset_meta, canonicalize_recipient, contact_address_is_valid,
-    fmt_duration, format_base_units, format_fixed9_amount, format_native_fixed9,
-    format_slippage_percent, known_cc_assets, parse_send_amount,
+    AssetMovement, AssetTone, CcAmount, Digest32, MAX_COMMENT_BYTES, MAX_ENCRYPTED_COMMENT_BYTES,
+    MAX_RECORD_DATA_BYTES, MAX_RECORD_TITLE_BYTES, MAX_SLIPPAGE_BPS, SeedPhrase, SendToken,
+    StorageRecord, WalletSnapshot, all_supported_assets, asset_meta, canonicalize_recipient,
+    contact_address_is_valid, fmt_duration, format_base_units, format_fixed9_amount,
+    format_native_fixed9, format_slippage_percent, known_cc_assets, parse_send_amount,
 };
 pub use cc_wallet_storage::{StartupCwd, resolve_startup_cwd};
 pub use command::{AppCommand, Password, SeedInput};

@@ -3,10 +3,10 @@ use std::rc::Rc;
 use cc_wallet_app::{
     AccountInspection, AccountTrace, ActivityEvent, AppPhase, AppState, AppTab, AssetAmount,
     AssetId, AuthMode, AuthPurpose, CcAmount, CoinSupply, DecodedContract, DecodedValue,
-    DestinationAccountStatus, LiveStatus, MAX_COMMENT_BYTES, MAX_RECORD_DATA_BYTES,
-    MAX_RECORD_TITLE_BYTES, MAX_SLIPPAGE_BPS, MAX_STORAGE_RECORDS, NetworkStats, RecipientCheck,
-    all_supported_assets, asset_meta, canonicalize_recipient, fmt_duration, format_fixed9_amount,
-    format_native_fixed9, known_cc_assets,
+    DestinationAccountStatus, LiveStatus, MAX_COMMENT_BYTES, MAX_ENCRYPTED_COMMENT_BYTES,
+    MAX_RECORD_DATA_BYTES, MAX_RECORD_TITLE_BYTES, MAX_SLIPPAGE_BPS, MAX_STORAGE_RECORDS,
+    NetworkStats, RecipientCheck, all_supported_assets, asset_meta, canonicalize_recipient,
+    fmt_duration, format_fixed9_amount, format_native_fixed9, known_cc_assets,
 };
 use slint::{ModelRc, SharedString, VecModel};
 
@@ -552,7 +552,16 @@ pub(super) fn sync_ui(ui: &AppWindow, state: &AppState, form_locked: bool, cache
         ui.set_comment(state.send_form.comment.clone().into());
     }
     ui.set_comment_bytes(state.send_form.comment.len() as i32);
-    ui.set_comment_limit(MAX_COMMENT_BYTES as i32);
+    // Sealing costs bytes out of the same budget, so the limit the counter
+    // shows is the limit that is actually left.
+    ui.set_comment_limit(if state.send_form.encrypt {
+        MAX_ENCRYPTED_COMMENT_BYTES as i32
+    } else {
+        MAX_COMMENT_BYTES as i32
+    });
+    ui.set_encrypt_available(state.encrypt_available());
+    ui.set_encrypt_on(state.send_form.encrypt);
+    ui.set_encrypt_hint(state.encrypt_hint().into());
     ui.set_recipient_valid(state.recipient_valid());
     ui.set_send_enabled(state.send_ready());
     ui.set_insufficient_balance(state.amount_exceeds_balance());
@@ -1177,6 +1186,7 @@ mod explorer_tests {
 
     fn inspection(balance: u128, extra: &[(u32, &str)]) -> AccountInspection {
         AccountInspection {
+            signing_key: None,
             exists: true,
             status: "Active",
             balance,

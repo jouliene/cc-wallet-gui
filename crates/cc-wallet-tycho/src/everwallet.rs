@@ -263,11 +263,16 @@ pub struct AccountInspection {
     pub data_boc: Option<String>,
     pub data_bytes: usize,
     pub decoded: Option<DecodedContract>,
+    /// The key this account signs with, when it is an Ever Wallet. It is the
+    /// only key an account publishes, so it is the only thing a comment can be
+    /// encrypted to; anything else leaves this empty.
+    pub signing_key: Option<[u8; 32]>,
 }
 
 impl AccountInspection {
     fn not_deployed() -> Self {
         Self {
+            signing_key: None,
             exists: false,
             status: "Non-exist",
             balance: 0,
@@ -304,6 +309,7 @@ impl AccountInspection {
             None => (None, None, 0),
         };
 
+        let mut signing_key = None;
         let (status, code_hash, data_hash, code_boc, code_bytes, data_boc, data_bytes, decoded) =
             match &account.state {
                 CoreAccountState::Active(state_init) => {
@@ -316,6 +322,14 @@ impl AccountInspection {
                         },
                         state_init.data.as_ref(),
                     );
+                    if code_hash.as_deref() == Some(ever_wallet_code_hash().as_str()) {
+                        signing_key = state_init
+                            .data
+                            .as_ref()
+                            .and_then(|data| data.as_slice().ok())
+                            .and_then(|mut slice| slice.load_u256().ok())
+                            .map(|key| key.0);
+                    }
                     (
                         "Active", code_hash, data_hash, code_boc, code_bytes, data_boc, data_bytes,
                         decoded,
@@ -326,6 +340,7 @@ impl AccountInspection {
             };
 
         Ok(Some(Self {
+            signing_key,
             exists: true,
             status,
             balance: account.balance.tokens.into(),
@@ -438,6 +453,11 @@ impl EverTransfer {
     pub fn payload(mut self, payload: Cell) -> Self {
         self.payload = Some(payload);
         self
+    }
+
+    /// The body as built, for a caller that needs to read back what it wrote.
+    pub fn payload_cell(&self) -> Option<&Cell> {
+        self.payload.as_ref()
     }
 
     pub fn dest_state_init(mut self, state_init: StateInit) -> Self {

@@ -713,6 +713,13 @@ impl AppController {
                 self.state.send_form.comment = truncate_comment(&comment).to_owned();
                 self.schedule_fee_reestimate();
             }
+            AppCommand::SetEncryptComment(on) => {
+                // A longer payload is a different fee, so the estimate is owed
+                // a fresh answer for the same reason a changed amount is.
+                self.state.send_form.encrypt = on && self.state.encrypt_available();
+                self.state.clear_send_form_error();
+                self.schedule_fee_reestimate();
+            }
             AppCommand::SetMaxAmount => self.set_max_amount(),
             AppCommand::SetAllowUnbounced(allow) => self.state.allow_unbounced = allow,
             AppCommand::RequestSend => self.request_send(),

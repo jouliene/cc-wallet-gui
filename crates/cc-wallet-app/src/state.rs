@@ -294,6 +294,10 @@ pub struct AppState {
     pub fee_estimate_stale: bool,
     pub max_refining: bool,
     pub recipient_check: RecipientCheck,
+    /// The key this recipient signs with, when their account publishes one. It
+    /// is the whole of what makes an encrypted comment possible, so it is also
+    /// the whole of what the toggle beside the comment waits for.
+    pub recipient_encrypt_key: Option<[u8; 32]>,
     pub allow_unbounced: bool,
     pub journal_blocking: bool,
     pub active_reservations: Vec<Reservation>,
@@ -388,6 +392,7 @@ impl Default for AppState {
             fee_estimate_stale: false,
             max_refining: false,
             recipient_check: RecipientCheck::Unchecked,
+            recipient_encrypt_key: None,
             allow_unbounced: false,
             journal_blocking: false,
             active_reservations: Vec::new(),
@@ -843,6 +848,48 @@ impl AppState {
     pub fn reset_recipient_status(&mut self) {
         self.recipient_check = RecipientCheck::Unchecked;
         self.allow_unbounced = false;
+        // A key belongs to one recipient. Editing the address invalidates both
+        // the key and the intention to use it, or the next transfer would be
+        // sealed to whoever was in the field before.
+        self.recipient_encrypt_key = None;
+        self.send_form.encrypt = false;
+    }
+
+    /// The request this form stands for, sealed to the recipient when that is
+    /// both possible and asked for. The form knows the intention and the state
+    /// knows the key, and only here do the two meet.
+    pub fn send_request(&self) -> cc_wallet_domain::WalletResult<cc_wallet_domain::SendRequest> {
+        Ok(self
+            .send_form
+            .request()?
+            .sealed_to(self.sealing_key_for_comment()))
+    }
+
+    fn sealing_key_for_comment(&self) -> Option<[u8; 32]> {
+        if !self.send_form.encrypt || self.send_form.comment.is_empty() {
+            return None;
+        }
+        self.recipient_encrypt_key
+    }
+
+    /// Whether this comment could be encrypted at all: the recipient's account
+    /// has to be there, and it has to publish the key to encrypt to.
+    pub fn encrypt_available(&self) -> bool {
+        self.recipient_valid() && self.recipient_encrypt_key.is_some()
+    }
+
+    /// Why not, when it is worth saying. Before an address is entered there is
+    /// nothing to explain, and while the answer is still coming, saying so
+    /// would only flicker.
+    pub fn encrypt_hint(&self) -> &'static str {
+        if self.encrypt_available() || !self.recipient_valid() {
+            return "";
+        }
+        match self.recipient_check {
+            RecipientCheck::Unchecked | RecipientCheck::Pending => "",
+            RecipientCheck::Failed => "could not read this recipient's account",
+            RecipientCheck::Known(_) => "this recipient publishes no key to encrypt to",
+        }
     }
 
     pub fn amount_positive(&self) -> bool {

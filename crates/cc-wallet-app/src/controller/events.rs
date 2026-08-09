@@ -276,13 +276,14 @@ impl AppController {
                 generation,
                 seq,
                 address,
-                status,
+                report,
             } => {
                 if generation == self.subscription_generation
                     && seq == self.dest_check_seq
                     && self.state.send_form.destination.trim() == address
                 {
-                    self.state.recipient_check = match status {
+                    self.state.recipient_encrypt_key = report.and_then(|report| report.encrypt_key);
+                    self.state.recipient_check = match report.map(|report| report.status) {
                         Some(status) => {
                             if self.state.auth.error == super::seed_auth::GATE_MSG_PENDING
                                 || self.state.auth.error == super::seed_auth::GATE_MSG_FAILED

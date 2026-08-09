@@ -40,7 +40,7 @@ impl AppController {
             );
             return;
         }
-        let request = match self.state.send_form.request() {
+        let request = match self.state.send_request() {
             Ok(request) => request,
             Err(_) => {
                 self.state.set_send_form_error(

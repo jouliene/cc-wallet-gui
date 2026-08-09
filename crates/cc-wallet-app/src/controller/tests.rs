@@ -7,9 +7,9 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use cc_wallet_chain::{
     AccountInspection, AccountTx, AccountTxKind, AccountTxPage, AccountUpdate,
     CandidateBroadcastOutcome, ChainError, ChainFuture, ChainResult, ChainService,
-    ChainTransaction, DestinationAccountStatus, FeeEstimate, LOCAL_SEND_FEE_CEILING_NANOS,
-    PoolSnapshot, PreparedChainSend, SubscriptionEvent, TransactionPage,
-    parse_transaction_for_test,
+    ChainTransaction, DestinationAccountStatus, DestinationReport, FeeEstimate,
+    LOCAL_SEND_FEE_CEILING_NANOS, PoolSnapshot, PreparedChainSend, SubscriptionEvent,
+    TransactionPage, parse_transaction_for_test,
 };
 use cc_wallet_domain::{
     ActivityDirection, ActivityEvent, AddressBookEntry, AssetAmount, AssetId, AssetMovement,
@@ -4068,7 +4068,10 @@ fn a_stale_generation_destination_check_is_dropped() {
         generation: c.subscription_generation.wrapping_sub(1),
         seq: c.dest_check_seq,
         address: dest.clone(),
-        status: Some(DestinationAccountStatus::NonExist),
+        report: Some(DestinationReport {
+            status: DestinationAccountStatus::NonExist,
+            encrypt_key: None,
+        }),
     });
     assert_eq!(
         c.state().recipient_check,
@@ -4089,7 +4092,10 @@ fn the_destination_check_records_non_exist_and_uninit_distinctly() {
         generation: c.subscription_generation,
         seq: c.dest_check_seq,
         address: dest.clone(),
-        status: Some(DestinationAccountStatus::Uninit),
+        report: Some(DestinationReport {
+            status: DestinationAccountStatus::Uninit,
+            encrypt_key: None,
+        }),
     });
     assert!(c.state().recipient_inactive());
     assert_eq!(
@@ -4101,7 +4107,10 @@ fn the_destination_check_records_non_exist_and_uninit_distinctly() {
         generation: c.subscription_generation,
         seq: c.dest_check_seq,
         address: dest,
-        status: Some(DestinationAccountStatus::NonExist),
+        report: Some(DestinationReport {
+            status: DestinationAccountStatus::NonExist,
+            encrypt_key: None,
+        }),
     });
     assert!(c.state().recipient_inactive());
     assert_eq!(
@@ -4145,7 +4154,10 @@ fn a_frozen_recipient_counts_as_inactive_and_is_recorded_distinctly() {
         generation: c.subscription_generation,
         seq: c.dest_check_seq,
         address: dest,
-        status: Some(DestinationAccountStatus::Frozen),
+        report: Some(DestinationReport {
+            status: DestinationAccountStatus::Frozen,
+            encrypt_key: None,
+        }),
     });
     assert_eq!(
         c.state().recipient_check,
@@ -4326,7 +4338,7 @@ fn a_superseded_check_result_never_overwrites_a_fresher_status() {
         generation: c.subscription_generation,
         seq: 1,
         address: SEND_DEST.to_owned(),
-        status: None,
+        report: None,
     });
     assert_eq!(
         c.state().recipient_check,
@@ -4338,7 +4350,10 @@ fn a_superseded_check_result_never_overwrites_a_fresher_status() {
         generation: c.subscription_generation,
         seq: 2,
         address: SEND_DEST.to_owned(),
-        status: Some(DestinationAccountStatus::Uninit),
+        report: Some(DestinationReport {
+            status: DestinationAccountStatus::Uninit,
+            encrypt_key: None,
+        }),
     });
     assert_eq!(
         c.state().recipient_check,
@@ -4370,7 +4385,10 @@ fn a_resolved_check_clears_a_stale_gate_refusal() {
         generation: c.subscription_generation,
         seq: c.dest_check_seq,
         address: SEND_DEST.to_owned(),
-        status: Some(DestinationAccountStatus::Active),
+        report: Some(DestinationReport {
+            status: DestinationAccountStatus::Active,
+            encrypt_key: None,
+        }),
     });
     assert!(
         c.state().auth.error.is_empty(),
@@ -4592,7 +4610,10 @@ fn an_inactive_destination_stays_bounceable_unless_explicitly_opted_in() {
         generation: c.subscription_generation,
         seq: c.dest_check_seq,
         address: dest,
-        status: Some(DestinationAccountStatus::NonExist),
+        report: Some(DestinationReport {
+            status: DestinationAccountStatus::NonExist,
+            encrypt_key: None,
+        }),
     });
     assert_eq!(
         c.state().recipient_check,
@@ -4629,7 +4650,10 @@ fn a_second_topup_to_the_same_address_re_runs_the_destination_check() {
         generation: c.subscription_generation,
         seq: c.dest_check_seq,
         address: dest.clone(),
-        status: Some(DestinationAccountStatus::NonExist),
+        report: Some(DestinationReport {
+            status: DestinationAccountStatus::NonExist,
+            encrypt_key: None,
+        }),
     });
     assert!(
         !c.needs_destination_check(),
@@ -4646,7 +4670,10 @@ fn a_second_topup_to_the_same_address_re_runs_the_destination_check() {
         generation: c.subscription_generation,
         seq: c.dest_check_seq,
         address: dest.clone(),
-        status: Some(DestinationAccountStatus::NonExist),
+        report: Some(DestinationReport {
+            status: DestinationAccountStatus::NonExist,
+            encrypt_key: None,
+        }),
     });
     assert!(
         c.state().recipient_inactive(),
@@ -6345,14 +6372,18 @@ impl ChainService for FakeChain {
         &'a self,
         _inputs: &'a EndpointAddressInputs,
         _address: String,
-    ) -> ChainFuture<'a, DestinationAccountStatus> {
+    ) -> ChainFuture<'a, DestinationReport> {
         let result = self
             .0
             .lock()
             .unwrap()
             .destination
             .clone()
-            .unwrap_or(Ok(DestinationAccountStatus::Active));
+            .unwrap_or(Ok(DestinationAccountStatus::Active))
+            .map(|status| DestinationReport {
+                status,
+                encrypt_key: None,
+            });
         Box::pin(async move { result })
     }
 
@@ -10338,6 +10369,7 @@ fn clearing_the_explorer_address_drops_the_looked_up_account() {
     let dir = temp_dir("explorer-clear");
     let mut c = unlocked(&dir, WalletProfile::default());
     c.state_mut().account_detail = Some(AccountInspection {
+        signing_key: None,
         exists: true,
         status: "Active",
         balance: 1_980_000_000,
@@ -10382,6 +10414,7 @@ fn a_lookup_that_outlives_its_session_is_reissued_not_left_spinning() {
         seq,
         address: "-1:00".to_owned(),
         result: Ok(AccountInspection {
+            signing_key: None,
             exists: true,
             status: "Active",
             balance: 1,
