@@ -11401,6 +11401,28 @@ fn settle(c: &mut AppController) {
     c.pump_events();
 }
 
+fn dispatch_record(c: &mut AppController, ext: &str) {
+    let generation = c.session_generation;
+    c.apply_event(AppEvent::StorageFinished {
+        generation,
+        op: StorageOp::Put {
+            id: 2,
+            title: "watched".to_owned(),
+            data: "x".to_owned(),
+        },
+        result: Ok(crate::event::BroadcastDispatch {
+            outcome: CandidateBroadcastOutcome::NodeResponseObserved {
+                request_id: "req".to_owned(),
+                response: cc_wallet_domain::NodeResponseKind::Acknowledged,
+                detail: "acknowledged".to_owned(),
+            },
+            ext_msg_hash: digest(ext),
+            broadcast_started_at: Instant::now(),
+        }),
+    });
+    settle(c);
+}
+
 fn add_record(c: &mut AppController, title: &str, data: &str) {
     c.handle_command(AppCommand::SetStorageTitle(title.to_owned()));
     c.handle_command(AppCommand::SetStorageData(data.to_owned()));
@@ -11569,6 +11591,35 @@ fn deleting_names_the_record_and_refuses_one_that_is_not_there() {
     authorize(&mut c);
 
     assert_eq!(chain.storage_ops(), vec![StorageOp::Delete { id: 4 }]);
+    cleanup(&dir);
+}
+
+#[test]
+fn a_record_in_flight_looks_for_its_own_transaction_the_way_a_transfer_does() {
+    let dir = temp_dir("storage-settle-fetch");
+    let chain = FakeChain::default();
+    let (mut c, _mem) = storage_controller(&dir, chain.clone(), vec![stored(1, "one", "a")]);
+    let before = chain.transaction_calls();
+
+    dispatch_record(&mut c, "settle-ext");
+    assert!(
+        c.storage_watch.is_some(),
+        "a dispatched record is being watched for settlement"
+    );
+
+    let fetched_on_dispatch = chain.transaction_calls();
+    assert!(
+        fetched_on_dispatch > before,
+        "dispatching a record reads history once, the way a transfer does"
+    );
+
+    c.poll_storage_settlement(Instant::now() + Duration::from_secs(5));
+    settle(&mut c);
+    assert!(
+        chain.transaction_calls() > fetched_on_dispatch,
+        "and it keeps looking on every settlement tick, so the moment its row \
+         appears is found on the same cadence a transfer's is"
+    );
     cleanup(&dir);
 }
 

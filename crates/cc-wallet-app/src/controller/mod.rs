@@ -1054,7 +1054,7 @@ impl AppController {
         if suspended {
             self.on_resume_from_suspend();
         }
-        self.poll_storage_settlement();
+        self.poll_storage_settlement(now_mono);
         self.expire_record_reveal();
         if let Some(deadline) = self.clipboard_deadline
             && deadline.expired()

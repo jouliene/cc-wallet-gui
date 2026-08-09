@@ -123,11 +123,10 @@ impl AppController {
         }
     }
 
-    pub(super) fn poll_storage_settlement(&mut self) {
+    pub(super) fn poll_storage_settlement(&mut self, now: Instant) {
         let Some(watch) = self.storage_watch.as_ref() else {
             return;
         };
-        let now = Instant::now();
         if now >= watch.give_up_at {
             self.storage_watch = None;
             self.state.storage.notice.clear();
@@ -142,6 +141,12 @@ impl AppController {
             watch.next_poll = now + STORAGE_POLL_EVERY;
         }
         self.refresh_storage();
+        // A transfer keeps re-reading its own history until its transaction
+        // turns up, and the finality it reports is measured against the moment
+        // it does. A record is on the wire the same way, so it has to look for
+        // itself on the same cadence — otherwise its reading is not slower
+        // because the chain was, but because nobody went to look.
+        self.fetch_transactions(self.subscription_generation);
     }
 
     pub(super) fn apply_storage_load_failed(&mut self, generation: u64, seq: u64, error: String) {
