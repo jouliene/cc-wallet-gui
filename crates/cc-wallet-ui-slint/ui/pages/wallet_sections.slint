@@ -635,11 +635,20 @@ component ConversationHeader inherits Rectangle {
 /// One thing said, in a bubble that leans the way it travelled.
 component ConversationBubble inherits Rectangle {
     in property <ChatLineRow> line;
-    height: bubble.preferred-height + 2 * Space.s_4;
+    /// The column's width, handed down rather than read off this row. Reading
+    /// it here would ask the scroll area how wide it is, and the scroll area
+    /// answers by asking its content — which is this.
+    in property <length> room;
+    // The gap between messages is this row's padding, not an offset inside it.
+    // Setting `y` on the layout left it as tall as the row and the bubble grew
+    // to match — which is why bubbles touched, and why the words and the time
+    // drifted apart inside them: the extra height had to go somewhere.
+    height: bubble.preferred-height;
     bubble := HorizontalLayout {
-        y: Space.s_4;
         padding-left: Space.s_16;
         padding-right: Space.s_16;
+        padding-top: Space.s_4;
+        padding-bottom: Space.s_4;
         // Ours to the right, theirs to the left. The stretch does the leaning,
         // so a bubble never has to be measured to be placed.
         if root.line.outgoing: Rectangle { horizontal-stretch: 1; min-width: Space.s_24; }
@@ -647,15 +656,18 @@ component ConversationBubble inherits Rectangle {
             // A bubble is as wide as what was said, up to a point. Stretching it
             // to the column would make every message look the same length.
             horizontal-stretch: 0;
-            max-width: root.width * 0.62;
+            max-width: root.room * 0.62;
             border-radius: Radii.md;
             background: root.line.outgoing ? Palette.accent_quiet : Palette.surface_inset;
             border-width: 1px;
             border-color: root.line.outgoing ? Palette.selected_border : Palette.border_subtle;
             opacity: root.line.pending ? 0.6 : 1.0;
             VerticalLayout {
-                padding: Space.s_10;
-                spacing: Space.s_4;
+                padding-left: Space.s_10;
+                padding-right: Space.s_10;
+                padding-top: Space.s_6;
+                padding-bottom: Space.s_4;
+                spacing: Space.s_0;
                 if root.line.locked: HorizontalLayout {
                     spacing: Space.s_6;
                     alignment: start;
@@ -864,7 +876,7 @@ component ConversationView inherits Rectangle {
                         vertical-alignment: center;
                     }
                 }
-                ConversationBubble { line: line; }
+                ConversationBubble { line: line; room: root.width; }
             }
         }
     }
