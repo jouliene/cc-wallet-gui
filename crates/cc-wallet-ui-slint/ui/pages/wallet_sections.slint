@@ -564,6 +564,7 @@ component ConversationHeader inherits Rectangle {
     in property <color> peer_tone;
     in property <bool> loading;
     callback back();
+    callback open_in_explorer();
     height: row.preferred-height;
     Rectangle {
         y: parent.height - 1px;
@@ -635,6 +636,16 @@ component ConversationHeader inherits Rectangle {
                 VerticalLayout {
                     alignment: center;
                     CopyButton { value: root.peer; }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: @image-url("../../assets/icons/external-link.svg");
+                        tint: Palette.text_quiet;
+                        size: Sizes.control_dense;
+                        icon_size: Sizes.icon_sm;
+                        clicked => { root.open_in_explorer(); }
+                    }
                 }
             }
         }
@@ -764,58 +775,14 @@ component ConversationComposer inherits Rectangle {
         height: 1px;
         background: Palette.border_subtle;
     }
-    row := VerticalLayout {
+    row := HorizontalLayout {
         padding-left: Space.s_16;
         padding-right: Space.s_16;
         padding-top: Space.s_8;
         padding-bottom: Space.s_8;
-        spacing: Space.s_4;
-        HorizontalLayout {
-            // Shorter than a form's label row: this one carries a toggle and a
-            // counter, not a heading, and the conversation above it has no
-            // room to spare.
-            height: Sizes.control_dense;
-            spacing: Space.s_6;
-            alignment: start;
-            // Stated, not offered. A checkbox here is a way to forget, and
-            // forgetting sends in the clear what was written to be private.
-            VerticalLayout {
-                alignment: center;
-                Icon {
-                    source: @image-url("../../assets/icons/chat-lock.svg");
-                    tint: root.can_encrypt ? Palette.positive : Palette.warning;
-                    width: 13px;
-                    height: 13px;
-                }
-            }
-            VerticalLayout {
-                alignment: center;
-                Text {
-                    text: root.can_encrypt
-                        ? "Encrypted end to end"
-                        : "This account publishes no key — write from Send instead";
-                    color: root.can_encrypt ? Palette.text_secondary : Palette.warning;
-                    font-family: Fonts.ui;
-                    font-weight: Fonts.medium;
-                    font-size: Fonts.small;
-                    vertical-alignment: center;
-                }
-            }
-            Rectangle { horizontal-stretch: 1; }
-            if root.draft != "": VerticalLayout {
-                alignment: center;
-                Text {
-                    text: root.draft_bytes + " / " + root.draft_limit;
-                    color: root.draft_bytes >= root.draft_limit ? Palette.warning : Palette.text_quiet;
-                    font-family: Fonts.mono;
-                    font-size: Fonts.micro;
-                }
-            }
-        }
-        HorizontalLayout {
-            spacing: Space.s_10;
-            composer_field := Field {
-                horizontal-stretch: 1;
+        spacing: Space.s_10;
+        composer_field := Field {
+            horizontal-stretch: 1;
                 // A conversation is opened to say something, so the cursor is
                 // already where the saying happens.
                 init => { self.focus(); }
@@ -832,14 +799,52 @@ component ConversationComposer inherits Rectangle {
                 edited(t) => { root.edited(t); }
                 accepted => { root.send(); }
             }
-            VerticalLayout {
-                width: Theme.send_btn_w;
+        VerticalLayout {
+            // The field is two lines tall and the button is one, so the line
+            // above it is room the composer already had. Saying it there costs
+            // no height at all; saying it on its own row cost a whole one.
+            width: Theme.chat_send_col_w;
+            spacing: Space.s_4;
+            HorizontalLayout {
+                spacing: Space.s_6;
                 alignment: end;
-                PrimaryButton {
-                    label: root.busy ? "Sending" : "Send";
-                    enabled: root.can_send && !root.busy;
-                    clicked => { root.send(); }
+                VerticalLayout {
+                    alignment: center;
+                    Icon {
+                        source: @image-url("../../assets/icons/chat-lock.svg");
+                        tint: root.can_encrypt ? Palette.positive : Palette.warning;
+                        width: 12px;
+                        height: 12px;
+                    }
                 }
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        // The counter earns the line only near the limit; until
+                        // then the assurance is the more useful of the two, and
+                        // the lock beside it keeps saying so either way.
+                        text: !root.can_encrypt
+                            ? "No key — use Send"
+                            : (root.draft_bytes * 2 >= root.draft_limit
+                                ? root.draft_bytes + " / " + root.draft_limit
+                                : "Encrypted end to end");
+                        color: !root.can_encrypt
+                            ? Palette.warning
+                            : (root.draft_bytes >= root.draft_limit
+                                ? Palette.warning
+                                : Palette.text_quiet);
+                        font-family: Fonts.ui;
+                        font-weight: Fonts.medium;
+                        font-size: Fonts.micro;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+            }
+            PrimaryButton {
+                label: root.busy ? "Sending" : "Send";
+                enabled: root.can_send && !root.busy;
+                clicked => { root.send(); }
             }
         }
     }
@@ -862,6 +867,11 @@ component ConversationView inherits Rectangle {
         width: 100%;
         height: 100%;
         scrolled => { UserActivity.ping(); }
+        // Every list in this wallet scrolls without a bar. This one kept the
+        // platform's, which stays hidden until the pointer crosses it and then
+        // arrives in the platform's own colours — white, on a dark thread.
+        vertical-scrollbar-policy: ScrollBarPolicy.always-off;
+        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
         viewport-height: thread.preferred-height;
         // A conversation opens where it left off, and follows what arrives.
         // Reading from the top would mean scrolling past everything ever said
@@ -1177,6 +1187,7 @@ export component ActivityCard inherits Card {
                 peer_tone: root.chat_peer_tone;
                 loading: root.chat_loading;
                 back => { root.close_chat(); }
+                open_in_explorer => { root.open_in_explorer(root.chat_peer, ""); }
             }
             Rectangle {
                 vertical-stretch: 1;

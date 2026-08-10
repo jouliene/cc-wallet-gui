@@ -37,6 +37,9 @@ export global Theme {
     /// Two lines of a message, which is where a composer stops growing and
     /// starts scrolling.
     out property <length> chat_input_h: 58px;
+    /// Wide enough for the send button and, above it, the line that says the
+    /// conversation is sealed.
+    out property <length> chat_send_col_w: 168px;
     // What the swap form needs before it starts clipping: a token selector, a
     // MAX chip and enough room left to read the amount being typed.
     out property <length> swap_form_min_w: root.token_selector_w
