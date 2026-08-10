@@ -100,6 +100,66 @@ impl SwapDrive {
     }
 }
 
+/// Drives the send form as far as the confirmation dialog and stops there.
+///
+/// The dialog is three interactions deep — an address, MAX, then Send — and
+/// mouse events from a screenshot harness do not reach Slint at all. It never
+/// submits: what it exists to show is the dialog itself.
+#[cfg(debug_assertions)]
+#[derive(Default)]
+struct SendDrive {
+    destination: Option<String>,
+    comment: Option<String>,
+    asked: bool,
+}
+
+#[cfg(debug_assertions)]
+impl SendDrive {
+    fn from_env() -> Self {
+        let var = |name: &str| {
+            std::env::var(name)
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        };
+        Self {
+            destination: var("CC_WALLET_TEST_SEND_MAX"),
+            comment: var("CC_WALLET_TEST_SEND_COMMENT"),
+            asked: false,
+        }
+    }
+
+    fn idle(&self) -> bool {
+        self.destination.is_none()
+    }
+
+    fn apply(&mut self, controller: &mut AppController) {
+        let Some(destination) = self.destination.clone() else {
+            return;
+        };
+        // The balance is what MAX is a fraction of, so there is nothing to ask
+        // until the wallet has answered.
+        if controller.state().wallet.is_none() {
+            return;
+        }
+        if !self.asked {
+            controller.handle_command(AppCommand::SetSendDestination(destination));
+            if let Some(comment) = self.comment.clone() {
+                controller.handle_command(AppCommand::SetSendComment(comment));
+            }
+            controller.handle_command(AppCommand::SetMaxAmount);
+            self.asked = true;
+            return;
+        }
+        // MAX is refined against a live emulation, and asking to send before it
+        // lands would be asking about an amount that is about to change.
+        if controller.state().max_refining || controller.state().send_form.amount.is_empty() {
+            return;
+        }
+        controller.handle_command(AppCommand::RequestSend);
+        self.destination = None;
+    }
+}
+
 #[cfg(debug_assertions)]
 #[derive(Default)]
 struct StorageDrive {
@@ -426,6 +486,8 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
     #[cfg(debug_assertions)]
     let pending_storage_drive = std::rc::Rc::new(std::cell::RefCell::new(StorageDrive::from_env()));
     #[cfg(debug_assertions)]
+    let pending_send_drive = std::rc::Rc::new(std::cell::RefCell::new(SendDrive::from_env()));
+    #[cfg(debug_assertions)]
     if let Some(token) = std::env::var("CC_WALLET_TEST_TOKEN_FILTER")
         .ok()
         .and_then(|v| v.parse::<i32>().ok())
@@ -512,6 +574,12 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
                     }
                     {
                         let mut drive = pending_storage_drive.borrow_mut();
+                        if !drive.idle() {
+                            drive.apply(&mut c);
+                        }
+                    }
+                    if c.state().phase == cc_wallet_app::AppPhase::Unlocked {
+                        let mut drive = pending_send_drive.borrow_mut();
                         if !drive.idle() {
                             drive.apply(&mut c);
                         }
