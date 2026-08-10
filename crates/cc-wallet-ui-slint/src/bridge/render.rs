@@ -601,7 +601,6 @@ pub(super) fn trace_edges(trace: &AccountTrace) -> Vec<TraceEdgeRow> {
                 to: edge.to as i32,
                 op: edge.op.clone().into(),
                 raw_op: edge.raw_op.clone().into(),
-                comment: edge.comment.clone().into(),
                 movements: ModelRc::from(Rc::new(VecModel::from(movement_rows(
                     &edge
                         .movements

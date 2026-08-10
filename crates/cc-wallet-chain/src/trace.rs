@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use cc_wallet_domain::{AssetMovement, Digest32};
 use cc_wallet_tycho::{
-    ChainMessage, ChainTransaction, ContractAt, MsgKind, contract_name, external_method,
-    internal_method,
+    ChainMessage, ChainTransaction, ContractAt, ENCRYPTED_COMMENT_OP, MsgKind, contract_name,
+    external_method, internal_method,
 };
 
 use crate::activity::message_movements;
@@ -46,7 +46,6 @@ pub struct TraceEdge {
     pub to: usize,
     pub op: String,
     pub raw_op: String,
-    pub comment: String,
     pub movements: Vec<AssetMovement>,
     pub fwd_fee: u128,
     pub depth: usize,
@@ -137,7 +136,6 @@ pub fn flatten(
         raw_op: inbound
             .map(|message| message_raw_op(message, root_at))
             .unwrap_or_default(),
-        comment: inbound.map(message_comment).unwrap_or_default(),
         movements: inbound
             .map(message_movements)
             .transpose()?
@@ -209,7 +207,6 @@ fn walk_out(
             to,
             op: message_op(message, from_at, to_at),
             raw_op: message_raw_op(message, to_at),
-            comment: message_comment(message),
             movements: message_movements(message)?,
             fwd_fee: message.fwd_fee,
             depth: node.depth + 1,
@@ -281,6 +278,10 @@ fn message_op(message: &ChainMessage, src: ContractAt, dst: ContractAt) -> Strin
             .to_owned(),
         MsgKind::Int => match body_op(message) {
             None | Some(0) => "transfer".to_owned(),
+            // Named here rather than in a contract's table, because no contract
+            // implements it: like op 0, it is a convention about what the body
+            // holds, and the receiving wallet accepts the transfer either way.
+            Some(op) if op == ENCRYPTED_COMMENT_OP => "encrypted comment".to_owned(),
             Some(op) => internal_op_name(src, dst, op).unwrap_or_else(|| format!("op 0x{op:08x}")),
         },
     }
@@ -309,28 +310,6 @@ fn message_raw_op(message: &ChainMessage, dst: ContractAt) -> String {
         MsgKind::ExtOut | MsgKind::Int => body_op(message),
     };
     op.map_or_else(String::new, |op| format!("op 0x{op:08x}"))
-}
-
-fn message_comment(message: &ChainMessage) -> String {
-    if message.bounced || body_op(message) != Some(0) {
-        return String::new();
-    }
-    let Ok(mut slice) = message.body.as_slice() else {
-        return String::new();
-    };
-    if slice.load_u32().is_err() {
-        return String::new();
-    }
-    let mut bytes = Vec::new();
-    while slice.size_bits() >= 8 {
-        match slice.load_u8() {
-            Ok(byte) => bytes.push(byte),
-            Err(_) => break,
-        }
-    }
-    String::from_utf8(bytes)
-        .map(|text| text.trim().to_owned())
-        .unwrap_or_default()
 }
 
 fn body_op(message: &ChainMessage) -> Option<u32> {
@@ -603,21 +582,30 @@ mod tests {
     }
 
     #[test]
-    fn a_body_names_its_method_by_op_and_a_plain_transfer_shows_its_comment() {
+    fn a_body_names_its_method_by_op_and_never_prints_what_it_carries() {
         let mut with_op = message(MsgKind::Int, Some(A), Some(B), 1);
         let mut builder = CellBuilder::new();
         builder.store_u32(0x02ed_f6b4).unwrap();
         with_op.body = builder.build().unwrap();
         assert_eq!(op_name(&with_op), "op 0x02edf6b4");
-        assert_eq!(message_comment(&with_op), "");
 
         let mut commented = message(MsgKind::Int, Some(A), Some(B), 1);
         let mut builder = CellBuilder::new();
         builder.store_u32(0).unwrap();
         builder.store_raw(b"rent", 32).unwrap();
         commented.body = builder.build().unwrap();
-        assert_eq!(op_name(&commented), "transfer");
-        assert_eq!(message_comment(&commented), "rent");
+        assert_eq!(
+            op_name(&commented),
+            "transfer",
+            "a note rides along with a transfer; it does not rename it, and the trace \
+             is no place to print it"
+        );
+
+        let mut sealed = message(MsgKind::Int, Some(A), Some(B), 1);
+        let mut builder = CellBuilder::new();
+        builder.store_u32(ENCRYPTED_COMMENT_OP).unwrap();
+        sealed.body = builder.build().unwrap();
+        assert_eq!(op_name(&sealed), "encrypted comment");
 
         let empty = message(MsgKind::Int, Some(A), Some(B), 1);
         assert_eq!(op_name(&empty), "transfer", "an empty body is a transfer");

@@ -1614,7 +1614,6 @@ mod explorer_tests {
             } else {
                 "op 0x00000000".to_owned()
             },
-            comment: String::new(),
             movements: vec![AssetMovement {
                 amount: AssetAmount::native(if op == "event" { 0 } else { 2_500_000_000 })
                     .expect("in domain"),

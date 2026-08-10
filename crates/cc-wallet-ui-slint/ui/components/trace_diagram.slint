@@ -429,7 +429,7 @@ export component TraceDiagram inherits Rectangle {
                                     ? TextHorizontalAlignment.left
                                     : TextHorizontalAlignment.right)
                                 : TextHorizontalAlignment.center;
-                            text: root.said(e.op, e.raw_op) + (e.comment != "" ? " · " + e.comment : "");
+                            text: root.said(e.op, e.raw_op);
                             color: e.is_event ? Palette.text_quiet : (!e.executed ? Palette.warning : (e.ok ? Palette.text_value : Palette.negative));
                             font-family: Fonts.ui;
                             font-weight: Fonts.semibold;
