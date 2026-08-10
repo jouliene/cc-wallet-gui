@@ -215,7 +215,7 @@ struct LoadRuntime {
 #[derive(Default)]
 struct SessionRuntime {
     pending_sends: Vec<(u64, Option<Instant>)>,
-    pending_externals: Vec<(Digest32, Instant)>,
+    pending_externals: Vec<PendingExternal>,
     awaiting_send_lt: Option<u64>,
     in_flight_record_id: Option<RecordId>,
     /// The record whose signed message is on the wire, and the timestamp that
@@ -235,6 +235,20 @@ struct SessionRuntime {
     /// The key the open conversation's other end publishes, once asked for.
     /// Without it every message this wallet wrote stays shut to its author.
     chat_peer_key: Option<[u8; 32]>,
+}
+
+/// Something of ours on the wire that is not a plain transfer — a swap, a
+/// record — timed exactly the way one is.
+///
+/// A transfer has an optimistic row to stop spinning, and that row carries its
+/// own figure. These have no row until the endpoint's transaction index catches
+/// up, which is a wait of its own and not the one worth reporting, so the
+/// figure is frozen when the chain first speaks and read back when the row
+/// finally arrives.
+struct PendingExternal {
+    hash: Digest32,
+    started_at: Instant,
+    settled_ms: Option<u64>,
 }
 
 struct PendingLock {

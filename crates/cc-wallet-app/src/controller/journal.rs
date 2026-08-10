@@ -659,6 +659,12 @@ impl AppController {
         self.settle_optimistic_row(&ext_msg_hash);
     }
 
+    /// The same news, for everything else of ours on the wire.
+    pub(super) fn end_waits_on_announcement(&mut self) {
+        self.confirm_in_flight_from_announcement();
+        self.end_external_waits();
+    }
+
     /// Confirms an in-flight transfer from the wallet's own replay guard.
     ///
     /// The account state carries the timestamp the wallet contract stored the

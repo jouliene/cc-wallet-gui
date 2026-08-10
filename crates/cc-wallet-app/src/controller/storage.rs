@@ -416,9 +416,11 @@ impl AppController {
                 // The row this message becomes in Activity is owed a finality
                 // reading like any other transfer, and the only thing that can
                 // tie the two together is the hash we just put on the wire.
-                self.session
-                    .pending_externals
-                    .push((dispatch.ext_msg_hash, dispatch.broadcast_started_at));
+                self.session.pending_externals.push(super::PendingExternal {
+                    hash: dispatch.ext_msg_hash,
+                    started_at: dispatch.broadcast_started_at,
+                    settled_ms: None,
+                });
                 self.state.storage.notice = match &op {
                     StorageOp::Create => "Creating the storage on chain".to_owned(),
                     StorageOp::Put { id, .. } => format!("Saving record #{id}"),

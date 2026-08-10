@@ -12028,6 +12028,60 @@ fn a_row_no_send_of_ours_was_waiting_on_reports_no_finality() {
 }
 
 #[test]
+fn a_record_reports_the_wait_the_chain_ended_not_how_late_the_index_was() {
+    let dir = temp_dir("storage-finality-index-lag");
+    let chain = FakeChain::default();
+    let (mut c, _mem) = storage_controller(&dir, chain, vec![stored(1, "one", "a")]);
+    let generation = c.session_generation;
+
+    c.apply_event(AppEvent::StorageFinished {
+        generation,
+        op: StorageOp::Delete { id: 1 },
+        result: Ok(crate::event::BroadcastDispatch {
+            outcome: CandidateBroadcastOutcome::NodeResponseObserved {
+                request_id: "req".to_owned(),
+                response: cc_wallet_domain::NodeResponseKind::Acknowledged,
+                detail: "acknowledged".to_owned(),
+            },
+            ext_msg_hash: digest("slow-index-ext"),
+            broadcast_started_at: Instant::now(),
+        }),
+    });
+
+    // The chain speaks, which is where the wait ends. A record has no row on
+    // screen to stop spinning, so the figure is frozen here instead.
+    std::thread::sleep(Duration::from_millis(40));
+    c.end_external_waits();
+
+    // The endpoint's transaction index takes its time, as it does.
+    std::thread::sleep(Duration::from_millis(250));
+    c.merge_activity(vec![ActivityEvent {
+        direction: ActivityDirection::Out,
+        tx_hash: optional_digest("slow-index-tx"),
+        counterparty: STORAGE_ADDR.to_owned(),
+        ext_msg_hash: optional_digest("slow-index-ext"),
+        int_msg_hash: optional_digest("slow-index-int"),
+        ..ActivityEvent::test_stub(61, 1_700_000_000)
+    }]);
+
+    let reported = u128::from(
+        c.state()
+            .activity
+            .iter()
+            .find(|event| event.ext_msg_hash == optional_digest("slow-index-ext"))
+            .expect("the record's own transaction is in history")
+            .finality_ms
+            .expect("a record is our own send and reports its wait"),
+    );
+    assert!(
+        (40..150).contains(&reported),
+        "a record reported {reported} ms — the wait ended when the chain spoke, \
+         not when the index finally carried the row"
+    );
+    cleanup(&dir);
+}
+
+#[test]
 fn a_records_own_row_reports_its_finality_like_any_other_send() {
     let dir = temp_dir("storage-finality");
     let chain = FakeChain::default();

@@ -356,9 +356,11 @@ impl AppController {
         let intent = self.swap_in_flight.take();
         match result {
             Ok(dispatch) if broadcast_reached_node(&dispatch.outcome) => {
-                self.session
-                    .pending_externals
-                    .push((dispatch.ext_msg_hash.clone(), dispatch.broadcast_started_at));
+                self.session.pending_externals.push(super::PendingExternal {
+                    hash: dispatch.ext_msg_hash.clone(),
+                    started_at: dispatch.broadcast_started_at,
+                    settled_ms: None,
+                });
                 self.state.swap.receipt = intent.map(|intent| SwapReceipt {
                     sent: intent.sent,
                     out_asset: intent.out_asset,

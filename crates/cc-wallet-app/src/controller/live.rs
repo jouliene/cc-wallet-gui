@@ -477,6 +477,31 @@ impl AppController {
         }
     }
 
+    /// The wait this message ended up reporting, if the chain has already
+    /// spoken for it. A swap or a record has no row to stop spinning, so its
+    /// figure is frozen at that moment and kept here until the row lands.
+    fn settled_wait_for(&self, hash: &cc_wallet_domain::Digest32) -> Option<u64> {
+        self.session
+            .pending_externals
+            .iter()
+            .find(|pending| &pending.hash == hash)
+            .and_then(|pending| pending.settled_ms)
+    }
+
+    /// Ends the wait for everything of ours that is on the wire.
+    ///
+    /// Called on the subscription frame, which is the same news that stops a
+    /// transfer's spinner. Whatever we sent, the chain has now spoken once
+    /// since we sent it, and that is the wait worth reporting — not how long
+    /// the endpoint's transaction index then took to carry the row.
+    pub(super) fn end_external_waits(&mut self) {
+        for pending in &mut self.session.pending_externals {
+            if pending.settled_ms.is_none() {
+                pending.settled_ms = u64::try_from(pending.started_at.elapsed().as_millis()).ok();
+            }
+        }
+    }
+
     /// When this message went out — from whichever ledger holds it. A transfer
     /// is timed through the optimistic row being replaced here; a swap or a
     /// record is timed by its own external hash.
@@ -485,13 +510,13 @@ impl AppController {
         hash: &cc_wallet_domain::Digest32,
         replaced: &[(u64, u64, Option<u64>)],
     ) -> Option<Instant> {
-        if let Some((_, started_at)) = self
+        if let Some(pending) = self
             .session
             .pending_externals
             .iter()
-            .find(|(pending, _)| pending == hash)
+            .find(|pending| &pending.hash == hash)
         {
-            return Some(*started_at);
+            return Some(pending.started_at);
         }
         self.session
             .pending_sends
@@ -598,6 +623,7 @@ impl AppController {
                         .iter()
                         .filter_map(|(_, _, finality)| *finality)
                         .min()
+                        .or_else(|| self.settled_wait_for(&hash))
                         .or_else(|| {
                             self.broadcast_started_at(&hash, &removed)
                                 .and_then(|started_at| self.spun_for(started_at))
@@ -611,7 +637,7 @@ impl AppController {
                     .retain(|(lt, _)| !removed.iter().any(|(removed_lt, _, _)| removed_lt == lt));
                 self.session
                     .pending_externals
-                    .retain(|(pending, _)| pending != &hash);
+                    .retain(|pending| pending.hash != hash);
             }
             self.state.activity.push(event);
             changed = true;
