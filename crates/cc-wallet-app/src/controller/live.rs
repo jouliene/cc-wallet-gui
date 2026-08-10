@@ -4,7 +4,8 @@ use std::time::Instant;
 use cc_wallet_chain::SubscriptionEvent;
 use cc_wallet_chain::activity_from_chain_tx;
 use cc_wallet_domain::{
-    ActivityDirection, ActivityEvent, AssetMovement, EndpointTransactionEvidence, SendRequest,
+    ActivityDirection, ActivityEvent, ActivityMessage, AssetMovement, EndpointTransactionEvidence,
+    SendRequest,
 };
 
 use super::AppController;
@@ -466,6 +467,14 @@ impl AppController {
             int_msg_hash: None,
             finality_ms: None,
             pending: true,
+            // The words are ours and we have them in hand, so the row that
+            // stands in for the transfer carries them from the first frame.
+            // A sealed one is shown in the clear because it is ours to read;
+            // once the chain answers, this row is replaced by the real one and
+            // the ciphertext is what gets kept.
+            message: (!request.comment().is_empty()).then(|| ActivityMessage::Plain {
+                text: request.comment().to_owned(),
+            }),
         });
         self.session.pending_sends.push((lt, None));
         self.sort_activity();
@@ -566,6 +575,10 @@ impl AppController {
         self.state
             .activity
             .sort_by(|a, b| b.pending.cmp(&a.pending).then(b.lt.cmp(&a.lt)));
+        // Every path that touches the activity ends here, so an open
+        // conversation follows the history instead of freezing at the moment it
+        // was opened.
+        self.rebuild_chat();
     }
 
     pub(super) fn merge_activity(&mut self, incoming: Vec<ActivityEvent>) {

@@ -65,6 +65,12 @@ pub enum AppEvent {
         address: String,
         report: Option<DestinationReport>,
     },
+    ChatPeerKeyLoaded {
+        generation: u64,
+        seq: u64,
+        peer: String,
+        key: Option<[u8; 32]>,
+    },
     ValidatorClockLoaded {
         generation: u64,
         seq: u64,

@@ -138,6 +138,16 @@ export struct ActivityRow {
     exit_code: int,
     group: string,
     has_party: bool,
+    has_message: bool,
+}
+
+export struct ChatLineRow {
+    outgoing: bool,
+    time: string,
+    text: string,
+    sealed: bool,
+    locked: bool,
+    pending: bool,
 }
 
 export struct RiskOverlapRow {

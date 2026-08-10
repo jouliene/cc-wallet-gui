@@ -89,6 +89,44 @@ pub fn comment_payload(text: &str) -> Result<Cell> {
     root.build().context("failed to build the comment payload")
 }
 
+/// Reads a plain comment back out of a message body, or says it is not one.
+///
+/// The convention is only an op of zero and then bytes, snaked across as many
+/// cells as it took. Anyone may write one, so nothing here trusts the sender:
+/// a body that is not valid UTF-8, or that runs past what a comment may hold,
+/// is not a comment as far as this wallet is concerned.
+pub fn read_comment(body: &Cell) -> Option<String> {
+    let mut slice = body.as_slice().ok()?;
+    if slice.size_bits() < 32 || slice.load_u32().ok()? != COMMENT_OP {
+        return None;
+    }
+
+    let mut text = Vec::new();
+    let mut cell = body.clone();
+    loop {
+        let mut part = cell.as_slice().ok()?;
+        if std::ptr::eq(cell.as_ref(), body.as_ref()) {
+            part.skip_first(32, 0).ok()?;
+        }
+        let bits = part.size_bits();
+        if !bits.is_multiple_of(8) {
+            return None;
+        }
+        let mut chunk = vec![0u8; usize::from(bits / 8)];
+        part.load_raw(&mut chunk, bits).ok()?;
+        text.extend_from_slice(&chunk);
+        if text.len() > MAX_COMMENT_BYTES {
+            return None;
+        }
+        match cell.reference_cloned(0) {
+            Some(next) => cell = next,
+            None => break,
+        }
+    }
+
+    String::from_utf8(text).ok()
+}
+
 pub trait IntoStdAddr {
     fn into_std_addr(self) -> Result<StdAddr>;
 }

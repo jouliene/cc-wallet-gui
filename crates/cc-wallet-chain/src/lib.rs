@@ -20,6 +20,6 @@ pub use wallet_service::{
     CandidateBroadcastOutcome, ChainError, ChainFuture, ChainResult, ChainService,
     DestinationAccountStatus, DestinationReport, FeeEstimate, LOCAL_SEND_FEE_CEILING_NANOS,
     LOCAL_SEND_FEE_HEADROOM_NANOS, NetworkStats, PoolSnapshot, PreparedChainSend,
-    PreparedStorageOp, PreparedSwap, RISK_OVERRIDE_COOLING_SECS, TransactionPage,
+    PreparedStorageOp, PreparedSwap, RISK_OVERRIDE_COOLING_SECS, SealedComment, TransactionPage,
     TychoWalletService, account_status_label, generate_seed, validate_seed_phrase,
 };

@@ -129,6 +129,14 @@ hex32_newtype!(RiskNonce, "a 64-lowercase-hex risk nonce");
 
 hex32_newtype!(Digest32, "a 64-lowercase-hex 32-byte digest");
 
+hex32_newtype!(
+    /// An account's signing key, as it travels in a sealed comment. Not a
+    /// secret and not a digest, but the same shape and the same canonical
+    /// hex, so it is stored the same way.
+    PublicKey32,
+    "a 64-lowercase-hex public key"
+);
+
 #[cfg(test)]
 mod tests {
     use super::*;

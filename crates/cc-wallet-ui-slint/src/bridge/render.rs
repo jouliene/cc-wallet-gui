@@ -9,7 +9,8 @@ use slint::{Color, ModelRc, VecModel};
 use zeroize::Zeroizing;
 
 use super::{
-    ActivityRow, AssetRow, ContactRow, ExplorerTxRow, TokenAmount, TraceEdgeRow, TracePartyCol,
+    ActivityRow, AssetRow, ChatLineRow, ContactRow, ExplorerTxRow, TokenAmount, TraceEdgeRow,
+    TracePartyCol,
 };
 
 fn rgb(v: u32) -> Color {
@@ -681,6 +682,19 @@ fn activity_row(
         exit_code: event.exit_code,
         group: "".into(),
         has_party: !event.counterparty.is_empty(),
+        has_message: event.message.is_some() && !event.counterparty.is_empty(),
+    }
+}
+
+/// One line of a conversation, ready to draw.
+pub(super) fn chat_line_row(line: &cc_wallet_app::ChatLine) -> ChatLineRow {
+    ChatLineRow {
+        outgoing: line.outgoing,
+        time: fmt_time(line.time_unix).into(),
+        text: line.text.clone().into(),
+        sealed: line.sealed,
+        locked: line.locked,
+        pending: line.pending,
     }
 }
 
@@ -1865,10 +1879,11 @@ mod helper_tests {
         }
         assert_eq!(
             embedded.len(),
-            4,
+            5,
             "the field-label triple is spelled out at {} sites outside widgets.slint \
-             ({embedded:?}); four keep it for a stated reason and a fifth should be \
-             FieldLabel",
+             ({embedded:?}); five keep it for a stated reason — the fifth is the line a \
+             sealed message shows in place of its words, which is quiet prose inside a \
+             bubble rather than a label over a field — and a sixth should be FieldLabel",
             embedded.len()
         );
     }

@@ -1,7 +1,10 @@
 use cc_wallet_domain::{
-    ActivityDirection, ActivityEvent, AssetAmount, AssetMovement, CcAmount, Digest32,
+    ActivityDirection, ActivityEvent, ActivityMessage, AssetAmount, AssetMovement, CcAmount,
+    Digest32, PublicKey32,
 };
-use cc_wallet_tycho::{BounceOutcome, ChainMessage, ChainTransaction, MsgKind};
+use cc_wallet_tycho::{
+    BounceOutcome, ChainMessage, ChainTransaction, MsgKind, parse_encrypted_comment, read_comment,
+};
 
 use crate::explorer::failure_reason;
 use crate::wallet_service::{ChainError, ChainResult};
@@ -54,6 +57,7 @@ pub fn activity_from_chain_tx(tx: &ChainTransaction) -> ChainResult<Vec<Activity
                     int_msg_hash: Some(parse_hash(&message.hash, "internal message")?),
                     finality_ms: None,
                     pending: false,
+                    message: message_carried(message),
                 });
             }
             Ok(events)
@@ -81,10 +85,33 @@ pub fn activity_from_chain_tx(tx: &ChainTransaction) -> ChainResult<Vec<Activity
                 int_msg_hash: Some(parse_hash(&in_msg.hash, "internal message")?),
                 finality_ms: None,
                 pending: false,
+                message: message_carried(in_msg),
             }])
         }
         MsgKind::ExtOut => Ok(Vec::new()),
     }
+}
+
+/// What this message carried besides money, if anything legible.
+///
+/// A bounced message carries back the head of what it was sent with, which is
+/// not a message anyone wrote to anyone — reading one as a comment would put
+/// our own words in the other end's mouth. Anything else undecodable is simply
+/// not a message: the body belongs to whoever built it, and a wallet that
+/// refused to list a transfer because a stranger's payload confused it would be
+/// hostage to strangers.
+fn message_carried(message: &ChainMessage) -> Option<ActivityMessage> {
+    if message.bounced {
+        return None;
+    }
+    if let Some(text) = read_comment(&message.body) {
+        return (!text.is_empty()).then_some(ActivityMessage::Plain { text });
+    }
+    let sealed = parse_encrypted_comment(&message.body).ok().flatten()?;
+    Some(ActivityMessage::Sealed {
+        sender_key: PublicKey32::from_bytes(sealed.sender_key),
+        blob: sealed.sealed,
+    })
 }
 
 fn no_transfer_send(tx: &ChainTransaction, ext_msg_hash: Digest32) -> ChainResult<ActivityEvent> {
@@ -108,6 +135,7 @@ fn no_transfer_send(tx: &ChainTransaction, ext_msg_hash: Digest32) -> ChainResul
         int_msg_hash: None,
         finality_ms: None,
         pending: false,
+        message: None,
     })
 }
 

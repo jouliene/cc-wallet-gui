@@ -413,6 +413,14 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
             .ok()
             .filter(|s| !s.is_empty()),
     ));
+    // The conversation is reached by clicking one icon in one activity row,
+    // which is not something a screenshot harness can be relied on to hit.
+    #[cfg(debug_assertions)]
+    let pending_chat = std::rc::Rc::new(std::cell::RefCell::new(
+        std::env::var("CC_WALLET_TEST_CHAT")
+            .ok()
+            .filter(|s| !s.is_empty()),
+    ));
     #[cfg(debug_assertions)]
     let pending_swap_drive = std::rc::Rc::new(std::cell::RefCell::new(SwapDrive::from_env()));
     #[cfg(debug_assertions)]
@@ -438,6 +446,7 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
         let pending_scan = pending_scan.clone();
         #[cfg(debug_assertions)]
         let pending_trace = pending_trace.clone();
+        let pending_chat = pending_chat.clone();
         #[cfg(debug_assertions)]
         let pending_swap_drive = pending_swap_drive.clone();
         #[cfg(debug_assertions)]
@@ -488,6 +497,12 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
                             }
                             None => c.handle_command(AppCommand::InspectAccount(address)),
                         }
+                    }
+                    if c.state().phase == cc_wallet_app::AppPhase::Unlocked
+                        && !c.state().activity.is_empty()
+                        && let Some(peer) = pending_chat.borrow_mut().take()
+                    {
+                        c.handle_command(AppCommand::OpenChat(peer));
                     }
                     {
                         let mut drive = pending_swap_drive.borrow_mut();

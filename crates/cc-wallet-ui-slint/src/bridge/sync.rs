@@ -16,8 +16,8 @@ use super::render::{
     short_addr, today_bucket, token_amount, token_units, trace_edges, trace_parties, units_exact,
 };
 use super::{
-    AccountView, ActivityFilters, ActivityRow, AppWindow, AssetRow, ContactRow, CurrencyRow,
-    FieldRow, NetworkStatsView, RiskOverlapRow, StorageRow, TokenAmount, TraceEdgeRow,
+    AccountView, ActivityFilters, ActivityRow, AppWindow, AssetRow, ChatLineRow, ContactRow,
+    CurrencyRow, FieldRow, NetworkStatsView, RiskOverlapRow, StorageRow, TokenAmount, TraceEdgeRow,
     TracePartyCol, UiCache,
 };
 
@@ -686,6 +686,23 @@ pub(super) fn sync_ui(ui: &AppWindow, state: &AppState, form_locked: bool, cache
         let activity: Vec<ActivityRow> =
             activity_rows(&filtered, wallet_address, &state.contacts, now);
         ui.set_activity(ModelRc::from(Rc::new(VecModel::from(activity))));
+    }
+
+    ui.set_chat_open(state.chat.open);
+    ui.set_chat_peer(state.chat.peer.clone().into());
+    ui.set_chat_peer_label(
+        crate::bridge::render::party_pill_label(&state.chat.peer, &state.contacts).into(),
+    );
+    ui.set_chat_loading(state.chat.loading);
+    ui.set_chat_error(state.chat.error.clone().into());
+    if state.chat.open {
+        let lines: Vec<ChatLineRow> = state
+            .chat
+            .lines
+            .iter()
+            .map(crate::bridge::render::chat_line_row)
+            .collect();
+        ui.set_chat_lines(ModelRc::from(Rc::new(VecModel::from(lines))));
     }
 
     ui.set_workchain(state.workchain.to_string().into());

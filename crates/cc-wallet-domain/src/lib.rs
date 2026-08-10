@@ -17,7 +17,7 @@ pub mod strict;
 pub mod swap;
 pub mod validator_clock;
 
-pub use activity::{ActivityDirection, ActivityEvent, AssetMovement};
+pub use activity::{ActivityDirection, ActivityEvent, ActivityMessage, AssetMovement};
 pub use address::{canonicalize_recipient, contact_address_is_valid, recipient_is_valid};
 pub use affordability::{
     AffordabilityError, AffordabilityReport, AssetAffordability, evaluate_affordability,
@@ -36,7 +36,7 @@ pub use envelope::{
     JournalEnvelope,
 };
 pub use error::{WalletError, WalletResult};
-pub use ids::{Digest32, IdError, RecordId, RiskNonce};
+pub use ids::{Digest32, IdError, PublicKey32, RecordId, RiskNonce};
 pub use journal::{
     DeliveryEvent, DeliveryEvidence, EndpointTransactionEvidence, JournalError,
     LOCAL_SEND_FEE_CEILING_NANOS, LOCAL_SEND_FEE_HEADROOM_NANOS, NetworkTimeProvenance,

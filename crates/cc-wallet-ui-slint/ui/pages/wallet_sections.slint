@@ -1,7 +1,7 @@
 import { Theme, Status } from "../theme.slint";
 import { Palette, Fade, Fonts, Radii, Sizes, Space, Motion } from "../design_tokens.slint";
-import { AmountFormat, Icon, Avatar, Card, CardHeader, MicroLabel, IconButton, Field, StatusDot, GhostButton, EmptyState, ClipboardBridge, UserActivity, MaxChip, TableHeader, PrimaryButton, InlineError, Checkbox } from "../widgets.slint";
-import { AssetRow, ActivityRow } from "../models.slint";
+import { AmountFormat, Icon, Avatar, Card, CardHeader, MicroLabel, IconButton, Field, StatusDot, GhostButton, EmptyState, ClipboardBridge, UserActivity, MaxChip, TableHeader, PrimaryButton, InlineError, Checkbox, CopyButton } from "../widgets.slint";
+import { AssetRow, ActivityRow, ChatLineRow } from "../models.slint";
 import { AssetListRow, ActivityListRow, SegBtn } from "wallet_components.slint";
 import { ScrollView } from "std-widgets.slint";
 
@@ -553,8 +553,213 @@ export component SendCard inherits Card {
     paste_timer := Timer { interval: Motion.ack_dwell; running: false; triggered => { root.pasted = false; self.running = false; } }
 }
 
+/// The header a conversation wears in place of the activity filters.
+///
+/// It replaces the card's own header rather than sitting above it, so the card
+/// stays one card and the page does not grow a second title bar.
+component ConversationHeader inherits Rectangle {
+    in property <string> peer;
+    in property <string> peer_label;
+    in property <bool> loading;
+    callback back();
+    height: row.preferred-height;
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Palette.border_subtle;
+    }
+    row := HorizontalLayout {
+        padding-left: Space.s_16;
+        padding-right: Space.s_16;
+        padding-top: Space.s_10;
+        padding-bottom: Space.s_10;
+        spacing: Space.s_12;
+        VerticalLayout {
+            alignment: center;
+            back_btn := Rectangle {
+                width: 40px;
+                height: 40px;
+                border-radius: Radii.md;
+                background: back_ta.has-hover ? Palette.hover_strong : Palette.accent_quiet;
+                Icon {
+                    source: @image-url("../../assets/icons/chevron-left.svg");
+                    tint: Palette.accent_text;
+                    width: 20px;
+                    height: 20px;
+                }
+                back_ta := TouchArea { mouse-cursor: pointer; clicked => { root.back(); } }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: Space.s_2;
+            horizontal-stretch: 1;
+            Text {
+                text: "Conversation" + (root.peer_label == "" ? "" : " · " + root.peer_label);
+                color: Palette.text_primary;
+                font-family: Fonts.ui;
+                font-weight: Fonts.semibold;
+                font-size: Fonts.title;
+                overflow: elide;
+            }
+            HorizontalLayout {
+                spacing: Space.s_6;
+                alignment: start;
+                Text {
+                    text: root.peer;
+                    color: Palette.text_tertiary;
+                    font-family: Fonts.mono;
+                    font-size: Fonts.micro;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    CopyButton { value: root.peer; }
+                }
+            }
+        }
+        if root.loading: VerticalLayout {
+            alignment: center;
+            Text {
+                text: "opening…";
+                color: Palette.text_quiet;
+                font-family: Fonts.ui;
+                font-size: Fonts.micro;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+/// One thing said, in a bubble that leans the way it travelled.
+component ConversationBubble inherits Rectangle {
+    in property <ChatLineRow> line;
+    height: bubble.preferred-height + 2 * Space.s_4;
+    bubble := HorizontalLayout {
+        y: Space.s_4;
+        padding-left: Space.s_16;
+        padding-right: Space.s_16;
+        // Ours to the right, theirs to the left. The stretch does the leaning,
+        // so a bubble never has to be measured to be placed.
+        if root.line.outgoing: Rectangle { horizontal-stretch: 1; min-width: Space.s_24; }
+        Rectangle {
+            // A bubble is as wide as what was said, up to a point. Stretching it
+            // to the column would make every message look the same length.
+            horizontal-stretch: 0;
+            max-width: root.width * 0.62;
+            border-radius: Radii.md;
+            background: root.line.outgoing ? Palette.accent_quiet : Palette.surface_inset;
+            border-width: 1px;
+            border-color: root.line.outgoing ? Palette.selected_border : Palette.border_subtle;
+            opacity: root.line.pending ? 0.6 : 1.0;
+            VerticalLayout {
+                padding: Space.s_10;
+                spacing: Space.s_4;
+                if root.line.locked: HorizontalLayout {
+                    spacing: Space.s_6;
+                    alignment: start;
+                    VerticalLayout {
+                        alignment: center;
+                        Icon {
+                            source: @image-url("../../assets/icons/chat-lock.svg");
+                            tint: Palette.text_quiet;
+                            width: 14px;
+                            height: 14px;
+                        }
+                    }
+                    Text {
+                        text: "sealed — this wallet cannot open it";
+                        color: Palette.text_quiet;
+                        font-family: Fonts.ui;
+                        font-size: Fonts.small;
+                        vertical-alignment: center;
+                    }
+                }
+                if !root.line.locked: Text {
+                    text: root.line.text;
+                    color: Palette.text_primary;
+                    font-family: Fonts.ui;
+                    font-size: Fonts.body;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    spacing: Space.s_6;
+                    alignment: end;
+                    if root.line.sealed && !root.line.locked: VerticalLayout {
+                        alignment: center;
+                        Icon {
+                            source: @image-url("../../assets/icons/chat-lock.svg");
+                            tint: Palette.positive;
+                            width: 11px;
+                            height: 11px;
+                        }
+                    }
+                    Text {
+                        text: root.line.pending ? "sending" : root.line.time;
+                        color: Palette.text_quiet;
+                        font-family: Fonts.ui;
+                        font-size: Fonts.micro;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+        if !root.line.outgoing: Rectangle { horizontal-stretch: 1; min-width: Space.s_24; }
+    }
+}
+
+/// The conversation itself: everything said with one address, oldest first.
+component ConversationView inherits Rectangle {
+    in property <[ChatLineRow]> lines;
+    in property <string> error;
+    in property <bool> loading;
+    if root.lines.length == 0 && !root.loading: EmptyState {
+        width: 100%;
+        height: 100%;
+        budget: root.height;
+        icon: @image-url("../../assets/icons/chat.svg");
+        title: "Nothing said yet";
+        subtitle: "Comments attached to transfers with this address appear here.";
+    }
+    if root.lines.length > 0: thread_scroll := ScrollView {
+        width: 100%;
+        height: 100%;
+        scrolled => { UserActivity.ping(); }
+        viewport-height: thread.preferred-height;
+        // A conversation opens where it left off, and follows what arrives.
+        // Reading from the top would mean scrolling past everything ever said
+        // to reach the thing that just came in.
+        changed viewport-height => {
+            self.viewport-y = min(0px, self.visible-height - self.viewport-height);
+        }
+        thread := VerticalLayout {
+            padding-top: Space.s_8;
+            padding-bottom: Space.s_8;
+            for line in root.lines: ConversationBubble { line: line; }
+        }
+    }
+    if root.error != "": Rectangle {
+        y: parent.height - self.height - Space.s_8;
+        height: 20px;
+        HorizontalLayout {
+            padding-left: Space.s_16;
+            padding-right: Space.s_16;
+            InlineError { text: root.error; }
+        }
+    }
+}
+
 export component ActivityCard inherits Card {
     in property <[ActivityRow]> activity;
+    in property <bool> chat_open;
+    in property <string> chat_peer;
+    in property <string> chat_peer_label;
+    in property <[ChatLineRow]> chat_lines;
+    in property <bool> chat_loading;
+    in property <string> chat_error;
+    callback open_chat(string);
+    callback close_chat();
     in property <string> af_dir;
     in property <int> af_token;
     in property <string> af_token_symbol;
@@ -772,8 +977,42 @@ export component ActivityCard inherits Card {
                         ActivityListRow {
                             item: r;
                             open_in_explorer => { root.open_in_explorer(r.party_full, r.tx_hash); }
+                            open_chat => { root.open_chat(r.party_full); }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    // The conversation covers the card rather than replacing what is in it.
+    // The filter pills the popups anchor to live in the header, and an element
+    // inside an `if` cannot be pointed at from outside one — so the list stays
+    // built, and the reader simply sits on top of it.
+    if root.chat_open: Rectangle {
+        width: 100%;
+        height: 100%;
+        background: Palette.surface_raised;
+        border-radius: Radii.lg;
+        // Nothing behind this is meant to be clickable while it is up.
+        TouchArea { }
+        VerticalLayout {
+            padding-bottom: Space.s_10;
+            ConversationHeader {
+                peer: root.chat_peer;
+                peer_label: root.chat_peer_label;
+                loading: root.chat_loading;
+                back => { root.close_chat(); }
+            }
+            Rectangle {
+                vertical-stretch: 1;
+                min-height: 0px;
+                ConversationView {
+                    width: 100%;
+                    height: 100%;
+                    lines: root.chat_lines;
+                    error: root.chat_error;
+                    loading: root.chat_loading;
                 }
             }
         }

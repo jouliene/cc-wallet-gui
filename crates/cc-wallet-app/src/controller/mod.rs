@@ -1,3 +1,4 @@
+mod chat;
 mod contacts;
 mod endpoints;
 mod events;
@@ -225,6 +226,9 @@ struct SessionRuntime {
     history_has_gap: bool,
     fee_reestimate_at: Option<Instant>,
     activity_quarantine_pending: Option<SelectedCandidate>,
+    /// The key the open conversation's other end publishes, once asked for.
+    /// Without it every message this wallet wrote stays shut to its author.
+    chat_peer_key: Option<[u8; 32]>,
 }
 
 struct PendingLock {
@@ -309,6 +313,7 @@ pub struct AppController {
     stats_refresh_at: Option<Deadline>,
     account_fetch_seq: u64,
     trace_fetch_seq: u64,
+    chat_key_seq: u64,
     pending_explorer_trace: Option<String>,
     trace_cache: Vec<(String, AccountTrace)>,
     pending_max_seq: Option<u64>,
@@ -471,6 +476,7 @@ impl AppController {
             stats_refresh_at: None,
             account_fetch_seq: 0,
             trace_fetch_seq: 0,
+            chat_key_seq: 0,
             pending_explorer_trace: None,
             trace_cache: Vec::new(),
             pending_max_seq: None,
@@ -780,6 +786,8 @@ impl AppController {
             } => self.open_in_explorer(address, transaction_hash),
             AppCommand::TraceTransaction(hash) => self.trace_transaction(hash),
             AppCommand::CloseTrace => self.close_trace(),
+            AppCommand::OpenChat(peer) => self.open_chat(peer),
+            AppCommand::CloseChat => self.close_chat(),
             AppCommand::AddEndpoint(url) => self.add_endpoint(url),
             AppCommand::SelectEndpoint(index) => self.select_endpoint(index),
             AppCommand::RemoveEndpoint(url) => self.remove_endpoint(url),

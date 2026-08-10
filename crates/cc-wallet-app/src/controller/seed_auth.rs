@@ -897,6 +897,8 @@ impl AppController {
         self.state.derived_wallet_address.clear();
         self.state.wallet = None;
         self.state.activity.clear();
+        // A conversation belongs to the wallet that could read it.
+        self.close_chat();
         self.session.pending_sends.clear();
         self.session.awaiting_send_lt = None;
         self.session.in_flight_record_id = None;

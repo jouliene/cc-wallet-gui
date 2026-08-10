@@ -300,6 +300,12 @@ impl AppController {
                     };
                 }
             }
+            AppEvent::ChatPeerKeyLoaded {
+                generation,
+                seq,
+                peer,
+                key,
+            } => self.apply_chat_peer_key(generation, seq, peer, key),
             AppEvent::ValidatorClockLoaded {
                 generation,
                 seq,

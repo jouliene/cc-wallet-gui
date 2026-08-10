@@ -405,6 +405,8 @@ pub(super) fn connect_callbacks(
         AppCommand::TraceTransaction(h.to_string())
     );
     on0!(on_close_trace, AppCommand::CloseTrace);
+    on1!(on_open_chat, peer, AppCommand::OpenChat(peer.to_string()));
+    on0!(on_close_chat, AppCommand::CloseChat);
     on0!(on_switch_wallet, AppCommand::SwitchWallet);
     on1!(
         on_switch_to_wallet,
@@ -930,10 +932,10 @@ mod tests {
         );
         assert_eq!(
             sections.matches(scroll).count(),
-            2,
-            "the asset and activity ScrollViews each ping — counted by the handler that \
-             matters, not by every ping on the page, so a new control that also keeps the \
-             session awake does not read as a regression"
+            3,
+            "every scrollable region of the wallet page keeps the session awake: assets, \
+             activity, and the conversation read over it — a scroll that does not count as \
+             use is a wallet that locks while it is being read"
         );
 
         let contacts = include_str!("../../ui/pages/contacts_page.slint");

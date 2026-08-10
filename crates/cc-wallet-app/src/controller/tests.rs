@@ -12,14 +12,14 @@ use cc_wallet_chain::{
     TransactionPage, parse_transaction_for_test,
 };
 use cc_wallet_domain::{
-    ActivityDirection, ActivityEvent, AddressBookEntry, AssetAmount, AssetId, AssetMovement,
-    BlockerRow, CcAmount, DEFAULT_ENDPOINT, DEFAULT_SLIPPAGE_BPS, DeliveryEvidence, Digest32,
-    EndpointAddressInputs, EndpointTransactionEvidence, EvidenceTag, LOCAL_SEND_FEE_HEADROOM_NANOS,
-    ObservedNetworkTime, PrepareProvenance, PreparedRecord, RISK_WARNING_VERSION, RecordId,
-    Reservation, ReservationKind, RiskGrant, RiskGrantConsumption, RiskNonce, SeedPhrase,
-    SendAuthorization, SendRequest, SendTicket, StorageOp, StorageRecord, StorageSnapshot,
-    TerminalOutcome, WalletInputs, WalletProfile, WalletSnapshot, blocker_set_digest,
-    overlap_set_digest, reservation_set_digest,
+    ActivityDirection, ActivityEvent, ActivityMessage, AddressBookEntry, AssetAmount, AssetId,
+    AssetMovement, BlockerRow, CcAmount, DEFAULT_ENDPOINT, DEFAULT_SLIPPAGE_BPS, DeliveryEvidence,
+    Digest32, EndpointAddressInputs, EndpointTransactionEvidence, EvidenceTag,
+    LOCAL_SEND_FEE_HEADROOM_NANOS, ObservedNetworkTime, PrepareProvenance, PreparedRecord,
+    RISK_WARNING_VERSION, RecordId, Reservation, ReservationKind, RiskGrant, RiskGrantConsumption,
+    RiskNonce, SeedPhrase, SendAuthorization, SendRequest, SendTicket, StorageOp, StorageRecord,
+    StorageSnapshot, TerminalOutcome, WalletInputs, WalletProfile, WalletSnapshot,
+    blocker_set_digest, overlap_set_digest, reservation_set_digest,
 };
 use cc_wallet_vault::{KdfParams, Vault};
 
@@ -6368,6 +6368,23 @@ impl ChainService for FakeChain {
         Box::pin(async move { result })
     }
 
+    fn open_conversation(
+        &self,
+        _inputs: &WalletInputs,
+        _peer: &str,
+        _peer_key: Option<&[u8; 32]>,
+        sealed: &[cc_wallet_chain::SealedComment<'_>],
+    ) -> Result<Vec<Option<String>>, ChainError> {
+        // The fake speaks the format rather than the cipher: a blob that is
+        // valid UTF-8 opens to itself, anything else stays shut. That keeps the
+        // conversation's own logic — which line is locked, which is legible —
+        // testable without a seed.
+        Ok(sealed
+            .iter()
+            .map(|comment| String::from_utf8(comment.blob.to_vec()).ok())
+            .collect())
+    }
+
     fn check_destination<'a>(
         &'a self,
         _inputs: &'a EndpointAddressInputs,
@@ -12161,6 +12178,142 @@ fn a_copied_record_is_wiped_on_the_same_timer_as_the_recovery_phrase() {
         clipboard_of(&mem),
         "",
         "the timer takes the record off the clipboard without anyone asking"
+    );
+    cleanup(&dir);
+}
+
+fn spoken(lt: u64, outgoing: bool, peer: &str, message: ActivityMessage) -> ActivityEvent {
+    ActivityEvent {
+        direction: if outgoing {
+            ActivityDirection::Out
+        } else {
+            ActivityDirection::In
+        },
+        counterparty: peer.to_owned(),
+        message: Some(message),
+        ..ActivityEvent::test_stub(lt, HISTORY_NOW + lt)
+    }
+}
+
+fn plain(text: &str) -> ActivityMessage {
+    ActivityMessage::Plain {
+        text: text.to_owned(),
+    }
+}
+
+/// The fake opens a blob that is valid UTF-8 and shuts on anything else, so
+/// this is a message that will read and one that will not.
+fn sealed(text: &[u8]) -> ActivityMessage {
+    ActivityMessage::Sealed {
+        sender_key: cc_wallet_domain::PublicKey32::from_bytes([4u8; 32]),
+        blob: text.to_vec(),
+    }
+}
+
+#[test]
+fn a_conversation_is_one_counterpartys_messages_oldest_first() {
+    let dir = temp_dir("chat-narrows");
+    let fake = FakeChain::default();
+    let mut c = unlocked_with_fake(&dir, &fake);
+    let other = "0:2222222222222222222222222222222222222222222222222222222222222222";
+    c.state_mut().activity = vec![
+        spoken(3, true, SEND_DEST, plain("third")),
+        spoken(1, false, SEND_DEST, plain("first")),
+        spoken(2, true, other, plain("someone else")),
+        // A transfer with no message at all is not part of any conversation.
+        history_event(4, HISTORY_NOW, AssetId::Native),
+        spoken(5, false, SEND_DEST, plain("second")),
+    ];
+
+    c.handle_command(AppCommand::OpenChat(SEND_DEST.to_owned()));
+
+    assert!(c.state().chat.open);
+    assert_eq!(c.state().chat.peer, SEND_DEST);
+    let said: Vec<(&str, bool)> = c
+        .state()
+        .chat
+        .lines
+        .iter()
+        .map(|line| (line.text.as_str(), line.outgoing))
+        .collect();
+    assert_eq!(
+        said,
+        vec![("first", false), ("third", true), ("second", false)],
+        "one address, in the order it was said"
+    );
+
+    c.handle_command(AppCommand::CloseChat);
+    assert!(!c.state().chat.open);
+    assert!(c.state().chat.lines.is_empty());
+    cleanup(&dir);
+}
+
+#[test]
+fn a_sealed_message_that_will_not_open_is_locked_not_missing() {
+    let dir = temp_dir("chat-locked");
+    let fake = FakeChain::default();
+    let mut c = unlocked_with_fake(&dir, &fake);
+    c.state_mut().activity = vec![
+        spoken(1, false, SEND_DEST, sealed(b"legible once opened")),
+        spoken(2, false, SEND_DEST, sealed(&[0xff, 0xfe, 0xfd])),
+        spoken(3, true, SEND_DEST, plain("in the clear")),
+    ];
+
+    c.handle_command(AppCommand::OpenChat(SEND_DEST.to_owned()));
+
+    let lines = &c.state().chat.lines;
+    assert_eq!(
+        lines.len(),
+        3,
+        "a message that will not open is still a line"
+    );
+    assert_eq!(lines[0].text, "legible once opened");
+    assert!(lines[0].sealed && !lines[0].locked);
+    assert!(
+        lines[1].locked && lines[1].text.is_empty(),
+        "unreadable is shown as shut, never as blank"
+    );
+    assert!(!lines[2].sealed && !lines[2].locked);
+    cleanup(&dir);
+}
+
+#[test]
+fn an_open_conversation_follows_the_history_as_it_arrives() {
+    let dir = temp_dir("chat-follows");
+    let fake = FakeChain::default();
+    let mut c = unlocked_with_fake(&dir, &fake);
+    c.state_mut().activity = vec![spoken(1, false, SEND_DEST, plain("hello"))];
+    c.handle_command(AppCommand::OpenChat(SEND_DEST.to_owned()));
+    assert_eq!(c.state().chat.lines.len(), 1);
+
+    c.state_mut()
+        .activity
+        .push(spoken(2, false, SEND_DEST, plain("still there?")));
+    c.sort_activity();
+
+    assert_eq!(
+        c.state().chat.lines.len(),
+        2,
+        "a conversation that stops when the page loads is not a conversation"
+    );
+    assert_eq!(c.state().chat.lines[1].text, "still there?");
+    cleanup(&dir);
+}
+
+#[test]
+fn switching_wallets_closes_whatever_was_being_read() {
+    let dir = temp_dir("chat-switch");
+    let fake = FakeChain::default();
+    let mut c = unlocked_with_fake(&dir, &fake);
+    c.state_mut().activity = vec![spoken(1, false, SEND_DEST, plain("private"))];
+    c.handle_command(AppCommand::OpenChat(SEND_DEST.to_owned()));
+    assert!(c.state().chat.open);
+
+    c.handle_command(AppCommand::SaveSeed(seed_input(TEST_SEED)));
+
+    assert!(
+        !c.state().chat.open,
+        "the next wallet has no business holding this one's conversation open"
     );
     cleanup(&dir);
 }

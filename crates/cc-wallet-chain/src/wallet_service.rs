@@ -836,6 +836,48 @@ impl TychoWalletService {
         })
     }
 
+    /// Opens the sealed comments of one conversation.
+    ///
+    /// Nothing here touches the network — the ciphertext already came off the
+    /// chain with the history, and the keys are the wallet's own. What differs
+    /// between the two directions is which key to agree with and which way the
+    /// pair is written down: a message we received names its sender in itself,
+    /// while one we sent names us, and reading our own words back needs the
+    /// other end's key instead.
+    ///
+    /// A comment that will not open is not an error. Anyone can send this
+    /// wallet an `op 0x43434531` body full of noise, and a conversation that
+    /// refused to render because a stranger did is a conversation a stranger
+    /// controls.
+    pub fn open_conversation(
+        &self,
+        inputs: &WalletInputs,
+        peer: &str,
+        peer_key: Option<&[u8; 32]>,
+        sealed: &[SealedComment<'_>],
+    ) -> ChainResult<Vec<Option<String>>> {
+        let seed = normalize_and_validate_inputs(inputs)?;
+        let keys = self.keypair_for(seed)?;
+        let me = EverWallet::compute_address(inputs.workchain, keys.public_key())
+            .map_err(ChainError::wallet)?
+            .to_string();
+        let peer = canonicalize_recipient(peer).map_err(ChainError::invalid_input)?;
+
+        Ok(sealed
+            .iter()
+            .map(|comment| {
+                let (their_key, aad) = if comment.outgoing {
+                    (peer_key?, comment_aad(&me, &peer))
+                } else {
+                    (comment.sender_key, comment_aad(&peer, &me))
+                };
+                let secret = keys.comment_secret_for(their_key).ok()?;
+                let plain = open_record(&secret, &aad, comment.blob).ok()?;
+                String::from_utf8(plain.to_vec()).ok()
+            })
+            .collect())
+    }
+
     pub async fn load_transactions(
         &self,
         inputs: &EndpointAddressInputs,
@@ -1858,6 +1900,15 @@ pub trait ChainService: Send + Sync {
         inputs: &'a EndpointAddressInputs,
         address: String,
     ) -> ChainFuture<'a, DestinationReport>;
+    /// Opens sealed comments. Nothing here goes to the network, so unlike its
+    /// neighbours it answers at once.
+    fn open_conversation(
+        &self,
+        inputs: &WalletInputs,
+        peer: &str,
+        peer_key: Option<&[u8; 32]>,
+        sealed: &[SealedComment<'_>],
+    ) -> ChainResult<Vec<Option<String>>>;
     fn load_transactions<'a>(
         &'a self,
         inputs: &'a EndpointAddressInputs,
@@ -2056,6 +2107,16 @@ impl ChainService for TychoWalletService {
         address: String,
     ) -> ChainFuture<'a, DestinationReport> {
         Box::pin(TychoWalletService::check_destination(self, inputs, address))
+    }
+
+    fn open_conversation(
+        &self,
+        inputs: &WalletInputs,
+        peer: &str,
+        peer_key: Option<&[u8; 32]>,
+        sealed: &[SealedComment<'_>],
+    ) -> ChainResult<Vec<Option<String>>> {
+        TychoWalletService::open_conversation(self, inputs, peer, peer_key, sealed)
     }
 
     fn load_transactions<'a>(
@@ -2405,6 +2466,17 @@ fn fee_within_bounds(fee: u128) -> bool {
     (FEE_ESTIMATE_FLOOR_NANOS..=maximum).contains(&fee)
 }
 
+/// One sealed comment to be opened, as the history kept it.
+#[derive(Debug, Clone, Copy)]
+pub struct SealedComment<'a> {
+    /// Whether this wallet wrote it. That decides which key opens it and which
+    /// way round the pair was written when it was sealed.
+    pub outgoing: bool,
+    /// The key named in the message. Ours on the way out, theirs on the way in.
+    pub sender_key: &'a [u8; 32],
+    pub blob: &'a [u8],
+}
+
 /// Our own side of a sealed comment: the keys to agree with, and the address
 /// the ciphertext is bound to. The other side travels with the request.
 struct CommentSeal<'a> {
@@ -2737,6 +2809,116 @@ mod tests {
             ),
             require_signature_id: false,
         }
+    }
+
+    /// Both halves of a conversation, opened from this wallet's side.
+    ///
+    /// The two directions do not use the same key and do not bind the same
+    /// pair, so a mistake in either one shows up as exactly one half of every
+    /// conversation being unreadable — which looks like a network problem and
+    /// is not.
+    #[test]
+    fn a_conversation_opens_in_both_directions_from_one_seed() {
+        let service = TychoWalletService::default();
+        let inputs = seed_inputs();
+        let seed = normalize_and_validate_inputs(&inputs).unwrap();
+        let mine = service.keypair_for(seed).unwrap();
+        let my_address = service.derive_wallet_address(&inputs).unwrap();
+
+        let theirs = KeyPair::from_secret_bytes([11u8; 32]);
+        let their_address = EverWallet::compute_address(inputs.workchain, theirs.public_key())
+            .unwrap()
+            .to_string();
+
+        // What we send them: sealed by the transfer builder, exactly as a real
+        // one is, then read back off the body the way history reads it.
+        let sent = "what I said";
+        let request = SendRequest::native(&their_address, 1_000)
+            .unwrap()
+            .with_comment(sent)
+            .sealed_to(Some(theirs.public_key_bytes()));
+        let transfer = build_transfer(
+            &request,
+            true,
+            Some(CommentSeal {
+                keys: &mine,
+                sender: &my_address,
+            }),
+        )
+        .unwrap();
+        let out = cc_wallet_tycho::parse_encrypted_comment(transfer.payload_cell().unwrap())
+            .unwrap()
+            .unwrap();
+
+        // What they send us, sealed from their side.
+        let replied = "what they said";
+        let their_secret = theirs.comment_secret_for(&mine.public_key_bytes()).unwrap();
+        let inbound = seal_record(
+            &their_secret,
+            &comment_aad(&their_address, &my_address),
+            replied.as_bytes(),
+        )
+        .unwrap();
+
+        let opened = service
+            .open_conversation(
+                &inputs,
+                &their_address,
+                Some(&theirs.public_key_bytes()),
+                &[
+                    SealedComment {
+                        outgoing: true,
+                        sender_key: &out.sender_key,
+                        blob: &out.sealed,
+                    },
+                    SealedComment {
+                        outgoing: false,
+                        sender_key: &theirs.public_key_bytes(),
+                        blob: &inbound,
+                    },
+                ],
+            )
+            .unwrap();
+
+        assert_eq!(
+            opened,
+            vec![Some(sent.to_owned()), Some(replied.to_owned())]
+        );
+    }
+
+    #[test]
+    fn a_conversation_survives_what_it_cannot_read() {
+        let service = TychoWalletService::default();
+        let inputs = seed_inputs();
+        let theirs = KeyPair::from_secret_bytes([11u8; 32]);
+        let their_address = EverWallet::compute_address(inputs.workchain, theirs.public_key())
+            .unwrap()
+            .to_string();
+
+        let opened = service
+            .open_conversation(
+                &inputs,
+                &their_address,
+                // Our own sent messages cannot be read without their key, and
+                // a stranger's noise cannot be read at all. Neither may take
+                // the conversation down with it.
+                None,
+                &[
+                    SealedComment {
+                        outgoing: true,
+                        sender_key: &[1u8; 32],
+                        blob: &[7u8; 24 + 16],
+                    },
+                    SealedComment {
+                        outgoing: false,
+                        sender_key: &[2u8; 32],
+                        blob: &[9u8; 24 + 16],
+                    },
+                ],
+            )
+            .unwrap();
+
+        assert_eq!(opened, vec![None, None]);
     }
 
     #[test]

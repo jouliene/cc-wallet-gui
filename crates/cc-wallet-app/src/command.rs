@@ -199,6 +199,8 @@ pub enum AppCommand {
     },
     TraceTransaction(String),
     CloseTrace,
+    OpenChat(String),
+    CloseChat,
     AddEndpoint(String),
     SelectEndpoint(usize),
     RemoveEndpoint(String),
@@ -280,6 +282,8 @@ impl AppCommand {
             | Self::OpenInExplorer { .. }
             | Self::TraceTransaction(_)
             | Self::CloseTrace
+            | Self::OpenChat(_)
+            | Self::CloseChat
             | Self::RefreshStorage
             | Self::HideStorageRecords
             | Self::CopyStorageRecord(_)
@@ -353,6 +357,8 @@ impl AppCommand {
             | Self::OpenInExplorer { .. }
             | Self::TraceTransaction(_)
             | Self::CloseTrace
+            | Self::OpenChat(_)
+            | Self::CloseChat
             | Self::RefreshStorage
             | Self::CreateStorage
             | Self::SetStorageTitle(_)

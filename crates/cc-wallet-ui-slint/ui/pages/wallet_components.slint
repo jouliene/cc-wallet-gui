@@ -167,6 +167,7 @@ export component ActivityMovementAmount inherits Rectangle {
 export component ActivityListRow inherits Rectangle {
     in property <ActivityRow> item;
     callback open_in_explorer();
+    callback open_chat();
     height: max(root.item.movements.length, 1) * Theme.tx_row_line_h + Theme.tx_row_pad_v * 2;
     Rectangle { y: 0; height: 1px; background: Palette.border_hairline; }
     VerticalLayout {
@@ -228,6 +229,19 @@ export component ActivityListRow inherits Rectangle {
                             size: Sizes.control_dense;
                             icon_size: Sizes.icon_sm;
                             clicked => { root.open_in_explorer(); }
+                        }
+                    }
+                    // Coloured, unlike its neighbours: those two do the same
+                    // thing to every row, while this one only appears where
+                    // there is something to read, and is worth finding.
+                    if root.item.has_message: VerticalLayout {
+                        alignment: center;
+                        IconButton {
+                            icon: @image-url("../../assets/icons/chat.svg");
+                            tint: Palette.accent_text;
+                            size: Sizes.control_dense;
+                            icon_size: Sizes.icon_sm;
+                            clicked => { root.open_chat(); }
                         }
                     }
                     Rectangle { horizontal-stretch: 1; min-width: 0px; }

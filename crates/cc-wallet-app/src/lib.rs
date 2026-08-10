@@ -23,8 +23,8 @@ pub use command::{AppCommand, Password, SeedInput};
 pub use controller::AppController;
 pub use event::AppEvent;
 pub use state::{
-    AppPhase, AppState, AppTab, AuthMode, AuthPurpose, LiveStatus, RecipientCheck, StorageUi,
-    SwapFigures, SwapReceipt,
+    AppPhase, AppState, AppTab, AuthMode, AuthPurpose, ChatLine, ChatUi, LiveStatus,
+    RecipientCheck, StorageUi, SwapFigures, SwapReceipt,
 };
 
 pub fn seed_phrase_is_valid(phrase: &str) -> bool {

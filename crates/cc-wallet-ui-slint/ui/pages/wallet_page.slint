@@ -1,7 +1,7 @@
 import { Theme } from "../theme.slint";
 import { Space } from "../design_tokens.slint";
 import { UserActivity } from "../widgets.slint";
-import { AssetRow, ContactRow, ActivityRow } from "../models.slint";
+import { AssetRow, ContactRow, ActivityRow, ChatLineRow } from "../models.slint";
 import { WalletSwitcherMenu, TokenPickerMenu, ContactPickerMenu, ActivityTokenMenu, ActivityPartyMenu } from "wallet_menus.slint";
 import { OverviewStrip, AssetsCard, SendCard, ActivityCard } from "wallet_sections.slint";
 
@@ -39,6 +39,14 @@ export component WalletPage inherits VerticalLayout {
     in property <[ContactRow]> address_book;
     in property <int> address_book_count;
     in property <[ActivityRow]> activity;
+    in property <bool> chat_open;
+    in property <string> chat_peer;
+    in property <string> chat_peer_label;
+    in property <[ChatLineRow]> chat_lines;
+    in property <bool> chat_loading;
+    in property <string> chat_error;
+    callback open_chat(string);
+    callback close_chat();
     in property <string> af_dir;
     in property <int> af_token;
     in property <string> af_token_symbol;
@@ -178,6 +186,14 @@ export component WalletPage inherits VerticalLayout {
         clear_party => { root.activity_set_party(""); }
         clear_filters => { root.activity_clear_filters(); }
         open_in_explorer(address, hash) => { root.open_in_explorer(address, hash); }
+        chat_open: root.chat_open;
+        chat_peer: root.chat_peer;
+        chat_peer_label: root.chat_peer_label;
+        chat_lines: root.chat_lines;
+        chat_loading: root.chat_loading;
+        chat_error: root.chat_error;
+        open_chat(peer) => { root.open_chat(peer); }
+        close_chat => { root.close_chat(); }
     }
 
     book_popup := PopupWindow {

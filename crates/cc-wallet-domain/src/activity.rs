@@ -4,7 +4,7 @@ use serde_json::value::RawValue;
 
 use crate::amount::AssetAmount;
 use crate::asset::AssetId;
-use crate::ids::Digest32;
+use crate::ids::{Digest32, PublicKey32};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ActivityDirection {
@@ -27,6 +27,67 @@ pub struct AssetMovement {
     pub amount: AssetAmount,
 }
 
+/// What a transfer carried besides money.
+///
+/// A plain comment is legible to anyone with a block explorer; a sealed one is
+/// legible only to the two ends, and is kept here exactly as it travelled. The
+/// ciphertext is what gets written to disk — opening it needs the wallet's key,
+/// and that is asked for at the moment of reading, not held open in the
+/// history file.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ActivityMessage {
+    Plain {
+        text: String,
+    },
+    Sealed {
+        /// The key the sender published in the message itself. For a message we
+        /// received it is the other end's; for one we sent it is our own, and
+        /// reading our own words back needs the recipient's key instead.
+        sender_key: PublicKey32,
+        #[serde(with = "hex_bytes")]
+        blob: Vec<u8>,
+    },
+}
+
+impl ActivityMessage {
+    pub fn is_sealed(&self) -> bool {
+        matches!(self, Self::Sealed { .. })
+    }
+}
+
+mod hex_bytes {
+    use serde::de::Error as _;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
+        let mut hex = String::with_capacity(bytes.len() * 2);
+        for byte in bytes {
+            hex.push_str(&format!("{byte:02x}"));
+        }
+        serializer.serialize_str(&hex)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<u8>, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        if !text.len().is_multiple_of(2) {
+            return Err(D::Error::custom("a hex blob has an even number of digits"));
+        }
+        (0..text.len() / 2)
+            .map(|i| {
+                let pair = &text[2 * i..2 * i + 2];
+                if pair
+                    .bytes()
+                    .any(|b| !b.is_ascii_digit() && !(b'a'..=b'f').contains(&b))
+                {
+                    return Err(D::Error::custom("a hex blob is lowercase ASCII hex"));
+                }
+                u8::from_str_radix(pair, 16).map_err(D::Error::custom)
+            })
+            .collect()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct ActivityEvent {
     pub direction: ActivityDirection,
@@ -44,6 +105,7 @@ pub struct ActivityEvent {
     pub int_msg_hash: Option<Digest32>,
     pub finality_ms: Option<u64>,
     pub pending: bool,
+    pub message: Option<ActivityMessage>,
 }
 
 #[derive(Deserialize)]
@@ -64,6 +126,7 @@ struct ActivityEventWire {
     int_msg_hash: RequiredNullable<Digest32>,
     finality_ms: RequiredNullable<u64>,
     pending: bool,
+    message: RequiredNullable<ActivityMessage>,
 }
 
 #[derive(Debug)]
@@ -101,6 +164,7 @@ impl<'de> Deserialize<'de> for ActivityEvent {
             int_msg_hash: wire.int_msg_hash.0,
             finality_ms: wire.finality_ms.0,
             pending: wire.pending,
+            message: wire.message.0,
         })
     }
 }
@@ -133,6 +197,7 @@ impl ActivityEvent {
             int_msg_hash: None,
             finality_ms: None,
             pending: false,
+            message: None,
         }
     }
 }

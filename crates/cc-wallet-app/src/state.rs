@@ -199,6 +199,38 @@ impl Default for SwapUi {
     }
 }
 
+/// One line of a conversation, as it will be read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChatLine {
+    pub outgoing: bool,
+    pub time_unix: u64,
+    pub lt: u64,
+    /// The words, once they are legible. A sealed message that has not been
+    /// opened — or cannot be — keeps this empty and says so through `locked`.
+    pub text: String,
+    pub sealed: bool,
+    pub locked: bool,
+    pub pending: bool,
+}
+
+/// The conversation with one counterparty, laid over the activity list.
+///
+/// It owns no messages of its own: everything here is the activity the wallet
+/// already holds, narrowed to one address and turned the right way round. What
+/// it does own is the reading of sealed ones, which needs a key and therefore
+/// a moment when the wallet was open.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ChatUi {
+    pub open: bool,
+    pub peer: String,
+    pub lines: Vec<ChatLine>,
+    pub error: String,
+    /// Set once the peer's account has answered with the key that opens what we
+    /// sent them. Until then our own sealed messages stay locked.
+    pub peer_key_known: bool,
+    pub loading: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct StorageUi {
     pub address: String,
@@ -348,6 +380,7 @@ pub struct AppState {
     pub trace_hash: String,
     pub swap: SwapUi,
     pub storage: StorageUi,
+    pub chat: ChatUi,
     pub records_reveal_deadline: Option<Deadline>,
 }
 
@@ -440,6 +473,7 @@ impl Default for AppState {
             trace_hash: String::new(),
             swap: SwapUi::default(),
             storage: StorageUi::default(),
+            chat: ChatUi::default(),
             records_reveal_deadline: None,
         }
     }

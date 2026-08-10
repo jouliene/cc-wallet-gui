@@ -21,9 +21,9 @@ import { ContactsPage } from "pages/contacts_page.slint";
 import { ExplorerPage } from "pages/explorer_page.slint";
 import { StoragePage } from "pages/storage_page.slint";
 import { SettingsPage } from "pages/settings_page.slint";
-import { AssetRow, ContactRow, ActivityRow, TokenAmount, RiskOverlapRow, CurrencyRow, FieldRow, AccountView, NetworkStatsView, ExplorerTxRow, TracePartyCol, TraceEdgeRow, StorageRow } from "models.slint";
+import { AssetRow, ContactRow, ActivityRow, ChatLineRow, TokenAmount, RiskOverlapRow, CurrencyRow, FieldRow, AccountView, NetworkStatsView, ExplorerTxRow, TracePartyCol, TraceEdgeRow, StorageRow } from "models.slint";
 
-export { AssetRow, ContactRow, ActivityRow, TokenAmount, RiskOverlapRow, StorageRow, NetworkStatsView, Anim, AmountFormat, ClipboardBridge, UserActivity }
+export { AssetRow, ContactRow, ActivityRow, ChatLineRow, TokenAmount, RiskOverlapRow, StorageRow, NetworkStatsView, Anim, AmountFormat, ClipboardBridge, UserActivity }
 
 export component AppWindow inherits Window {
     title: "CC Wallet";
@@ -80,6 +80,14 @@ export component AppWindow inherits Window {
     in property <bool> risk_override_form_ready: false;
     in-out property <bool> allow_unbounced: false;
     in property <[ActivityRow]> activity: [];
+    in property <bool> chat_open: false;
+    in property <string> chat_peer: "";
+    in property <string> chat_peer_label: "";
+    in property <[ChatLineRow]> chat_lines: [];
+    in property <bool> chat_loading: false;
+    in property <string> chat_error: "";
+    callback open_chat(string);
+    callback close_chat();
     in property <string> af_dir: "all";
     in property <int> af_token: -2;
     in property <string> af_token_symbol: "";
@@ -428,6 +436,14 @@ export component AppWindow inherits Window {
                 address_book: root.contacts;
                 address_book_count: root.contact_count;
                 activity: root.activity;
+                chat_open: root.chat_open;
+                chat_peer: root.chat_peer;
+                chat_peer_label: root.chat_peer_label;
+                chat_lines: root.chat_lines;
+                chat_loading: root.chat_loading;
+                chat_error: root.chat_error;
+                open_chat(peer) => { root.open_chat(peer); }
+                close_chat => { root.close_chat(); }
                 af_dir: root.af_dir;
                 af_token: root.af_token;
                 af_token_symbol: root.af_token_symbol;
