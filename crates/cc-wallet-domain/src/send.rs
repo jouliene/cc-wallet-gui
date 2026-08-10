@@ -222,7 +222,13 @@ impl SendAuthorization {
             canonicalize_recipient(&sender_address)?,
             inputs.network_id,
             inputs.endpoint.clone(),
-            SendRequest::new(request.destination().to_owned(), request.value().clone())?,
+            // Rebuilt so the destination and value are validated again at the
+            // moment they are frozen — but rebuilt whole. Dropping the note
+            // here sent an empty body while the fee estimate, which sees the
+            // real request, quoted the price of carrying one.
+            SendRequest::new(request.destination().to_owned(), request.value().clone())?
+                .with_comment(request.comment())
+                .sealed_to(request.encrypt_to().copied()),
             bounce,
             generation,
             nonce,
@@ -368,6 +374,45 @@ mod tests {
                 .is_err()
             );
         }
+    }
+
+    #[test]
+    fn an_authorized_transfer_carries_the_note_it_was_authorized_with() {
+        let request = SendRequest::native(DEST, 7)
+            .unwrap()
+            .with_comment("rent for July")
+            .sealed_to(Some([5u8; 32]));
+        let inputs = WalletInputs {
+            endpoint: "https://rpc.example/".to_owned(),
+            network_id: 2000,
+            workchain: 0,
+            seed: crate::SeedPhrase::shared("redacted test seed".to_owned()),
+            require_signature_id: true,
+        };
+
+        let authorized = SendAuthorization::new(
+            RecordId::from_bytes([3; 32]),
+            "wallet.ccwallet".to_owned(),
+            DEST.to_owned(),
+            inputs,
+            request,
+            true,
+            9,
+            11,
+        )
+        .unwrap();
+
+        assert_eq!(
+            authorized.ticket().request().comment(),
+            "rent for July",
+            "a note dropped here is a note the chain never sees, while the fee estimate \
+             still quotes the price of carrying it"
+        );
+        assert_eq!(
+            authorized.ticket().request().encrypt_to(),
+            Some(&[5u8; 32]),
+            "and sealed means sealed to this key, not sent in the clear"
+        );
     }
 
     #[test]

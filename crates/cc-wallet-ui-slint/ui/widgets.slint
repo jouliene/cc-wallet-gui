@@ -999,7 +999,7 @@ export component Field inherits Rectangle {
         x: root.pad_left;
         y: root.multiline ? root.pad_v : 0px;
         width: max(1px, parent.width - root.pad_left - root.pad_right);
-        height: root.multiline ? parent.height - 2 * root.pad_left : parent.height;
+        height: root.multiline ? root.inner_h : parent.height;
         color: Palette.text_placeholder;
         font-family: Fonts.ui;
         font-weight: Fonts.regular;
