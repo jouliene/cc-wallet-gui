@@ -5851,6 +5851,7 @@ struct FakeInner {
     broadcasts: VecDeque<ChainResult<CandidateBroadcastOutcome>>,
     fee: Option<ChainResult<FeeEstimate>>,
     fee_bounces: Vec<bool>,
+    fee_requests: Vec<SendRequest>,
     load_wallet: Option<ChainResult<WalletSnapshot>>,
     load_wallet_calls: u32,
     destination: Option<ChainResult<DestinationAccountStatus>>,
@@ -5912,6 +5913,10 @@ impl FakeChain {
 
     fn set_fee(&self, result: ChainResult<FeeEstimate>) {
         self.0.lock().unwrap().fee = Some(result);
+    }
+
+    fn fee_requests(&self) -> Vec<SendRequest> {
+        self.0.lock().unwrap().fee_requests.clone()
     }
 
     fn fee_bounces(&self) -> Vec<bool> {
@@ -6354,12 +6359,13 @@ impl ChainService for FakeChain {
     fn estimate_fee(
         &self,
         _inputs: WalletInputs,
-        _request: SendRequest,
+        request: SendRequest,
         bounce: bool,
     ) -> ChainFuture<'_, FeeEstimate> {
         let result = {
             let mut inner = self.0.lock().unwrap();
             inner.fee_bounces.push(bounce);
+            inner.fee_requests.push(request);
             inner.fee.clone().unwrap_or(Ok(FeeEstimate {
                 fee_nanos: 7_400_000,
                 deploy: false,
@@ -12316,4 +12322,51 @@ fn switching_wallets_closes_whatever_was_being_read() {
         "the next wallet has no business holding this one's conversation open"
     );
     cleanup(&dir);
+}
+
+/// Measured on a masterchain wallet on 2026-08-10: MAX with a 32-byte sealed
+/// comment produced an amount the wallet then refused as unaffordable. The
+/// probe priced a bare transfer, but the transfer that goes out carries the
+/// message — and at 80 000 nano a byte in the masterchain, a sealed comment
+/// costs far more than the drift headroom MAX leaves behind.
+#[test]
+fn max_is_priced_against_the_message_it_will_actually_send() {
+    let dir = temp_dir("max-with-comment");
+    let fake = FakeChain::default();
+    let mut c = unlocked_with_fake(&dir, &fake);
+    c.state_mut().seed = test_seed();
+    let mut wallet = timed_wallet("0:me");
+    set_native_balance(&mut wallet, 97_736_548_757);
+    c.state_mut().wallet = Some(wallet);
+    c.state_mut().send_form.destination = SEND_DEST.to_owned();
+    c.state_mut().recipient_check = RecipientCheck::Known(DestinationAccountStatus::Active);
+    c.state_mut().recipient_encrypt_key = Some([7u8; 32]);
+    c.handle_command(AppCommand::SetSendComment(
+        "thirty-two bytes of message".to_owned(),
+    ));
+    c.handle_command(AppCommand::SetEncryptComment(true));
+
+    c.handle_command(AppCommand::SetMaxAmount);
+    assert!(c.state().max_refining, "MAX went out to be priced");
+
+    // The estimate runs on the real runtime, so wait for it to land rather than
+    // racing it.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while fake.fee_requests().is_empty() && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let probe = fake
+        .fee_requests()
+        .pop()
+        .expect("MAX asks what a full-balance transfer costs");
+    assert_eq!(
+        probe.comment(),
+        "thirty-two bytes of message",
+        "a probe without the comment prices a message nobody is sending"
+    );
+    assert_eq!(
+        probe.encrypt_to(),
+        Some(&[7u8; 32]),
+        "sealing is most of what the comment costs, so the probe must be sealed too"
+    );
 }

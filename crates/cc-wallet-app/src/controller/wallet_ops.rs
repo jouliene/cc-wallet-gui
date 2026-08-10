@@ -238,7 +238,7 @@ impl AppController {
                         .address
                         .clone()
                 };
-                let Ok(request) = SendRequest::native(destination, balance_units) else {
+                let Ok(request) = self.state.native_request_of(destination, balance_units) else {
                     return;
                 };
                 self.session.fee_reestimate_at = None;

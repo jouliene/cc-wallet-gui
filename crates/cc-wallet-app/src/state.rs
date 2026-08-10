@@ -899,6 +899,25 @@ impl AppState {
             .sealed_to(self.sealing_key_for_comment()))
     }
 
+    /// The transfer this form would make if it spent exactly `units`.
+    ///
+    /// This is what MAX has to be measured against. A comment is paid for by
+    /// the byte in forward fees and a sealed one costs seventy-three bytes more
+    /// than it says, so pricing a bare transfer and then subtracting that from
+    /// the balance leaves an amount the wallet cannot actually afford. Only the
+    /// size of the message matters to the price, so the probe may carry the
+    /// form's seal even when it is aimed at our own address for want of a
+    /// recipient.
+    pub fn native_request_of(
+        &self,
+        destination: String,
+        units: u128,
+    ) -> cc_wallet_domain::WalletResult<cc_wallet_domain::SendRequest> {
+        Ok(cc_wallet_domain::SendRequest::native(destination, units)?
+            .with_comment(&self.send_form.comment)
+            .sealed_to(self.sealing_key_for_comment()))
+    }
+
     fn sealing_key_for_comment(&self) -> Option<[u8; 32]> {
         if !self.send_form.encrypt || self.send_form.comment.is_empty() {
             return None;
