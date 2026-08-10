@@ -24,13 +24,19 @@ pub const ENCRYPTED_COMMENT_OP: u32 = 0x4343_4531;
 
 pub const ENCRYPTED_COMMENT_VERSION: u8 = 1;
 
-/// Version, the sender's key, and the nonce; the tag is counted by the sealer.
-pub const ENCRYPTED_HEADER_BYTES: usize = 1 + 32 + 24;
+/// What stands in the body before the sealed blob: the version and the sender's
+/// key. The nonce and the tag are inside the blob, not in front of it — counting
+/// them here as well is how a comment that fits exactly came to be refused.
+pub const ENCRYPTED_PREFIX_BYTES: usize = 1 + 32;
 
-/// What the plaintext may run to once the header and the AEAD tag are paid for.
-pub const MAX_ENCRYPTED_COMMENT_BYTES: usize = MAX_COMMENT_BYTES - ENCRYPTED_HEADER_BYTES - 16;
+/// The nonce the sealer prepends and the tag it appends.
+pub const SEAL_OVERHEAD_BYTES: usize = 24 + 16;
 
-const ROOT_BYTES: usize = 123 - ENCRYPTED_HEADER_BYTES;
+/// What the plaintext may run to once all of that is paid for.
+pub const MAX_ENCRYPTED_COMMENT_BYTES: usize =
+    MAX_COMMENT_BYTES - ENCRYPTED_PREFIX_BYTES - SEAL_OVERHEAD_BYTES;
+
+const ROOT_BYTES: usize = 123 - ENCRYPTED_PREFIX_BYTES - 24;
 
 /// The context string binds a shared secret to this use. The same two keys
 /// meeting for some other purpose must not arrive at the same key.
@@ -63,7 +69,8 @@ pub fn encrypted_comment_payload(sender_key: &[u8; 32], sealed: &[u8]) -> Result
         sealed.len() >= 24 + 16,
         "a sealed comment carries at least its nonce and tag"
     );
-    let body_len = ENCRYPTED_HEADER_BYTES + sealed.len();
+    // The nonce is inside `sealed`, so it is counted once and only once.
+    let body_len = ENCRYPTED_PREFIX_BYTES + sealed.len();
     ensure!(
         body_len <= MAX_COMMENT_BYTES,
         "an encrypted comment of {body_len} bytes exceeds the {MAX_COMMENT_BYTES}-byte budget"
@@ -219,18 +226,24 @@ mod tests {
     }
 
     #[test]
-    fn the_budget_is_what_is_left_after_the_header_and_the_tag() {
+    fn a_comment_of_exactly_the_budget_still_fits() {
         assert_eq!(
             MAX_ENCRYPTED_COMMENT_BYTES,
-            MAX_COMMENT_BYTES - 57 - 16,
+            MAX_COMMENT_BYTES - 73,
             "version, key, nonce and tag are paid for out of the same budget"
         );
 
         let sender = keys(1).public_key_bytes();
-        let too_much = vec![0u8; 24 + MAX_ENCRYPTED_COMMENT_BYTES + 1 + 16];
+        let exact = vec![0u8; 24 + MAX_ENCRYPTED_COMMENT_BYTES + 16];
+        let cell = encrypted_comment_payload(&sender, &exact)
+            .expect("a comment cut to the budget is a comment that fits");
+        let read = parse_encrypted_comment(&cell).unwrap().unwrap();
+        assert_eq!(read.sealed.len(), exact.len());
+
+        let one_over = vec![0u8; 24 + MAX_ENCRYPTED_COMMENT_BYTES + 1 + 16];
         assert!(
-            encrypted_comment_payload(&sender, &too_much).is_err(),
-            "the builder refuses what the budget cannot hold"
+            encrypted_comment_payload(&sender, &one_over).is_err(),
+            "and one byte past it is not"
         );
     }
 }

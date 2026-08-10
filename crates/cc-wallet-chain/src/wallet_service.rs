@@ -3015,6 +3015,45 @@ mod tests {
     }
 
     #[test]
+    fn the_budget_the_form_enforces_is_the_budget_the_builder_accepts() {
+        // Two crates hold this figure — the domain, which cuts the field, and
+        // the message builder, which refuses what will not fit. This is the one
+        // place that sees both, and a disagreement here is a comment the user
+        // is allowed to type and the wallet then cannot send.
+        assert_eq!(
+            cc_wallet_domain::MAX_COMMENT_BYTES,
+            cc_wallet_tycho::MAX_COMMENT_BYTES,
+        );
+        assert_eq!(
+            cc_wallet_domain::MAX_ENCRYPTED_COMMENT_BYTES,
+            cc_wallet_tycho::MAX_ENCRYPTED_COMMENT_BYTES,
+        );
+
+        let sender = KeyPair::from_secret_bytes([9u8; 32]);
+        let recipient = KeyPair::from_secret_bytes([11u8; 32]);
+        let text = "x".repeat(cc_wallet_domain::MAX_ENCRYPTED_COMMENT_BYTES);
+        let request = SendRequest::native(DEST, 1_000)
+            .unwrap()
+            .with_comment(&text)
+            .sealed_to(Some(recipient.public_key_bytes()));
+        assert_eq!(
+            request.comment().len(),
+            text.len(),
+            "the form keeps it whole"
+        );
+
+        build_transfer(
+            &request,
+            true,
+            Some(CommentSeal {
+                keys: &sender,
+                sender: "0:1111111111111111111111111111111111111111111111111111111111111111",
+            }),
+        )
+        .expect("a comment cut to the budget is one the builder can carry");
+    }
+
+    #[test]
     fn a_sealed_comment_leaves_no_plaintext_in_the_message() {
         let sender = KeyPair::from_secret_bytes([9u8; 32]);
         let recipient = KeyPair::from_secret_bytes([11u8; 32]);
