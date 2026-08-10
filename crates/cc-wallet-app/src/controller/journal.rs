@@ -652,6 +652,7 @@ impl AppController {
         // A note belongs to the transfer that carried it. Leaving it behind
         // attaches it to whatever is sent next.
         self.state.send_form.comment.clear();
+        self.clear_chat_draft_after_send();
         self.state.reset_recipient_status();
         self.state.clear_send_form_error();
     }

@@ -709,6 +709,104 @@ component ConversationBubble inherits Rectangle {
     }
 }
 
+/// Where a reply is written.
+///
+/// It sends nothing itself: pressing send fills in the transfer form above and
+/// hands it to the same authorization every other transfer goes through, which
+/// is why there is no amount here. A message carries the least a transfer can.
+component ConversationComposer inherits Rectangle {
+    in-out property <string> draft;
+    in property <int> draft_bytes;
+    in property <int> draft_limit;
+    in property <bool> can_encrypt;
+    in property <bool> encrypt_on;
+    in property <bool> busy;
+    in property <bool> can_send;
+    callback edited(string);
+    callback set_encrypt(bool);
+    callback send();
+    height: row.preferred-height;
+    Rectangle {
+        y: 0;
+        height: 1px;
+        background: Palette.border_subtle;
+    }
+    row := VerticalLayout {
+        padding-left: Space.s_16;
+        padding-right: Space.s_16;
+        padding-top: Space.s_10;
+        padding-bottom: Space.s_4;
+        spacing: Space.s_6;
+        HorizontalLayout {
+            height: Sizes.label_row_h;
+            spacing: Space.s_8;
+            alignment: start;
+            Rectangle {
+                width: encrypt_row.preferred-width;
+                encrypt_row := HorizontalLayout {
+                    spacing: Space.s_8;
+                    alignment: start;
+                    VerticalLayout {
+                        alignment: center;
+                        Checkbox {
+                            checked: root.encrypt_on;
+                            enabled: root.can_encrypt && !root.busy;
+                            toggled(v) => { UserActivity.ping(); root.set_encrypt(v); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Text {
+                            text: "Send encrypted";
+                            color: Palette.text_secondary;
+                            opacity: root.can_encrypt ? 1.0 : Fade.disabled;
+                            font-family: Fonts.ui;
+                            font-weight: Fonts.medium;
+                            font-size: Fonts.small;
+                        }
+                    }
+                }
+                TouchArea {
+                    enabled: root.can_encrypt && !root.busy;
+                    mouse-cursor: pointer;
+                    clicked => { UserActivity.ping(); root.set_encrypt(!root.encrypt_on); }
+                }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            if root.draft != "": VerticalLayout {
+                alignment: center;
+                Text {
+                    text: root.draft_bytes + " / " + root.draft_limit;
+                    color: root.draft_bytes >= root.draft_limit ? Palette.warning : Palette.text_quiet;
+                    font-family: Fonts.mono;
+                    font-size: Fonts.micro;
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: Space.s_10;
+            Field {
+                horizontal-stretch: 1;
+                text <=> root.draft;
+                enabled: !root.busy;
+                placeholder: "Write a message";
+                height_: Theme.field_h;
+                font_size: Fonts.body;
+                edited(t) => { root.edited(t); }
+            }
+            VerticalLayout {
+                width: Theme.send_btn_w;
+                alignment: center;
+                PrimaryButton {
+                    label: root.busy ? "Sending" : "Send";
+                    enabled: root.can_send && !root.busy;
+                    clicked => { root.send(); }
+                }
+            }
+        }
+    }
+}
+
 /// The conversation itself: everything said with one address, oldest first.
 component ConversationView inherits Rectangle {
     in property <[ChatLineRow]> lines;
@@ -758,8 +856,18 @@ export component ActivityCard inherits Card {
     in property <[ChatLineRow]> chat_lines;
     in property <bool> chat_loading;
     in property <string> chat_error;
+    in-out property <string> chat_draft;
+    in property <int> chat_draft_bytes;
+    in property <int> chat_draft_limit;
+    in property <bool> chat_can_encrypt;
+    in property <bool> chat_encrypt_on;
+    in property <bool> chat_busy;
+    in property <bool> chat_can_send;
     callback open_chat(string);
     callback close_chat();
+    callback chat_draft_edited(string);
+    callback set_chat_encrypt(bool);
+    callback send_chat_message();
     in property <string> af_dir;
     in property <int> af_token;
     in property <string> af_token_symbol;
@@ -1014,6 +1122,18 @@ export component ActivityCard inherits Card {
                     error: root.chat_error;
                     loading: root.chat_loading;
                 }
+            }
+            ConversationComposer {
+                draft <=> root.chat_draft;
+                draft_bytes: root.chat_draft_bytes;
+                draft_limit: root.chat_draft_limit;
+                can_encrypt: root.chat_can_encrypt;
+                encrypt_on: root.chat_encrypt_on;
+                busy: root.chat_busy;
+                can_send: root.chat_can_send;
+                edited(t) => { root.chat_draft_edited(t); }
+                set_encrypt(v) => { root.set_chat_encrypt(v); }
+                send => { root.send_chat_message(); }
             }
         }
     }

@@ -695,6 +695,15 @@ pub(super) fn sync_ui(ui: &AppWindow, state: &AppState, form_locked: bool, cache
     );
     ui.set_chat_loading(state.chat.loading);
     ui.set_chat_error(state.chat.error.clone().into());
+    if ui.get_chat_draft() != state.chat.draft.as_str() {
+        ui.set_chat_draft(state.chat.draft.clone().into());
+    }
+    ui.set_chat_draft_bytes(state.chat.draft.len() as i32);
+    ui.set_chat_draft_limit(state.chat.draft_limit() as i32);
+    ui.set_chat_can_encrypt(state.chat.peer_key_known);
+    ui.set_chat_encrypt_on(state.chat.encrypt);
+    ui.set_chat_busy(state.chat.sending || state.sending);
+    ui.set_chat_can_send(state.chat.can_send() && !state.sending);
     if state.chat.open {
         let lines: Vec<ChatLineRow> = state
             .chat

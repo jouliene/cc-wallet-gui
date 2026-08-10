@@ -229,6 +229,37 @@ pub struct ChatUi {
     /// sent them. Until then our own sealed messages stay locked.
     pub peer_key_known: bool,
     pub loading: bool,
+    /// What is being written but not yet sent. It lives here rather than in the
+    /// send form because a half-typed message is not a transfer yet.
+    pub draft: String,
+    pub encrypt: bool,
+    /// A reply that has been asked for and is waiting on the recipient's
+    /// account to answer before it can be authorized.
+    pub sending: bool,
+}
+
+/// What a message carries when it is sent as a message. The chain will not
+/// deliver a body without a transfer to carry it, and the smallest transfer
+/// there is costs the sender only its fees.
+pub const CHAT_ATTACH_NANOS: u128 = 1;
+
+impl ChatUi {
+    /// What a reply may run to right now. Sealing spends part of the budget, so
+    /// the answer changes with the toggle and the field has to follow it.
+    pub fn draft_limit(&self) -> usize {
+        if self.encrypt {
+            cc_wallet_domain::MAX_ENCRYPTED_COMMENT_BYTES
+        } else {
+            cc_wallet_domain::MAX_COMMENT_BYTES
+        }
+    }
+
+    pub fn can_send(&self) -> bool {
+        self.open
+            && !self.sending
+            && !self.draft.trim().is_empty()
+            && self.draft.len() <= self.draft_limit()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

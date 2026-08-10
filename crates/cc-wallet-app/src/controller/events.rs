@@ -298,6 +298,7 @@ impl AppController {
                             crate::state::RecipientCheck::Failed
                         }
                     };
+                    self.advance_chat_send();
                 }
             }
             AppEvent::ChatPeerKeyLoaded {

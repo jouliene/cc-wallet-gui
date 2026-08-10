@@ -86,6 +86,16 @@ export component AppWindow inherits Window {
     in property <[ChatLineRow]> chat_lines: [];
     in property <bool> chat_loading: false;
     in property <string> chat_error: "";
+    in-out property <string> chat_draft;
+    in property <int> chat_draft_bytes;
+    in property <int> chat_draft_limit;
+    in property <bool> chat_can_encrypt;
+    in property <bool> chat_encrypt_on;
+    in property <bool> chat_busy;
+    in property <bool> chat_can_send;
+    callback chat_draft_edited(string);
+    callback set_chat_encrypt(bool);
+    callback send_chat_message();
     callback open_chat(string);
     callback close_chat();
     in property <string> af_dir: "all";
@@ -441,6 +451,16 @@ export component AppWindow inherits Window {
                 chat_peer_label: root.chat_peer_label;
                 chat_lines: root.chat_lines;
                 chat_loading: root.chat_loading;
+                chat_draft <=> root.chat_draft;
+                chat_draft_bytes: root.chat_draft_bytes;
+                chat_draft_limit: root.chat_draft_limit;
+                chat_can_encrypt: root.chat_can_encrypt;
+                chat_encrypt_on: root.chat_encrypt_on;
+                chat_busy: root.chat_busy;
+                chat_can_send: root.chat_can_send;
+                chat_draft_edited(t) => { root.chat_draft_edited(t); }
+                set_chat_encrypt(v) => { root.set_chat_encrypt(v); }
+                send_chat_message => { root.send_chat_message(); }
                 chat_error: root.chat_error;
                 open_chat(peer) => { root.open_chat(peer); }
                 close_chat => { root.close_chat(); }

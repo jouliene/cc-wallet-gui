@@ -407,6 +407,13 @@ pub(super) fn connect_callbacks(
     on0!(on_close_trace, AppCommand::CloseTrace);
     on1!(on_open_chat, peer, AppCommand::OpenChat(peer.to_string()));
     on0!(on_close_chat, AppCommand::CloseChat);
+    on1!(
+        on_chat_draft_edited,
+        t,
+        AppCommand::SetChatDraft(t.to_string())
+    );
+    on1!(on_set_chat_encrypt, v, AppCommand::SetChatEncrypt(v));
+    on0!(on_send_chat_message, AppCommand::SendChatMessage);
     on0!(on_switch_wallet, AppCommand::SwitchWallet);
     on1!(
         on_switch_to_wallet,

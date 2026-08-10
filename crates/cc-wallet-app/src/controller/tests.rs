@@ -12370,3 +12370,146 @@ fn max_is_priced_against_the_message_it_will_actually_send() {
         "sealing is most of what the comment costs, so the probe must be sealed too"
     );
 }
+
+#[test]
+fn a_reply_goes_out_through_the_one_sender_this_wallet_has() {
+    let dir = temp_dir("chat-reply");
+    let fake = FakeChain::default();
+    let mut c = unlocked_with_fake(&dir, &fake);
+    let mut wallet = timed_wallet("0:me");
+    set_native_balance(&mut wallet, 5_000_000_000);
+    c.state_mut().wallet = Some(wallet);
+    c.state_mut().activity = vec![spoken(1, false, SEND_DEST, plain("hello"))];
+    c.handle_command(AppCommand::OpenChat(SEND_DEST.to_owned()));
+
+    c.handle_command(AppCommand::SetChatDraft("answering".to_owned()));
+    c.handle_command(AppCommand::SendChatMessage);
+
+    // Nothing may be authorized until the recipient's account has answered.
+    assert!(c.state().chat.sending, "the reply waits on the account");
+    assert!(c.pending_authorization.is_none());
+
+    c.apply_event(AppEvent::DestinationChecked {
+        generation: c.subscription_generation,
+        seq: c.dest_check_seq,
+        address: SEND_DEST.to_owned(),
+        report: Some(DestinationReport {
+            status: DestinationAccountStatus::Active,
+            encrypt_key: Some([5u8; 32]),
+        }),
+    });
+
+    let authorization = c
+        .pending_authorization
+        .as_ref()
+        .expect("the reply reached the same authorization every transfer does");
+    let request = authorization.ticket().request();
+    assert_eq!(request.destination(), SEND_DEST, "pinned to the thread");
+    assert_eq!(request.comment(), "answering");
+    assert_eq!(
+        request.value().native_units(),
+        Some(crate::state::CHAT_ATTACH_NANOS),
+        "a message carries the least a message can carry"
+    );
+    assert!(!c.state().chat.sending);
+    cleanup(&dir);
+}
+
+#[test]
+fn a_reply_is_sealed_when_the_other_end_publishes_a_key() {
+    let dir = temp_dir("chat-reply-sealed");
+    let fake = FakeChain::default();
+    let mut c = unlocked_with_fake(&dir, &fake);
+    let mut wallet = timed_wallet("0:me");
+    set_native_balance(&mut wallet, 5_000_000_000);
+    c.state_mut().wallet = Some(wallet);
+    c.state_mut().activity = vec![spoken(1, false, SEND_DEST, plain("hello"))];
+    c.handle_command(AppCommand::OpenChat(SEND_DEST.to_owned()));
+    c.state_mut().chat.peer_key_known = true;
+
+    c.handle_command(AppCommand::SetChatEncrypt(true));
+    c.handle_command(AppCommand::SetChatDraft("for your eyes".to_owned()));
+    c.handle_command(AppCommand::SendChatMessage);
+    c.apply_event(AppEvent::DestinationChecked {
+        generation: c.subscription_generation,
+        seq: c.dest_check_seq,
+        address: SEND_DEST.to_owned(),
+        report: Some(DestinationReport {
+            status: DestinationAccountStatus::Active,
+            encrypt_key: Some([5u8; 32]),
+        }),
+    });
+
+    let request = c
+        .pending_authorization
+        .as_ref()
+        .expect("the reply was authorized")
+        .ticket()
+        .request();
+    assert_eq!(
+        request.encrypt_to(),
+        Some(&[5u8; 32]),
+        "asking to seal must survive the destination check that clears the key"
+    );
+    cleanup(&dir);
+}
+
+#[test]
+fn sealing_cuts_the_draft_to_what_sealing_leaves_room_for() {
+    let dir = temp_dir("chat-draft-limit");
+    let fake = FakeChain::default();
+    let mut c = unlocked_with_fake(&dir, &fake);
+    c.handle_command(AppCommand::OpenChat(SEND_DEST.to_owned()));
+    c.state_mut().chat.peer_key_known = true;
+
+    c.handle_command(AppCommand::SetChatDraft("x".repeat(1200)));
+    assert_eq!(
+        c.state().chat.draft.len(),
+        cc_wallet_domain::MAX_COMMENT_BYTES,
+        "a plain draft is cut to the plain budget"
+    );
+
+    c.handle_command(AppCommand::SetChatEncrypt(true));
+    assert_eq!(
+        c.state().chat.draft.len(),
+        cc_wallet_domain::MAX_ENCRYPTED_COMMENT_BYTES,
+        "turning sealing on cuts it again, then and not at send time"
+    );
+    cleanup(&dir);
+}
+
+#[test]
+fn a_reply_to_an_account_that_cannot_receive_says_so_instead_of_hanging() {
+    let dir = temp_dir("chat-reply-inactive");
+    let fake = FakeChain::default();
+    let mut c = unlocked_with_fake(&dir, &fake);
+    let mut wallet = timed_wallet("0:me");
+    set_native_balance(&mut wallet, 5_000_000_000);
+    c.state_mut().wallet = Some(wallet);
+    c.handle_command(AppCommand::OpenChat(SEND_DEST.to_owned()));
+    c.handle_command(AppCommand::SetChatDraft("anyone there".to_owned()));
+    c.handle_command(AppCommand::SendChatMessage);
+
+    c.apply_event(AppEvent::DestinationChecked {
+        generation: c.subscription_generation,
+        seq: c.dest_check_seq,
+        address: SEND_DEST.to_owned(),
+        report: Some(DestinationReport {
+            status: DestinationAccountStatus::NonExist,
+            encrypt_key: None,
+        }),
+    });
+
+    assert!(!c.state().chat.sending);
+    assert!(c.pending_authorization.is_none());
+    assert!(
+        !c.state().chat.error.is_empty(),
+        "the wait ends with a reason"
+    );
+    assert_eq!(
+        c.state().chat.draft,
+        "anyone there",
+        "what was written is not thrown away because it could not be sent"
+    );
+    cleanup(&dir);
+}

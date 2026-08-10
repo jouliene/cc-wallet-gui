@@ -481,6 +481,16 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
             .ok()
             .filter(|s| !s.is_empty()),
     ));
+    // What to say once it is open, for the same reason: the composer cannot be
+    // reached by a harness that has no way to click or type into it.
+    #[cfg(debug_assertions)]
+    let said_something = std::rc::Rc::new(std::cell::Cell::new(false));
+    #[cfg(debug_assertions)]
+    let pending_say = std::rc::Rc::new(std::cell::RefCell::new(
+        std::env::var("CC_WALLET_TEST_CHAT_SAY")
+            .ok()
+            .filter(|s| !s.is_empty()),
+    ));
     #[cfg(debug_assertions)]
     let pending_swap_drive = std::rc::Rc::new(std::cell::RefCell::new(SwapDrive::from_env()));
     #[cfg(debug_assertions)]
@@ -509,6 +519,8 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
         #[cfg(debug_assertions)]
         let pending_trace = pending_trace.clone();
         let pending_chat = pending_chat.clone();
+        let pending_say = pending_say.clone();
+        let said_something = said_something.clone();
         #[cfg(debug_assertions)]
         let pending_swap_drive = pending_swap_drive.clone();
         #[cfg(debug_assertions)]
@@ -565,6 +577,32 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
                         && let Some(peer) = pending_chat.borrow_mut().take()
                     {
                         c.handle_command(AppCommand::OpenChat(peer));
+                    }
+                    if c.state().chat.open
+                        && c.state().wallet.is_some()
+                        && !c.state().chat.sending
+                        && let Some(text) = pending_say.borrow_mut().take()
+                    {
+                        if std::env::var("CC_WALLET_TEST_CHAT_SEAL").is_ok() {
+                            c.handle_command(AppCommand::SetChatEncrypt(true));
+                        }
+                        said_something.set(true);
+                        c.handle_command(AppCommand::SetChatDraft(text));
+                        c.handle_command(AppCommand::SendChatMessage);
+                    }
+                    // The reply stops at the signing dialog like any transfer,
+                    // so the harness has to sign it the way a person would.
+                    if c.state().auth.open
+                        && c.state().auth.purpose == cc_wallet_app::AuthPurpose::Send
+                        && said_something.get()
+                        && let Ok(pw) = std::env::var("CC_WALLET_TEST_PASSWORD")
+                    {
+                        said_something.set(false);
+                        c.handle_command(AppCommand::AuthSubmit {
+                            pw: Password::new(pw),
+                            pw2: Password::new(String::new()),
+                            remember: true,
+                        });
                     }
                     {
                         let mut drive = pending_swap_drive.borrow_mut();

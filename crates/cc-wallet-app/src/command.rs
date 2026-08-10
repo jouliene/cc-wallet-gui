@@ -201,6 +201,9 @@ pub enum AppCommand {
     CloseTrace,
     OpenChat(String),
     CloseChat,
+    SetChatDraft(String),
+    SetChatEncrypt(bool),
+    SendChatMessage,
     AddEndpoint(String),
     SelectEndpoint(usize),
     RemoveEndpoint(String),
@@ -227,6 +230,7 @@ impl AppCommand {
             | Self::SetSendAmount(_)
             | Self::SetSendComment(_)
             | Self::SetEncryptComment(_)
+            | Self::SendChatMessage
             | Self::SetMaxAmount
             | Self::SetAllowUnbounced(_)
             | Self::SetSwapFromToken(_)
@@ -284,6 +288,8 @@ impl AppCommand {
             | Self::CloseTrace
             | Self::OpenChat(_)
             | Self::CloseChat
+            | Self::SetChatDraft(_)
+            | Self::SetChatEncrypt(_)
             | Self::RefreshStorage
             | Self::HideStorageRecords
             | Self::CopyStorageRecord(_)
@@ -359,6 +365,9 @@ impl AppCommand {
             | Self::CloseTrace
             | Self::OpenChat(_)
             | Self::CloseChat
+            | Self::SetChatDraft(_)
+            | Self::SetChatEncrypt(_)
+            | Self::SendChatMessage
             | Self::RefreshStorage
             | Self::CreateStorage
             | Self::SetStorageTitle(_)
