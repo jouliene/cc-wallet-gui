@@ -7,7 +7,7 @@ use cc_wallet_tycho::{
 };
 
 use crate::activity::message_movements;
-use crate::explorer::failure_reason;
+use crate::explorer::{abort_explanation, failure_reason};
 use crate::wallet_service::{ChainError, ChainResult};
 
 pub const TRACE_MAX_TRANSACTIONS: usize = 64;
@@ -38,6 +38,11 @@ pub struct TraceTx {
     pub fee_native: u128,
     pub success: bool,
     pub failure: String,
+    /// What the chain aborted over, when the value arrived anyway. A wallet
+    /// that could not run still kept what it was sent, so this is a remark
+    /// rather than a failure — but a scanner that says nothing at all here
+    /// shows a green transaction the chain marked aborted.
+    pub note: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -256,6 +261,11 @@ fn code_hash_of<'a>(contracts: &'a ContractIndex, address: &str) -> Option<&'a s
 
 fn trace_tx(tx: &ChainTransaction) -> ChainResult<TraceTx> {
     let failure = failure_reason(tx);
+    let note = if failure.is_empty() {
+        abort_explanation(tx).to_owned()
+    } else {
+        String::new()
+    };
     Ok(TraceTx {
         hash: parse_hash(&tx.hash)?,
         lt: tx.lt,
@@ -263,6 +273,7 @@ fn trace_tx(tx: &ChainTransaction) -> ChainResult<TraceTx> {
         fee_native: tx.total_fees_native,
         success: failure.is_empty(),
         failure,
+        note,
     })
 }
 
@@ -330,6 +341,8 @@ fn parse_hash(value: &str) -> ChainResult<Digest32> {
 
 #[cfg(test)]
 mod tests {
+    use cc_wallet_tycho::{BounceOutcome, ComputePhaseSkipReason};
+
     use std::collections::BTreeMap;
 
     use cc_wallet_tycho::{Cell, CellBuilder};
@@ -388,7 +401,7 @@ mod tests {
             action_success: Some(true),
             action_result_code: Some(0),
             action_no_funds: Some(false),
-            bounce_phase_present: false,
+            bounce: None,
             in_msg: Some(in_msg),
             out_msgs: out,
         }
@@ -556,11 +569,34 @@ mod tests {
         assert_eq!(child.failure, "");
     }
 
+    /// Measured on Tycho testnet on 2026-08-10: a 0.0001 COIN transfer carrying
+    /// an encrypted comment to a masterchain wallet, where the flat gas price is
+    /// 0.01 COIN. The compute phase was skipped as `NoGas`, the bounce phase
+    /// could not afford the way home, and the wallet reported it as value coming
+    /// back — which is the one thing that did not happen.
+    #[test]
+    fn a_message_that_bought_no_gas_did_not_send_the_value_home() {
+        let mut nodes = two_hop();
+        nodes[1].tx.aborted = true;
+        nodes[1].tx.compute_skipped = true;
+        nodes[1].tx.compute_skip_reason = Some(ComputePhaseSkipReason::NoGas);
+        nodes[1].tx.bounce = Some(BounceOutcome::Unaffordable);
+        let trace = flatten(&nodes, focus(), false, &ContractIndex::new()).unwrap();
+
+        let child = trace.edges[1].tx.as_ref().unwrap();
+        assert_eq!(
+            child.failure, "",
+            "nothing came back, so nothing may say it did"
+        );
+        assert_eq!(child.note, "not enough value to pay for gas");
+        assert_eq!(trace.failed, 0, "the value stayed where it landed");
+    }
+
     #[test]
     fn value_that_came_straight_back_is_named_for_what_it_did() {
         let mut nodes = two_hop();
         nodes[1].tx.aborted = true;
-        nodes[1].tx.bounce_phase_present = true;
+        nodes[1].tx.bounce = Some(BounceOutcome::Returned);
         let trace = flatten(&nodes, focus(), false, &ContractIndex::new()).unwrap();
 
         let child = trace.edges[1].tx.as_ref().unwrap();

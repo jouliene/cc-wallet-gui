@@ -28,10 +28,10 @@ use cc_wallet_tycho::{
     EverTransfer, EverWallet, KeyPair, LocalReason, MsgKind, ResponseKind, STORAGE_TARGET_BALANCE,
     Seed, SendAttemptOutcome, StdAddr, SubscriptionEvent, Transport, WalletState,
     account_subscription_loop, comment_aad, comment_payload, elector_election_stake,
-    emulate_external_message, encrypted_comment_payload, key_block_supply, parse_transaction,
-    pool_storage_from_account, prepare_emulation_config, shard_account_for_emulation,
-    storage_address, storage_delete_body, storage_from_account, storage_put_body, swap_body,
-    validate_emulation_input_sizes,
+    emulate_external_message, encrypted_comment_payload, key_block_supply, min_bounceable_attach,
+    parse_transaction, pool_storage_from_account, prepare_emulation_config,
+    shard_account_for_emulation, storage_address, storage_delete_body, storage_from_account,
+    storage_put_body, swap_body, validate_emulation_input_sizes,
 };
 use cc_wallet_vault::{open_record, seal_record};
 use sha2::{Digest, Sha256};
@@ -133,6 +133,9 @@ static MONOTONIC_ORIGIN: LazyLock<Instant> = LazyLock::new(Instant::now);
 pub struct DestinationReport {
     pub status: DestinationAccountStatus,
     pub encrypt_key: Option<[u8; 32]>,
+    /// The least this recipient can be sent bounceably, in nanos. Below it the
+    /// receiving transaction buys no gas at all and is skipped as `NoGas`.
+    pub min_attach_native: u128,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -837,9 +840,20 @@ impl TychoWalletService {
             .ok()
             .flatten()
             .and_then(|inspection| inspection.signing_key);
+        // Gas on the receiving side is bought out of what the message carries,
+        // and the price differs between workchains, so the floor belongs to the
+        // recipient rather than to us.
+        let workchain = address
+            .parse::<StdAddr>()
+            .map_err(|error| ChainError::invalid_input(error.to_string()))?
+            .workchain;
+        let config = self.blockchain_config(&transport).await?;
+        let min_attach_native = min_bounceable_attach(&config.state.config, workchain)
+            .map_err(|error| ChainError::Wallet(error.to_string()))?;
         Ok(DestinationReport {
             status,
             encrypt_key,
+            min_attach_native,
         })
     }
 

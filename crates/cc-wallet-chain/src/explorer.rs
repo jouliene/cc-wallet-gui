@@ -1,5 +1,7 @@
 use cc_wallet_domain::{AssetMovement, Digest32};
-use cc_wallet_tycho::{ChainMessage, ChainTransaction, MsgKind};
+use cc_wallet_tycho::{
+    BounceOutcome, ChainMessage, ChainTransaction, ComputePhaseSkipReason, MsgKind,
+};
 
 use crate::activity::message_movements;
 use crate::wallet_service::{ChainError, ChainResult};
@@ -67,7 +69,7 @@ pub fn failure_reason(tx: &ChainTransaction) -> String {
             _ => format!("action {}", tx.action_result_code.unwrap_or_default()),
         };
     }
-    let returned = tx.bounce_phase_present
+    let returned = tx.bounce == Some(BounceOutcome::Returned)
         && tx
             .in_msg
             .as_ref()
@@ -76,6 +78,26 @@ pub fn failure_reason(tx: &ChainTransaction) -> String {
         return "value returned".to_owned();
     }
     String::new()
+}
+
+/// What the chain says went wrong with a transaction whose value still arrived.
+///
+/// A failure here is a failure of execution, not of delivery: nothing ran, and
+/// the reason nothing ran is the whole story. It is reported apart from
+/// [`failure_reason`] because the two answer different questions — that one
+/// asks whether the money got where it was going, this one whether the
+/// receiving account did anything about it.
+pub fn abort_explanation(tx: &ChainTransaction) -> &'static str {
+    if !tx.aborted {
+        return "";
+    }
+    match tx.compute_skip_reason {
+        Some(ComputePhaseSkipReason::NoGas) => "not enough value to pay for gas",
+        Some(ComputePhaseSkipReason::NoState) => "account has no code to run",
+        Some(ComputePhaseSkipReason::BadState) => "account state is unusable",
+        Some(ComputePhaseSkipReason::Suspended) => "account is suspended",
+        None => "aborted",
+    }
 }
 
 pub fn account_tx_from_chain_tx(tx: &ChainTransaction) -> ChainResult<AccountTx> {
@@ -320,7 +342,7 @@ mod tests {
             action_success: Some(true),
             action_result_code: Some(0),
             action_no_funds: Some(false),
-            bounce_phase_present: false,
+            bounce: None,
             in_msg,
             out_msgs,
         }
@@ -457,7 +479,7 @@ mod tests {
         let deposit = message(MsgKind::Int, Some(OTHER), Some(ME), 7_000, BTreeMap::new());
         let mut returned = transaction(Some(deposit), Vec::new());
         returned.aborted = true;
-        returned.bounce_phase_present = true;
+        returned.bounce = Some(BounceOutcome::Returned);
         assert!(!account_tx_from_chain_tx(&returned).unwrap().success);
         assert_eq!(failure_reason(&returned), "value returned");
 
@@ -470,7 +492,7 @@ mod tests {
         );
         let mut kept = transaction(Some(with_currency), Vec::new());
         kept.aborted = true;
-        kept.bounce_phase_present = true;
+        kept.bounce = Some(BounceOutcome::Returned);
         assert!(account_tx_from_chain_tx(&kept).unwrap().success);
     }
 

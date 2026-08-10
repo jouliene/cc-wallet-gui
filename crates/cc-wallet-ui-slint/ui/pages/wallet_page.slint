@@ -32,6 +32,7 @@ export component WalletPage inherits VerticalLayout {
     in property <bool> send_enabled;
     in property <bool> send_form_locked;
     in property <bool> insufficient_balance;
+    in property <string> amount_floor_hint;
     in property <bool> journal_blocking;
     in property <bool> risk_override_eligible;
     in property <bool> risk_override_form_ready;
@@ -136,6 +137,7 @@ export component WalletPage inherits VerticalLayout {
             send_enabled: root.send_enabled;
             form_locked: root.send_form_locked;
             insufficient_balance: root.insufficient_balance;
+            amount_floor_hint: root.amount_floor_hint;
             journal_blocking: root.journal_blocking;
             risk_override_eligible: root.risk_override_eligible;
             risk_override_form_ready: root.risk_override_form_ready;

@@ -818,6 +818,7 @@ dependencies = [
  "bip32",
  "bip39",
  "blake3",
+ "curve25519-dalek",
  "ed25519-dalek",
  "hex",
  "rand_core 0.6.4",

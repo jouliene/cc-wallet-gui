@@ -298,6 +298,10 @@ pub struct AppState {
     /// is the whole of what makes an encrypted comment possible, so it is also
     /// the whole of what the toggle beside the comment waits for.
     pub recipient_encrypt_key: Option<[u8; 32]>,
+    /// The least this recipient can be sent, in nanos, read from the network's
+    /// gas prices for the workchain they live in. Zero until their account has
+    /// answered, which is also when the amount cannot yet be judged.
+    pub recipient_min_attach: u128,
     pub allow_unbounced: bool,
     pub journal_blocking: bool,
     pub active_reservations: Vec<Reservation>,
@@ -393,6 +397,7 @@ impl Default for AppState {
             max_refining: false,
             recipient_check: RecipientCheck::Unchecked,
             recipient_encrypt_key: None,
+            recipient_min_attach: 0,
             allow_unbounced: false,
             journal_blocking: false,
             active_reservations: Vec::new(),
@@ -853,6 +858,9 @@ impl AppState {
         // sealed to whoever was in the field before.
         self.recipient_encrypt_key = None;
         self.send_form.encrypt = false;
+        // The floor belongs to the recipient's workchain, so it dies with the
+        // recipient rather than outliving them onto the next address.
+        self.recipient_min_attach = 0;
     }
 
     /// The request this form stands for, sealed to the recipient when that is
@@ -904,6 +912,41 @@ impl AppState {
 
     pub fn amount_positive(&self) -> bool {
         parse_send_amount(self.send_form.token.asset_id(), &self.send_form.amount).is_ok()
+    }
+
+    /// Whether what is being sent can pay for the recipient's own execution.
+    ///
+    /// A bounceable message is not credited before the receiving compute phase,
+    /// so the gas comes out of the transfer itself and the network sells the
+    /// first thousand units for an indivisible flat price. Under that price the
+    /// receiving transaction is skipped as `NoGas` — and if what is left cannot
+    /// pay the bounce back either, nothing returns and the whole thing reads as
+    /// a failure at the far end. Above the floor this is not our business.
+    pub fn amount_reaches_recipient(&self) -> bool {
+        self.amount_shortfall().is_none()
+    }
+
+    /// By how much, when it falls short. Only native transfers are judged: an
+    /// extra-currency transfer carries no native value to measure.
+    fn amount_shortfall(&self) -> Option<u128> {
+        if self.recipient_min_attach == 0 || !self.send_bounce() {
+            return None;
+        }
+        let amount =
+            parse_send_amount(self.send_form.token.asset_id(), &self.send_form.amount).ok()?;
+        let units = amount.native_units()?;
+        (units < self.recipient_min_attach).then_some(self.recipient_min_attach)
+    }
+
+    /// What to say about it, in the recipient's own terms.
+    pub fn amount_floor_hint(&self) -> String {
+        match self.amount_shortfall() {
+            None => String::new(),
+            Some(floor) => match cc_wallet_domain::format_native_fixed9(floor) {
+                Ok(text) => format!("This recipient cannot receive less than {text} COIN"),
+                Err(_) => "This recipient cannot receive an amount this small".to_owned(),
+            },
+        }
     }
 
     pub fn risk_override_form_ready(&self) -> bool {
@@ -993,6 +1036,7 @@ impl AppState {
             && !self.max_refining
             && self.recipient_valid()
             && self.amount_positive()
+            && self.amount_reaches_recipient()
             && self.comment_fits()
             && self.can_afford_send()
     }
@@ -1348,6 +1392,74 @@ mod tests {
             !state.send_enabled(),
             "network time from a different endpoint must not enable authorization"
         );
+    }
+
+    /// Measured on Tycho testnet on 2026-08-10. 0.0001 COIN to a masterchain
+    /// wallet bought no gas at all: the receiving compute phase was skipped, and
+    /// the same recipient took the identical message without complaint once
+    /// 0.01 COIN rode along with it.
+    #[test]
+    fn an_amount_too_small_for_the_recipients_gas_cannot_be_sent() {
+        let mut state = AppState {
+            persistence_health: PersistenceHealth::Ready,
+            default_endpoint: Some("https://rpc.example/".to_owned()),
+            ..AppState::default()
+        };
+        state.send_form.destination =
+            "-1:8f1d72dbc37c3e77d413867e5e846f35bbe0398699815fa079ec95301c119a4b".to_owned();
+        state.send_form.token = SendToken::Native;
+        state.wallet = Some(timed_wallet());
+        state
+            .wallet
+            .as_mut()
+            .unwrap()
+            .replace_balances(100_000_000_000, Default::default())
+            .unwrap();
+        state.recipient_check = RecipientCheck::Known(DestinationAccountStatus::Active);
+        state.recipient_min_attach = 10_000_000;
+
+        state.send_form.amount = "0.0001".to_owned();
+        assert!(!state.amount_reaches_recipient());
+        assert!(!state.send_enabled(), "the money would not arrive");
+        assert_eq!(
+            state.amount_floor_hint(),
+            "This recipient cannot receive less than 0.010000000 COIN"
+        );
+
+        state.send_form.amount = "0.01".to_owned();
+        assert!(
+            state.amount_reaches_recipient(),
+            "exactly the flat gas price buys exactly the flat gas"
+        );
+        assert_eq!(state.amount_floor_hint(), "");
+        assert!(state.send_enabled());
+    }
+
+    #[test]
+    fn a_recipient_who_pays_their_own_gas_has_no_floor_to_clear() {
+        let mut state = AppState {
+            persistence_health: PersistenceHealth::Ready,
+            default_endpoint: Some("https://rpc.example/".to_owned()),
+            ..AppState::default()
+        };
+        state.send_form.destination =
+            "0:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".to_owned();
+        state.send_form.token = SendToken::Native;
+        state.send_form.amount = "0.0001".to_owned();
+        state.recipient_min_attach = 1_000_000;
+
+        // Nothing has answered yet, so there is no floor to hold anyone to.
+        state.recipient_min_attach = 0;
+        assert!(state.amount_reaches_recipient());
+
+        // A message that is not sent bounceably is credited before the compute
+        // phase, so the account's own balance buys the gas and the floor does
+        // not apply.
+        state.recipient_min_attach = 1_000_000;
+        state.recipient_check = RecipientCheck::Known(DestinationAccountStatus::Uninit);
+        state.allow_unbounced = true;
+        assert!(!state.send_bounce());
+        assert!(state.amount_reaches_recipient());
     }
 
     #[test]

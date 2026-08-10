@@ -41,9 +41,12 @@ pub use everwallet::{
     ever_wallet_code_hash, make_wallet_state_init, parse_std_addr,
 };
 pub use history::{
-    ChainMessage, ChainTransaction, MAX_TRANSACTION_BOC_BYTES, MsgKind, parse_transaction,
+    BounceOutcome, ChainMessage, ChainTransaction, MAX_TRANSACTION_BOC_BYTES, MsgKind,
+    parse_transaction,
 };
-pub use network::{CoinSupply, ElectionStake, elector_election_stake, key_block_supply};
+pub use network::{
+    CoinSupply, ElectionStake, elector_election_stake, key_block_supply, min_bounceable_attach,
+};
 pub use storage::{
     MAX_BLOB_BYTES as MAX_STORAGE_BLOB_BYTES, MAX_RECORDS as MAX_STORAGE_RECORDS,
     MIN_OP_ATTACH as STORAGE_MIN_OP_ATTACH, STORAGE_CONTRACT, STORAGE_WORKCHAIN, StorageData,
@@ -62,6 +65,7 @@ pub use transport::{
 
 pub use anyhow::Result;
 pub use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
+pub use tycho_types::models::ComputePhaseSkipReason;
 pub use tycho_types::models::account::AccountStatus;
 pub use tycho_types::models::{BlockchainConfig, SignatureContext, StdAddr};
 pub use tycho_types::prelude::{Cell, CellBuilder, HashBytes};

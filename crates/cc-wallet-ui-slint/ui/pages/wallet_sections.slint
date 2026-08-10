@@ -230,6 +230,7 @@ export component SendCard inherits Card {
     in property <bool> send_enabled;
     in property <bool> form_locked;
     in property <bool> insufficient_balance;
+    in property <string> amount_floor_hint;
     in property <bool> journal_blocking;
     in property <bool> risk_override_eligible;
     in property <bool> risk_override_form_ready;
@@ -348,7 +349,15 @@ export component SendCard inherits Card {
                         spacing: Space.s_8;
                         alignment: start;
                         VerticalLayout { alignment: center; MicroLabel { text: "AMOUNT"; } }
-                        if root.insufficient_balance: VerticalLayout {
+                        // Too little to arrive is a different complaint from
+                        // too much to afford, and the row holds one line, so
+                        // the one that names an exact number wins.
+                        if root.amount_floor_hint != "": VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 1;
+                            InlineError { text: root.amount_floor_hint; }
+                        }
+                        if root.amount_floor_hint == "" && root.insufficient_balance: VerticalLayout {
                             alignment: center;
                             horizontal-stretch: 1;
                             InlineError { text: "Insufficient balance for this amount plus the fee"; }

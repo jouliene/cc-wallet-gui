@@ -459,15 +459,18 @@ export component TraceDiagram inherits Rectangle {
                                 }
                             }
                         }
-                        if !e.is_event && (!e.executed || !e.ok): Text {
+                        if !e.is_event && (!e.executed || !e.ok || e.note != ""): Text {
                             x: edge_row.loops
                                 ? edge_row.says_x
                                 : edge_row.to_x + (edge_row.rightward ? 12px : -110px);
                             width: edge_row.loops ? edge_row.says_w : 100px;
                             y: edge_row.loops ? parent.line_y - 22px : parent.line_y - 8px;
                             height: 16px;
-                            text: !e.executed ? "not executed" : e.failure;
-                            color: !e.executed ? Palette.warning : Palette.negative;
+                            // Three states, not two: nothing ran, nothing
+                            // arrived, or it arrived and the account could not
+                            // act on it. Only the middle one is red.
+                            text: !e.executed ? "not executed" : (e.ok ? e.note : e.failure);
+                            color: !e.executed || e.ok ? Palette.warning : Palette.negative;
                             font-family: Fonts.ui;
                             font-weight: Fonts.semibold;
                             font-size: Fonts.micro;

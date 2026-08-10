@@ -624,6 +624,10 @@ pub(super) fn trace_edges(trace: &AccountTrace) -> Vec<TraceEdgeRow> {
                     .map(|tx| tx.failure.clone())
                     .unwrap_or_default()
                     .into(),
+                note: produced
+                    .map(|tx| tx.note.clone())
+                    .unwrap_or_default()
+                    .into(),
                 focus: produced.is_some_and(|tx| tx.hash == trace.focus),
                 is_event: edge.op == "event",
             }

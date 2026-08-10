@@ -1,7 +1,7 @@
 use cc_wallet_domain::{
     ActivityDirection, ActivityEvent, AssetAmount, AssetMovement, CcAmount, Digest32,
 };
-use cc_wallet_tycho::{ChainMessage, ChainTransaction, MsgKind};
+use cc_wallet_tycho::{BounceOutcome, ChainMessage, ChainTransaction, MsgKind};
 
 use crate::explorer::failure_reason;
 use crate::wallet_service::{ChainError, ChainResult};
@@ -60,7 +60,8 @@ pub fn activity_from_chain_tx(tx: &ChainTransaction) -> ChainResult<Vec<Activity
         }
         MsgKind::Int => {
             let movements = message_movements(in_msg)?;
-            let native_was_returned = tx.bounce_phase_present && in_msg.value_extra.is_empty();
+            let native_was_returned =
+                tx.bounce == Some(BounceOutcome::Returned) && in_msg.value_extra.is_empty();
             let success = !in_msg.bounced && !native_was_returned;
             AssetAmount::native(tx.total_fees_native).map_err(|error| {
                 ChainError::Wallet(format!("native transaction fee is out of domain: {error}"))
@@ -220,7 +221,7 @@ mod tests {
             action_success: None,
             action_result_code: None,
             action_no_funds: None,
-            bounce_phase_present: false,
+            bounce: None,
             in_msg: Some(in_msg),
             out_msgs,
         }
@@ -242,7 +243,7 @@ mod tests {
     fn a_bounced_incoming_deposit_is_classified_as_failed() {
         let mut tx = transaction(incoming_deposit(5_000_000_000), Vec::new(), true, 0);
         tx.compute_skipped = true;
-        tx.bounce_phase_present = true;
+        tx.bounce = Some(BounceOutcome::Returned);
 
         let event = event(&tx);
 
@@ -275,7 +276,7 @@ mod tests {
         );
         let mut tx = transaction(deposit, Vec::new(), true, 0);
         tx.compute_skipped = true;
-        tx.bounce_phase_present = true;
+        tx.bounce = Some(BounceOutcome::Returned);
 
         let event = event(&tx);
 

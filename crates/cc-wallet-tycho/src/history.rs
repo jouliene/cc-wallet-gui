@@ -5,8 +5,8 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use tycho_types::boc::Boc;
 use tycho_types::models::{
-    ComputePhase, ComputePhaseSkipReason, ExtraCurrencyCollection, MsgInfo, OwnedMessage,
-    StateInit, Transaction, TxInfo,
+    BouncePhase, ComputePhase, ComputePhaseSkipReason, ExtraCurrencyCollection, MsgInfo,
+    OwnedMessage, StateInit, Transaction, TxInfo,
 };
 use tycho_types::prelude::*;
 
@@ -38,6 +38,21 @@ pub struct ChainMessage {
     pub body_boc_base64: String,
 }
 
+/// What the bounce phase managed to do, when there was one.
+///
+/// A transaction that failed with too little value to work with still has a
+/// bounce phase — it just cannot afford to send anything home. Reading the mere
+/// presence of the phase as a return is how a transfer that went nowhere came
+/// to be reported as money coming back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BounceOutcome {
+    /// The value went home.
+    Returned,
+    /// Nothing was sent back: what remained could not pay the way. The value
+    /// stayed with the account that failed to process it.
+    Unaffordable,
+}
+
 #[derive(Debug, Clone)]
 pub struct ChainTransaction {
     pub hash: String,
@@ -53,7 +68,7 @@ pub struct ChainTransaction {
     pub action_success: Option<bool>,
     pub action_result_code: Option<i32>,
     pub action_no_funds: Option<bool>,
-    pub bounce_phase_present: bool,
+    pub bounce: Option<BounceOutcome>,
     pub in_msg: Option<ChainMessage>,
     pub out_msgs: Vec<ChainMessage>,
 }
@@ -94,7 +109,7 @@ pub(crate) fn parse_transaction_cell(cell: &Cell) -> Result<ChainTransaction> {
         action_success,
         action_result_code,
         action_no_funds,
-        bounce_phase_present,
+        bounce,
     ) = match tx.load_info()? {
         TxInfo::Ordinary(info) => {
             let (success, skipped, skip_reason, exit_code) = match &info.compute_phase {
@@ -120,10 +135,15 @@ pub(crate) fn parse_transaction_cell(cell: &Cell) -> Result<ChainTransaction> {
                 action_success,
                 action_result_code,
                 action_no_funds,
-                info.bounce_phase.is_some(),
+                info.bounce_phase.as_ref().map(|phase| match phase {
+                    BouncePhase::Executed(_) => BounceOutcome::Returned,
+                    BouncePhase::NegativeFunds | BouncePhase::NoFunds(_) => {
+                        BounceOutcome::Unaffordable
+                    }
+                }),
             )
         }
-        TxInfo::TickTock(_) => (false, true, false, None, 0, None, None, None, false),
+        TxInfo::TickTock(_) => (false, true, false, None, 0, None, None, None, None),
     };
 
     let in_msg = match &tx.in_msg {
@@ -151,7 +171,7 @@ pub(crate) fn parse_transaction_cell(cell: &Cell) -> Result<ChainTransaction> {
         action_success,
         action_result_code,
         action_no_funds,
-        bounce_phase_present,
+        bounce,
         in_msg,
         out_msgs,
     })

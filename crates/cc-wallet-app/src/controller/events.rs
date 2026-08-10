@@ -283,6 +283,8 @@ impl AppController {
                     && self.state.send_form.destination.trim() == address
                 {
                     self.state.recipient_encrypt_key = report.and_then(|report| report.encrypt_key);
+                    self.state.recipient_min_attach =
+                        report.map_or(0, |report| report.min_attach_native);
                     self.state.recipient_check = match report.map(|report| report.status) {
                         Some(status) => {
                             if self.state.auth.error == super::seed_auth::GATE_MSG_PENDING
