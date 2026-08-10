@@ -385,10 +385,15 @@ export component PrimaryButton inherits Rectangle {
         mouse-cursor: root.enabled ? pointer : default;
         clicked => { root.clicked(); }
     }
+    // A press has to be visible even when the work behind it is instant. The
+    // signing dialog closes in the same frame it is confirmed in, and without
+    // this the click and a miss look alike — so the press lands at once and
+    // only the release eases back.
     states [
+        pressed when ta.pressed && root.enabled: { hover_a: 0.2; }
         hovered when ta.has-hover && root.enabled: { hover_a: 0.07; }
     ]
-    animate hover_a { duration: Motion.base; easing: Motion.curve; }
+    animate hover_a { duration: ta.pressed ? 0ms : Motion.base; easing: Motion.curve; }
 }
 
 export component GhostButton inherits Rectangle {
@@ -454,9 +459,10 @@ export component GhostButton inherits Rectangle {
         clicked => { root.clicked(); }
     }
     states [
+        pressed when ta.pressed && root.enabled: { hover_a: 0.16; }
         hovered when ta.has-hover && root.enabled: { hover_a: 0.05; }
     ]
-    animate hover_a { duration: Motion.base; easing: Motion.curve; }
+    animate hover_a { duration: ta.pressed ? 0ms : Motion.base; easing: Motion.curve; }
 }
 
 export component IconButton inherits Rectangle {
