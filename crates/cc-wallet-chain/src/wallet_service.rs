@@ -79,7 +79,19 @@ const FEE_ESTIMATE_FLOOR_NANOS: u128 = 100_000;
 pub const RISK_OVERRIDE_COOLING_SECS: u64 =
     cc_wallet_tycho::DEFAULT_TTL_SECS as u64 + 2 * cc_wallet_tycho::CLOCK_SKEW_MARGIN_SECS;
 
-const CONFIG_CACHE_TTL: Duration = Duration::from_secs(60);
+/// How long the network's own parameters are taken on trust.
+///
+/// They change at a key block and almost never otherwise, so this is not a
+/// guess about volatility — it is the price of never being the last to know.
+/// Gas and forward prices decide what a transfer is quoted at and how little it
+/// may carry; the global id and the capability flags decide how it is signed.
+/// Reading them once at launch would leave a wallet that stays open for days
+/// signing and quoting from the day it started.
+///
+/// The parsed emulation config carries the clock it was parsed with, but only
+/// to pick which storage-price epoch is in force — an hour of drift there
+/// changes nothing, so the window is set by the parameters, not by the clock.
+const CONFIG_CACHE_TTL: Duration = Duration::from_secs(600);
 
 fn config_cache_age_is_fresh(age: Duration) -> bool {
     age < CONFIG_CACHE_TTL
@@ -2867,7 +2879,7 @@ mod tests {
     }
 
     #[test]
-    fn blockchain_config_cache_expires_at_the_sixty_second_boundary() {
+    fn blockchain_config_cache_expires_exactly_at_its_window() {
         assert!(config_cache_age_is_fresh(Duration::ZERO));
         assert!(config_cache_age_is_fresh(
             CONFIG_CACHE_TTL - Duration::from_nanos(1)
