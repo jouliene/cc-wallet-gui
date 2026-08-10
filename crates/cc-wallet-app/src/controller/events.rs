@@ -298,11 +298,10 @@ impl AppController {
                             crate::state::RecipientCheck::Failed
                         }
                     };
-                    self.advance_chat_send();
                 }
             }
-            AppEvent::ChatPeerKeyLoaded { seq, peer, key } => {
-                self.apply_chat_peer_key(seq, peer, key)
+            AppEvent::ChatPeerKeyLoaded { seq, peer, report } => {
+                self.apply_chat_peer_key(seq, peer, report)
             }
             AppEvent::ValidatorClockLoaded {
                 generation,

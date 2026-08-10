@@ -275,7 +275,9 @@ impl AppController {
             self.state.set_error(reason.message());
             return;
         }
-        if !self.state.recipient_send_permitted(risk_override.is_some()) {
+        let permitted = self.state.recipient_send_permitted(risk_override.is_some())
+            || self.state.verified_chat_peer() == Some(authorization.request().destination());
+        if !permitted {
             if matches!(
                 self.state.recipient_check,
                 crate::state::RecipientCheck::Known(_)

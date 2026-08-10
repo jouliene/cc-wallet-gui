@@ -228,6 +228,10 @@ pub struct ChatUi {
     /// Set once the peer's account has answered with the key that opens what we
     /// sent them. Until then our own sealed messages stay locked.
     pub peer_key_known: bool,
+    /// Whether that same answer said the account is active. A conversation asks
+    /// about its own peer, so it does not have to borrow the send form's
+    /// opinion about a different address.
+    pub peer_active: bool,
     pub loading: bool,
     /// What is being written but not yet sent. It lives here rather than in the
     /// send form because a half-typed message is not a transfer yet.
@@ -258,6 +262,7 @@ impl ChatUi {
     pub fn can_send(&self) -> bool {
         self.open
             && self.peer_key_known
+            && self.peer_active
             && !self.sending
             && !self.draft.trim().is_empty()
             && self.draft.len() <= self.draft_limit()
@@ -902,6 +907,16 @@ impl AppState {
 
     pub fn recipient_inactive(&self) -> bool {
         self.recipient_valid() && self.recipient_known_inactive()
+    }
+
+    /// The conversation's own verified peer, when it has one.
+    ///
+    /// A reply is checked against this rather than against the send form: they
+    /// are two screens with two recipients, and the one being sent to is the
+    /// one that has to be permitted.
+    pub fn verified_chat_peer(&self) -> Option<&str> {
+        (self.chat.open && self.chat.peer_active && self.chat.peer_key_known)
+            .then_some(self.chat.peer.as_str())
     }
 
     pub fn recipient_send_permitted(&self, risk_override: bool) -> bool {

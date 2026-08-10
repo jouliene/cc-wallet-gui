@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use cc_wallet_domain::{
     ActivityEnvelope, AssetId, EnvelopeError, JournalEnvelope, SeedPhrase, SendAuthorization,
-    WalletProfile, normalize_seed, validate_seed,
+    SendRequest, WalletProfile, normalize_seed, validate_seed,
 };
 use cc_wallet_storage::VaultStore;
 use cc_wallet_vault::{ActivitySection, Vault};
@@ -269,6 +269,16 @@ impl AppController {
                 return;
             }
         };
+        self.authorize_transfer(request);
+    }
+
+    /// Everything a transfer goes through once there is a transfer to make.
+    ///
+    /// Kept apart from the form that usually fills it in, because a reply
+    /// written in a conversation is the same operation from a different screen
+    /// — and routing it through the form meant the message appeared for an
+    /// instant in the note field of a card the writer was not looking at.
+    pub(super) fn authorize_transfer(&mut self, request: SendRequest) {
         let inputs = match self.wallet_inputs() {
             Ok(inputs) => inputs,
             Err(error) => {

@@ -610,7 +610,9 @@ component ConversationHeader inherits Rectangle {
                 }
                 if root.peer_name != "": VerticalLayout {
                     alignment: center;
-                    Avatar { initial: root.peer_mark; tint: root.peer_tone; size: 20px; }
+                    // 22, not 20: the mark's cap-height centring lands true at the size
+                    // the token badges use, and a pixel high at twenty.
+                    Avatar { initial: root.peer_mark; tint: root.peer_tone; size: 22px; }
                 }
                 if root.peer_name != "": Text {
                     text: root.peer_name;
@@ -765,6 +767,13 @@ component ConversationComposer inherits Rectangle {
     in property <bool> can_send;
     callback edited(string);
     callback send();
+
+    // One inset, used everywhere: the strip's sides match the thread's, so the
+    // field starts where the messages start and the button ends where they end,
+    // and the space above and below the field is the same as between them.
+    property <length> inset: Space.s_16;
+    property <length> gap: Space.s_10;
+
     height: row.preferred-height;
     // Its own ground, not a continuation of the thread. A hairline alone left
     // the last bubble sitting on the field, and buying the separation with
@@ -776,77 +785,58 @@ component ConversationComposer inherits Rectangle {
         background: Palette.border_subtle;
     }
     row := HorizontalLayout {
-        padding-left: Space.s_16;
-        padding-right: Space.s_16;
-        padding-top: Space.s_8;
-        padding-bottom: Space.s_8;
-        spacing: Space.s_10;
+        padding-left: root.inset;
+        padding-right: root.inset;
+        padding-top: root.gap;
+        padding-bottom: root.gap;
+        spacing: root.gap;
         composer_field := Field {
             horizontal-stretch: 1;
-                // A conversation is opened to say something, so the cursor is
-                // already where the saying happens.
-                init => { self.focus(); }
-                text <=> root.draft;
-                enabled: !root.busy;
-                placeholder: "Write a message";
-                // Two lines' worth, and it scrolls past that: enough to see
-                // that the line broke without the composer taking the room the
-                // conversation needs.
-                height_: Theme.chat_input_h;
-                font_size: Fonts.body;
-                multiline: true;
-                enter_accepts: true;
-                edited(t) => { root.edited(t); }
-                accepted => { root.send(); }
-            }
+            // A conversation is opened to say something, so the cursor is
+            // already where the saying happens.
+            init => { self.focus(); }
+            text <=> root.draft;
+            enabled: !root.busy && root.can_encrypt;
+            // The one thing that can stop a conversation is said in the field
+            // itself. A line of its own above the box cost a whole row of a
+            // card that has none to spare, and this is where the eye already
+            // is when nothing can be typed.
+            placeholder: root.can_encrypt
+                ? "Write a message"
+                : "This account publishes no key — write from the Send form instead";
+            // Two lines' worth, and it scrolls past that: enough to see that
+            // the line broke without the composer taking the room the
+            // conversation needs.
+            height_: Theme.chat_input_h;
+            font_size: Fonts.body;
+            multiline: true;
+            enter_accepts: true;
+            edited(t) => { root.edited(t); }
+            accepted => { root.send(); }
+        }
         VerticalLayout {
-            // The field is two lines tall and the button is one, so the line
-            // above it is room the composer already had. Saying it there costs
-            // no height at all; saying it on its own row cost a whole one.
-            width: Theme.chat_send_col_w;
-            spacing: Space.s_4;
-            HorizontalLayout {
-                spacing: Space.s_6;
-                alignment: end;
-                VerticalLayout {
-                    alignment: center;
-                    Icon {
-                        source: @image-url("../../assets/icons/chat-lock.svg");
-                        tint: root.can_encrypt ? Palette.positive : Palette.warning;
-                        width: 12px;
-                        height: 12px;
-                    }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    Text {
-                        // The counter earns the line only near the limit; until
-                        // then the assurance is the more useful of the two, and
-                        // the lock beside it keeps saying so either way.
-                        text: !root.can_encrypt
-                            ? "No key — use Send"
-                            : (root.draft_bytes * 2 >= root.draft_limit
-                                ? root.draft_bytes + " / " + root.draft_limit
-                                : "Encrypted end to end");
-                        color: !root.can_encrypt
-                            ? Palette.warning
-                            : (root.draft_bytes >= root.draft_limit
-                                ? Palette.warning
-                                : Palette.text_quiet);
-                        font-family: Fonts.ui;
-                        font-weight: Fonts.medium;
-                        font-size: Fonts.micro;
-                        vertical-alignment: center;
-                        overflow: elide;
-                    }
-                }
-            }
+            // The same width the Send button has on the transfer form, so the
+            // two read as one control in two places.
+            width: Theme.send_btn_w;
+            // Beside the field, not hanging off its bottom edge.
+            alignment: center;
             PrimaryButton {
                 label: root.busy ? "Sending" : "Send";
                 enabled: root.can_send && !root.busy;
                 clicked => { root.send(); }
             }
         }
+    }
+    // Only near the ceiling, and inside the field it is about. Counting bytes
+    // at someone who has typed four words is noise; saying nothing when the
+    // field quietly stops accepting them is worse.
+    if root.draft_bytes * 5 >= root.draft_limit * 4: Text {
+        x: root.width - root.inset - Theme.send_btn_w - root.gap - self.width - Space.s_10;
+        y: root.height - root.gap - Space.s_6 - self.height;
+        text: root.draft_bytes + " / " + root.draft_limit;
+        color: root.draft_bytes >= root.draft_limit ? Palette.warning : Palette.text_quiet;
+        font-family: Fonts.mono;
+        font-size: Fonts.micro;
     }
 }
 

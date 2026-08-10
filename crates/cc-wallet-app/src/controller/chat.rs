@@ -152,11 +152,7 @@ impl AppController {
             .await
             .ok()
             .and_then(Result::ok);
-            let _ = tx.send(crate::event::AppEvent::ChatPeerKeyLoaded {
-                seq,
-                peer,
-                key: report.and_then(|report| report.encrypt_key),
-            });
+            let _ = tx.send(crate::event::AppEvent::ChatPeerKeyLoaded { seq, peer, report });
         });
     }
 
@@ -167,13 +163,19 @@ impl AppController {
     /// resubscribing in the meantime says nothing about whether this answer is
     /// still the right one. Gating on it left the conversation reading
     /// "opening…" forever whenever the two raced.
-    pub(super) fn apply_chat_peer_key(&mut self, seq: u64, peer: String, key: Option<[u8; 32]>) {
+    pub(super) fn apply_chat_peer_key(
+        &mut self,
+        seq: u64,
+        peer: String,
+        report: Option<cc_wallet_chain::DestinationReport>,
+    ) {
         if seq != self.chat_key_seq || self.state.chat.peer != peer {
             return;
         }
         self.state.chat.loading = false;
-        self.state.chat.peer_key_known = key.is_some();
-        self.session.chat_peer_key = key;
+        self.state.chat.peer_active = report.is_some_and(|report| report.status.is_active());
+        self.state.chat.peer_key_known = report.is_some_and(|report| report.encrypt_key.is_some());
+        self.session.chat_peer_key = report.and_then(|report| report.encrypt_key);
         self.rebuild_chat();
     }
 }
@@ -187,66 +189,35 @@ impl AppController {
 
     /// Sends the draft as a transfer carrying it.
     ///
-    /// There is one sender in this wallet and this is not a second one: the
-    /// send form is filled in with what the conversation means, and the same
-    /// authorization, the same gates and the same signing dialog do the rest.
-    /// The form is on screen above the conversation, so what it shows is what
-    /// is about to happen.
+    /// It builds its own transfer and hands it to the same authorization every
+    /// other one goes through. What it does not do is borrow the send form to
+    /// carry the words there: that made the message flash through the note
+    /// field of a card nobody was looking at, and a form is not a scratchpad.
     pub(super) fn send_chat_message(&mut self) {
         if !self.state.chat.can_send() {
             return;
         }
-        self.state.clear_send_form_error();
-        self.state.select_asset(cc_wallet_domain::AssetId::Native);
-        self.state.send_form.token = cc_wallet_domain::SendToken::Native;
-        self.state.send_form.amount =
-            cc_wallet_domain::format_native_fixed9(crate::state::CHAT_ATTACH_NANOS)
-                .expect("one nano is in the native domain");
-        self.state.send_form.comment = self.state.chat.draft.clone();
-        self.state.send_form.destination = self.state.chat.peer.clone();
-        // Editing the destination invalidates what was known about the last
-        // one, including the key a comment would be sealed to, so the intention
-        // to seal is held here until the account answers again.
-        self.state.reset_recipient_status();
-        self.state.chat.sending = true;
-        self.check_destination();
-        self.advance_chat_send();
-    }
-
-    /// Carries an asked-for reply forward once the recipient's account answers.
-    ///
-    /// Authorizing before the answer arrives is refused downstream with "the
-    /// recipient account state is not verified yet", so the wait is held here
-    /// rather than shown to whoever pressed send.
-    pub(super) fn advance_chat_send(&mut self) {
-        if !self.state.chat.sending {
+        let Some(key) = self.session.chat_peer_key else {
+            self.state.chat.error = "This account publishes no key to encrypt to".to_owned();
             return;
-        }
-        match self.state.recipient_check {
-            crate::state::RecipientCheck::Known(status) if status.is_active() => {
-                self.state.chat.sending = false;
-                // A conversation is sealed or it does not send. If the key
-                // went away between asking and answering, this stops rather
-                // than falling back to plaintext.
-                if self.state.recipient_encrypt_key.is_none() {
-                    self.state.chat.error =
-                        "This account publishes no key to encrypt to".to_owned();
-                    return;
-                }
-                self.state.send_form.encrypt = true;
-                self.request_send();
+        };
+        let request = match cc_wallet_domain::SendRequest::native(
+            self.state.chat.peer.clone(),
+            crate::state::CHAT_ATTACH_NANOS,
+        ) {
+            Ok(request) => request
+                .with_comment(&self.state.chat.draft)
+                .sealed_to(Some(key)),
+            Err(error) => {
+                self.state.chat.error = error.to_string();
+                return;
             }
-            crate::state::RecipientCheck::Known(_) => {
-                self.state.chat.sending = false;
-                self.state.chat.error =
-                    "This account is not active, so it cannot be written to".to_owned();
-            }
-            crate::state::RecipientCheck::Failed => {
-                self.state.chat.sending = false;
-                self.state.chat.error = "Could not read this recipient's account".to_owned();
-            }
-            _ => {}
-        }
+        };
+        self.state.chat.error.clear();
+        self.state.chat.sending = true;
+        self.authorize_transfer(request);
+        // The dialog is up or it never opened; either way the waiting is over.
+        self.state.chat.sending = self.pending_authorization.is_some();
     }
 
     /// The draft belongs to the message that carried it, exactly as the send

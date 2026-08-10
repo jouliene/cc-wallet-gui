@@ -12371,85 +12371,58 @@ fn max_is_priced_against_the_message_it_will_actually_send() {
     );
 }
 
-#[test]
-fn a_reply_goes_out_through_the_one_sender_this_wallet_has() {
-    let dir = temp_dir("chat-reply");
-    let fake = FakeChain::default();
-    let mut c = unlocked_with_fake(&dir, &fake);
+fn conversation_with(dir: &Path, fake: &FakeChain, report: DestinationReport) -> AppController {
+    let mut c = unlocked_with_fake(dir, fake);
     let mut wallet = timed_wallet("0:me");
     set_native_balance(&mut wallet, 5_000_000_000);
     c.state_mut().wallet = Some(wallet);
     c.state_mut().activity = vec![spoken(1, false, SEND_DEST, plain("hello"))];
     c.handle_command(AppCommand::OpenChat(SEND_DEST.to_owned()));
-    c.state_mut().chat.peer_key_known = true;
+    c.apply_event(AppEvent::ChatPeerKeyLoaded {
+        seq: c.chat_key_seq,
+        peer: SEND_DEST.to_owned(),
+        report: Some(report),
+    });
+    c
+}
+
+#[test]
+fn a_reply_goes_out_through_the_one_authorization_every_transfer_uses() {
+    let dir = temp_dir("chat-reply");
+    let fake = FakeChain::default();
+    let mut c = conversation_with(
+        &dir,
+        &fake,
+        DestinationReport {
+            status: DestinationAccountStatus::Active,
+            encrypt_key: Some([5u8; 32]),
+        },
+    );
 
     c.handle_command(AppCommand::SetChatDraft("answering".to_owned()));
     c.handle_command(AppCommand::SendChatMessage);
 
-    // Nothing may be authorized until the recipient's account has answered.
-    assert!(c.state().chat.sending, "the reply waits on the account");
-    assert!(c.pending_authorization.is_none());
-
-    c.apply_event(AppEvent::DestinationChecked {
-        generation: c.subscription_generation,
-        seq: c.dest_check_seq,
-        address: SEND_DEST.to_owned(),
-        report: Some(DestinationReport {
-            status: DestinationAccountStatus::Active,
-            encrypt_key: Some([5u8; 32]),
-        }),
-    });
-
-    let authorization = c
+    assert!(
+        c.state().send_form.comment.is_empty() && c.state().send_form.destination.is_empty(),
+        "the send form is not a scratchpad for a message written somewhere else"
+    );
+    let request = c
         .pending_authorization
         .as_ref()
-        .expect("the reply reached the same authorization every transfer does");
-    let request = authorization.ticket().request();
+        .expect("the reply reached the same authorization every transfer does")
+        .ticket()
+        .request();
     assert_eq!(request.destination(), SEND_DEST, "pinned to the thread");
     assert_eq!(request.comment(), "answering");
+    assert_eq!(
+        request.encrypt_to(),
+        Some(&[5u8; 32]),
+        "a conversation is sealed or it does not send"
+    );
     assert_eq!(
         request.value().native_units(),
         Some(crate::state::CHAT_ATTACH_NANOS),
         "a message carries the least a message can carry"
-    );
-    assert!(!c.state().chat.sending);
-    cleanup(&dir);
-}
-
-#[test]
-fn a_reply_is_sealed_when_the_other_end_publishes_a_key() {
-    let dir = temp_dir("chat-reply-sealed");
-    let fake = FakeChain::default();
-    let mut c = unlocked_with_fake(&dir, &fake);
-    let mut wallet = timed_wallet("0:me");
-    set_native_balance(&mut wallet, 5_000_000_000);
-    c.state_mut().wallet = Some(wallet);
-    c.state_mut().activity = vec![spoken(1, false, SEND_DEST, plain("hello"))];
-    c.handle_command(AppCommand::OpenChat(SEND_DEST.to_owned()));
-    c.state_mut().chat.peer_key_known = true;
-
-    c.handle_command(AppCommand::SetChatDraft("for your eyes".to_owned()));
-    c.handle_command(AppCommand::SendChatMessage);
-    c.apply_event(AppEvent::DestinationChecked {
-        generation: c.subscription_generation,
-        seq: c.dest_check_seq,
-        address: SEND_DEST.to_owned(),
-        report: Some(DestinationReport {
-            status: DestinationAccountStatus::Active,
-            encrypt_key: Some([5u8; 32]),
-        }),
-    });
-
-    let request = c
-        .pending_authorization
-        .as_ref()
-        .expect("the reply was authorized")
-        .ticket()
-        .request();
-    assert_eq!(
-        request.encrypt_to(),
-        Some(&[5u8; 32]),
-        "asking to seal must survive the destination check that clears the key"
     );
     cleanup(&dir);
 }
@@ -12460,7 +12433,6 @@ fn a_draft_is_cut_to_what_sealing_leaves_room_for() {
     let fake = FakeChain::default();
     let mut c = unlocked_with_fake(&dir, &fake);
     c.handle_command(AppCommand::OpenChat(SEND_DEST.to_owned()));
-    c.state_mut().chat.peer_key_known = true;
 
     c.handle_command(AppCommand::SetChatDraft("x".repeat(1200)));
     assert_eq!(
@@ -12471,40 +12443,55 @@ fn a_draft_is_cut_to_what_sealing_leaves_room_for() {
     cleanup(&dir);
 }
 
+/// A conversation is private or it is nothing. An account that publishes no key
+/// cannot be written to privately, and the failure that must never happen is
+/// the quiet one: the message going out in the clear. The plain path is still
+/// there, on the Send form.
 #[test]
-fn a_reply_to_an_account_that_cannot_receive_says_so_instead_of_hanging() {
-    let dir = temp_dir("chat-reply-inactive");
+fn a_conversation_will_not_send_to_someone_it_cannot_seal_to() {
+    let dir = temp_dir("chat-no-key");
     let fake = FakeChain::default();
-    let mut c = unlocked_with_fake(&dir, &fake);
-    let mut wallet = timed_wallet("0:me");
-    set_native_balance(&mut wallet, 5_000_000_000);
-    c.state_mut().wallet = Some(wallet);
-    c.handle_command(AppCommand::OpenChat(SEND_DEST.to_owned()));
-    c.state_mut().chat.peer_key_known = true;
-    c.handle_command(AppCommand::SetChatDraft("anyone there".to_owned()));
-    c.handle_command(AppCommand::SendChatMessage);
-
-    c.apply_event(AppEvent::DestinationChecked {
-        generation: c.subscription_generation,
-        seq: c.dest_check_seq,
-        address: SEND_DEST.to_owned(),
-        report: Some(DestinationReport {
-            status: DestinationAccountStatus::NonExist,
+    let mut c = conversation_with(
+        &dir,
+        &fake,
+        DestinationReport {
+            status: DestinationAccountStatus::Active,
             encrypt_key: None,
-        }),
-    });
-
-    assert!(!c.state().chat.sending);
-    assert!(c.pending_authorization.is_none());
-    assert!(
-        !c.state().chat.error.is_empty(),
-        "the wait ends with a reason"
+        },
     );
+
+    c.handle_command(AppCommand::SetChatDraft("private".to_owned()));
+    assert!(
+        !c.state().chat.can_send(),
+        "nothing to seal to, nothing sent"
+    );
+    c.handle_command(AppCommand::SendChatMessage);
+    assert!(c.pending_authorization.is_none());
     assert_eq!(
         c.state().chat.draft,
-        "anyone there",
+        "private",
         "what was written is not thrown away because it could not be sent"
     );
+    cleanup(&dir);
+}
+
+#[test]
+fn a_conversation_will_not_send_to_an_account_that_is_not_there() {
+    let dir = temp_dir("chat-inactive");
+    let fake = FakeChain::default();
+    let mut c = conversation_with(
+        &dir,
+        &fake,
+        DestinationReport {
+            status: DestinationAccountStatus::NonExist,
+            encrypt_key: None,
+        },
+    );
+
+    c.handle_command(AppCommand::SetChatDraft("anyone there".to_owned()));
+    assert!(!c.state().chat.can_send());
+    c.handle_command(AppCommand::SendChatMessage);
+    assert!(c.pending_authorization.is_none());
     cleanup(&dir);
 }
 
@@ -12525,7 +12512,10 @@ fn the_peer_key_answer_survives_the_wallet_resubscribing_under_it() {
     c.apply_event(AppEvent::ChatPeerKeyLoaded {
         seq: c.chat_key_seq,
         peer: SEND_DEST.to_owned(),
-        key: Some([9u8; 32]),
+        report: Some(DestinationReport {
+            status: DestinationAccountStatus::Active,
+            encrypt_key: Some([9u8; 32]),
+        }),
     });
 
     assert!(!c.state().chat.loading, "the answer arrived and was taken");
@@ -12545,66 +12535,24 @@ fn an_answer_about_another_conversation_is_ignored() {
     c.apply_event(AppEvent::ChatPeerKeyLoaded {
         seq: c.chat_key_seq.wrapping_sub(1),
         peer: SEND_DEST.to_owned(),
-        key: Some([9u8; 32]),
+        report: Some(DestinationReport {
+            status: DestinationAccountStatus::Active,
+            encrypt_key: Some([9u8; 32]),
+        }),
     });
     assert!(!c.state().chat.peer_key_known, "a superseded question");
 
     c.apply_event(AppEvent::ChatPeerKeyLoaded {
         seq: c.chat_key_seq,
         peer: "0:2222222222222222222222222222222222222222222222222222222222222222".to_owned(),
-        key: Some([9u8; 32]),
+        report: Some(DestinationReport {
+            status: DestinationAccountStatus::Active,
+            encrypt_key: Some([9u8; 32]),
+        }),
     });
     assert!(
         !c.state().chat.peer_key_known,
         "another peer's key is not ours"
     );
-    cleanup(&dir);
-}
-
-/// A conversation is private or it is nothing. An account that publishes no key
-/// cannot be written to privately, and the failure that must never happen is
-/// the quiet one: the message going out in the clear because a box was left
-/// unticked. The plain path is still there, on the Send form.
-#[test]
-fn a_conversation_will_not_send_to_someone_it_cannot_seal_to() {
-    let dir = temp_dir("chat-no-key");
-    let fake = FakeChain::default();
-    let mut c = unlocked_with_fake(&dir, &fake);
-    let mut wallet = timed_wallet("0:me");
-    set_native_balance(&mut wallet, 5_000_000_000);
-    c.state_mut().wallet = Some(wallet);
-    c.state_mut().activity = vec![spoken(1, false, SEND_DEST, plain("hello"))];
-    c.handle_command(AppCommand::OpenChat(SEND_DEST.to_owned()));
-    c.state_mut().chat.peer_key_known = false;
-
-    c.handle_command(AppCommand::SetChatDraft("private".to_owned()));
-    assert!(
-        !c.state().chat.can_send(),
-        "nothing to seal to, nothing sent"
-    );
-
-    c.handle_command(AppCommand::SendChatMessage);
-    assert!(!c.state().chat.sending);
-    assert!(c.pending_authorization.is_none());
-
-    // And if the key disappears between asking and answering, the reply stops
-    // rather than falling back to plaintext.
-    c.state_mut().chat.peer_key_known = true;
-    c.handle_command(AppCommand::SendChatMessage);
-    assert!(c.state().chat.sending);
-    c.apply_event(AppEvent::DestinationChecked {
-        generation: c.subscription_generation,
-        seq: c.dest_check_seq,
-        address: SEND_DEST.to_owned(),
-        report: Some(DestinationReport {
-            status: DestinationAccountStatus::Active,
-            encrypt_key: None,
-        }),
-    });
-    assert!(
-        c.pending_authorization.is_none(),
-        "a reply that cannot be sealed is not sent in the clear"
-    );
-    assert!(!c.state().chat.error.is_empty());
     cleanup(&dir);
 }
