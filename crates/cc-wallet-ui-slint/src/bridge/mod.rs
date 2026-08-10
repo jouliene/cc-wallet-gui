@@ -603,9 +603,6 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
                         && !c.state().chat.sending
                         && let Some(text) = pending_say.borrow_mut().take()
                     {
-                        if std::env::var("CC_WALLET_TEST_CHAT_SEAL").is_ok() {
-                            c.handle_command(AppCommand::SetChatEncrypt(true));
-                        }
                         said_something.set(true);
                         c.handle_command(AppCommand::SetChatDraft(text));
                         c.handle_command(AppCommand::SendChatMessage);

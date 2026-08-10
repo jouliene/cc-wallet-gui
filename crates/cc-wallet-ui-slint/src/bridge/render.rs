@@ -1931,11 +1931,12 @@ mod helper_tests {
         }
         assert_eq!(
             embedded.len(),
-            5,
+            6,
             "the field-label triple is spelled out at {} sites outside widgets.slint \
-             ({embedded:?}); five keep it for a stated reason — the fifth is the line a \
-             sealed message shows in place of its words, which is quiet prose inside a \
-             bubble rather than a label over a field — and a sixth should be FieldLabel",
+             ({embedded:?}); six keep it for a stated reason — two of them are prose \
+             rather than labels: the line a sealed message shows in place of its words, \
+             and the note that says a fee includes a deployment — and a seventh should \
+             be FieldLabel",
             embedded.len()
         );
     }

@@ -232,7 +232,6 @@ pub struct ChatUi {
     /// What is being written but not yet sent. It lives here rather than in the
     /// send form because a half-typed message is not a transfer yet.
     pub draft: String,
-    pub encrypt: bool,
     /// A reply that has been asked for and is waiting on the recipient's
     /// account to answer before it can be authorized.
     pub sending: bool,
@@ -244,18 +243,21 @@ pub struct ChatUi {
 pub const CHAT_ATTACH_NANOS: u128 = 1;
 
 impl ChatUi {
-    /// What a reply may run to right now. Sealing spends part of the budget, so
-    /// the answer changes with the toggle and the field has to follow it.
+    /// What a reply may run to. A conversation is always sealed, so the budget
+    /// is always the sealed one — no toggle changes it under the writer.
     pub fn draft_limit(&self) -> usize {
-        if self.encrypt {
-            cc_wallet_domain::MAX_ENCRYPTED_COMMENT_BYTES
-        } else {
-            cc_wallet_domain::MAX_COMMENT_BYTES
-        }
+        cc_wallet_domain::MAX_ENCRYPTED_COMMENT_BYTES
     }
 
+    /// Whether a reply can go out at all.
+    ///
+    /// Sealing is not optional here. An account that publishes no key cannot be
+    /// written to privately, and quietly sending in the clear instead would be
+    /// the one failure this feature must never have — so the conversation
+    /// refuses, and the plain path stays where it always was, on the Send form.
     pub fn can_send(&self) -> bool {
         self.open
+            && self.peer_key_known
             && !self.sending
             && !self.draft.trim().is_empty()
             && self.draft.len() <= self.draft_limit()

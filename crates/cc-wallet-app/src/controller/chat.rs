@@ -185,16 +185,6 @@ impl AppController {
         self.state.chat.draft = truncate_comment_to(&text, limit).to_owned();
     }
 
-    pub(super) fn set_chat_encrypt(&mut self, on: bool) {
-        // Sealing is only on offer when the other end publishes a key, and
-        // turning it on costs seventy-three bytes of the budget — so the draft
-        // is cut to the new limit at the moment the limit changes, not at the
-        // moment it is sent.
-        self.state.chat.encrypt = on && self.state.chat.peer_key_known;
-        let limit = self.state.chat.draft_limit();
-        self.state.chat.draft = truncate_comment_to(&self.state.chat.draft, limit).to_owned();
-    }
-
     /// Sends the draft as a transfer carrying it.
     ///
     /// There is one sender in this wallet and this is not a second one: the
@@ -235,8 +225,15 @@ impl AppController {
         match self.state.recipient_check {
             crate::state::RecipientCheck::Known(status) if status.is_active() => {
                 self.state.chat.sending = false;
-                self.state.send_form.encrypt =
-                    self.state.chat.encrypt && self.state.recipient_encrypt_key.is_some();
+                // A conversation is sealed or it does not send. If the key
+                // went away between asking and answering, this stops rather
+                // than falling back to plaintext.
+                if self.state.recipient_encrypt_key.is_none() {
+                    self.state.chat.error =
+                        "This account publishes no key to encrypt to".to_owned();
+                    return;
+                }
+                self.state.send_form.encrypt = true;
                 self.request_send();
             }
             crate::state::RecipientCheck::Known(_) => {

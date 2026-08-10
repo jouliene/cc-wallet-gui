@@ -35,7 +35,9 @@ export component AuthModal inherits Rectangle {
     in property <string> tx_to;
     in property <bool> tx_in_contacts;
     in property <string> tx_to_addr_full;
-    in property <string> tx_fee;
+    in property <TokenAmount> tx_fee_amount;
+    in property <bool> tx_fee_known;
+    in property <string> tx_fee_note;
     in property <string> auth_recipient_state: "pending";
     in property <string> auth_recipient_notice;
     in property <string> auth_recipient_ack_label;
@@ -311,14 +313,43 @@ export component AuthModal inherits Rectangle {
                         spacing: Space.s_8;
                         VerticalLayout { alignment: center; MicroLabel { text: "NETWORK FEE"; } }
                         Rectangle { }
-                        VerticalLayout {
+                        if !root.tx_fee_known: VerticalLayout {
                             alignment: center;
                             Text {
-                                text: root.tx_fee;
+                                text: "Estimating…";
                                 color: Palette.text_secondary;
                                 font-family: Fonts.ui;
                                 font-size: Fonts.small;
                                 horizontal-alignment: right;
+                            }
+                        }
+                        if root.tx_fee_known: VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: "≈";
+                                color: Palette.text_secondary;
+                                font-family: Fonts.ui;
+                                font-size: Fonts.small;
+                                vertical-alignment: center;
+                            }
+                        }
+                        if root.tx_fee_known: VerticalLayout {
+                            alignment: center;
+                            Amount {
+                                amount: root.tx_fee_amount;
+                                tint: Palette.text_secondary;
+                                font_size: Fonts.small;
+                                int_weight: Fonts.semibold;
+                            }
+                        }
+                        if root.tx_fee_known && root.tx_fee_note != "": VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: "· " + root.tx_fee_note;
+                                color: Palette.text_quiet;
+                                font-family: Fonts.ui;
+                                font-size: Fonts.small;
+                                vertical-alignment: center;
                             }
                         }
                     }

@@ -202,7 +202,6 @@ pub enum AppCommand {
     OpenChat(String),
     CloseChat,
     SetChatDraft(String),
-    SetChatEncrypt(bool),
     SendChatMessage,
     AddEndpoint(String),
     SelectEndpoint(usize),
@@ -289,7 +288,6 @@ impl AppCommand {
             | Self::OpenChat(_)
             | Self::CloseChat
             | Self::SetChatDraft(_)
-            | Self::SetChatEncrypt(_)
             | Self::RefreshStorage
             | Self::HideStorageRecords
             | Self::CopyStorageRecord(_)
@@ -366,7 +364,6 @@ impl AppCommand {
             | Self::OpenChat(_)
             | Self::CloseChat
             | Self::SetChatDraft(_)
-            | Self::SetChatEncrypt(_)
             | Self::SendChatMessage
             | Self::RefreshStorage
             | Self::CreateStorage

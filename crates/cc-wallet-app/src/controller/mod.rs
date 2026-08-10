@@ -789,7 +789,6 @@ impl AppController {
             AppCommand::OpenChat(peer) => self.open_chat(peer),
             AppCommand::CloseChat => self.close_chat(),
             AppCommand::SetChatDraft(text) => self.set_chat_draft(text),
-            AppCommand::SetChatEncrypt(on) => self.set_chat_encrypt(on),
             AppCommand::SendChatMessage => self.send_chat_message(),
             AppCommand::AddEndpoint(url) => self.add_endpoint(url),
             AppCommand::SelectEndpoint(index) => self.select_endpoint(index),

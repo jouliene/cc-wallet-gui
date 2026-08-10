@@ -412,7 +412,6 @@ pub(super) fn connect_callbacks(
         t,
         AppCommand::SetChatDraft(t.to_string())
     );
-    on1!(on_set_chat_encrypt, v, AppCommand::SetChatEncrypt(v));
     on0!(on_send_chat_message, AppCommand::SendChatMessage);
     on0!(on_switch_wallet, AppCommand::SwitchWallet);
     on1!(

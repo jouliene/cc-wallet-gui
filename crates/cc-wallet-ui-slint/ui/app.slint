@@ -193,7 +193,9 @@ export component AppWindow inherits Window {
     in property <string> tx_to: "";
     in property <bool> tx_in_contacts: false;
     in property <string> tx_to_addr_full: "";
-    in property <string> tx_fee: "";
+    in property <TokenAmount> tx_fee_amount;
+    in property <bool> tx_fee_known;
+    in property <string> tx_fee_note: "";
     in property <string> auth_recipient_state: "pending";
     in property <string> auth_recipient_notice: "";
     in property <string> auth_recipient_ack_label: "";
@@ -696,7 +698,9 @@ export component AppWindow inherits Window {
         tx_to: root.tx_to;
         tx_in_contacts: root.tx_in_contacts;
         tx_to_addr_full: root.tx_to_addr_full;
-        tx_fee: root.tx_fee;
+        tx_fee_amount: root.tx_fee_amount;
+        tx_fee_known: root.tx_fee_known;
+        tx_fee_note: root.tx_fee_note;
         auth_recipient_state: root.auth_recipient_state;
         auth_recipient_notice: root.auth_recipient_notice;
         auth_recipient_ack_label: root.auth_recipient_ack_label;

@@ -724,7 +724,6 @@ pub(super) fn sync_ui(ui: &AppWindow, state: &AppState, form_locked: bool, cache
     ui.set_chat_draft_bytes(state.chat.draft.len() as i32);
     ui.set_chat_draft_limit(state.chat.draft_limit() as i32);
     ui.set_chat_can_encrypt(state.chat.peer_key_known);
-    ui.set_chat_encrypt_on(state.chat.encrypt);
     ui.set_chat_busy(state.chat.sending || state.sending);
     ui.set_chat_can_send(state.chat.can_send() && !state.sending);
     if state.chat.open {
@@ -918,19 +917,19 @@ fn sync_auth(ui: &AppWindow, state: &AppState, cache: &mut UiCache) {
             &format_native_fixed9(state.effective_send_fee())
                 .expect("a validated fee estimate is in the native domain"),
         );
-        ui.set_tx_fee(
-            if state.fee_estimate.is_some() {
-                format!(
-                    "≈ {fee} {native_symbol}{}",
-                    if deploy { " · incl. deploy" } else { "" }
-                )
-            } else if state.fee_estimating {
-                "Estimating…".to_owned()
-            } else {
-                format!("≈ {fee} {native_symbol}")
-            }
-            .into(),
-        );
+        let _ = native_symbol;
+        // The fee is money, and money in this wallet is written one way: the
+        // integer heavy, the fraction quiet, the token beside it with its mark.
+        // A sentence with the symbol spelled out was the only place that broke
+        // the rule, and it broke it on the screen that exists to be read.
+        ui.set_tx_fee_amount(token_amount(
+            AssetId::Native,
+            &format_native_fixed9(state.effective_send_fee())
+                .expect("a validated fee estimate is in the native domain"),
+        ));
+        ui.set_tx_fee_known(!state.fee_estimating);
+        ui.set_tx_fee_note(if deploy { "incl. deploy" } else { "" }.into());
+        let _ = fee;
     }
 }
 

@@ -750,11 +750,9 @@ component ConversationComposer inherits Rectangle {
     in property <int> draft_bytes;
     in property <int> draft_limit;
     in property <bool> can_encrypt;
-    in property <bool> encrypt_on;
     in property <bool> busy;
     in property <bool> can_send;
     callback edited(string);
-    callback set_encrypt(bool);
     callback send();
     height: row.preferred-height;
     // Its own ground, not a continuation of the thread. A hairline alone left
@@ -777,37 +775,30 @@ component ConversationComposer inherits Rectangle {
             // counter, not a heading, and the conversation above it has no
             // room to spare.
             height: Sizes.control_dense;
-            spacing: Space.s_8;
+            spacing: Space.s_6;
             alignment: start;
-            Rectangle {
-                width: encrypt_row.preferred-width;
-                encrypt_row := HorizontalLayout {
-                    spacing: Space.s_8;
-                    alignment: start;
-                    VerticalLayout {
-                        alignment: center;
-                        Checkbox {
-                            checked: root.encrypt_on;
-                            enabled: root.can_encrypt && !root.busy;
-                            toggled(v) => { UserActivity.ping(); root.set_encrypt(v); }
-                        }
-                    }
-                    VerticalLayout {
-                        alignment: center;
-                        Text {
-                            text: "Send encrypted";
-                            color: Palette.text_secondary;
-                            opacity: root.can_encrypt ? 1.0 : Fade.disabled;
-                            font-family: Fonts.ui;
-                            font-weight: Fonts.medium;
-                            font-size: Fonts.small;
-                        }
-                    }
+            // Stated, not offered. A checkbox here is a way to forget, and
+            // forgetting sends in the clear what was written to be private.
+            VerticalLayout {
+                alignment: center;
+                Icon {
+                    source: @image-url("../../assets/icons/chat-lock.svg");
+                    tint: root.can_encrypt ? Palette.positive : Palette.warning;
+                    width: 13px;
+                    height: 13px;
                 }
-                TouchArea {
-                    enabled: root.can_encrypt && !root.busy;
-                    mouse-cursor: pointer;
-                    clicked => { UserActivity.ping(); root.set_encrypt(!root.encrypt_on); }
+            }
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: root.can_encrypt
+                        ? "Encrypted end to end"
+                        : "This account publishes no key — write from Send instead";
+                    color: root.can_encrypt ? Palette.text_secondary : Palette.warning;
+                    font-family: Fonts.ui;
+                    font-weight: Fonts.medium;
+                    font-size: Fonts.small;
+                    vertical-alignment: center;
                 }
             }
             Rectangle { horizontal-stretch: 1; }
@@ -1203,11 +1194,9 @@ export component ActivityCard inherits Card {
                 draft_bytes: root.chat_draft_bytes;
                 draft_limit: root.chat_draft_limit;
                 can_encrypt: root.chat_can_encrypt;
-                encrypt_on: root.chat_encrypt_on;
                 busy: root.chat_busy;
                 can_send: root.chat_can_send;
                 edited(t) => { root.chat_draft_edited(t); }
-                set_encrypt(v) => { root.set_chat_encrypt(v); }
                 send => { root.send_chat_message(); }
             }
         }
