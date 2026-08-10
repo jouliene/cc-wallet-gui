@@ -37,8 +37,6 @@ impl Drop for FetchCompletionGuard {
     }
 }
 
-const ANNOUNCEMENTS_KEPT: usize = 32;
-
 impl AppController {
     fn reset_stranded_destination_check(&mut self) {
         if matches!(
@@ -479,17 +477,6 @@ impl AppController {
         }
     }
 
-    /// Every account update the subscription pushed, and the moment it arrived.
-    /// This is the only clock finality is allowed to stop against: a number read
-    /// off one of our own polls would say how long we took to go and look, not
-    /// how long the network took to accept the message.
-    pub(super) fn record_account_announcement(&mut self, max_lt: u64) {
-        self.session.announcements.push((max_lt, Instant::now()));
-        if self.session.announcements.len() > ANNOUNCEMENTS_KEPT {
-            self.session.announcements.remove(0);
-        }
-    }
-
     /// When this message went out — from whichever ledger holds it. A transfer
     /// is timed through the optimistic row being replaced here; a swap or a
     /// record is timed by its own external hash.
@@ -514,19 +501,14 @@ impl AppController {
             .min()
     }
 
-    /// How long from putting the message on the wire to the subscription saying
-    /// the account had reached this transaction. No announcement covering it
-    /// means we never heard the chain accept it, and the row stays blank rather
-    /// than reporting when a poll happened to notice.
-    fn announced_finality(&self, started_at: Instant, lt: u64) -> Option<u64> {
-        let announced_at = self
-            .session
-            .announcements
-            .iter()
-            .filter(|(max_lt, _)| *max_lt >= lt)
-            .map(|(_, at)| *at)
-            .min()?;
-        u64::try_from(announced_at.checked_duration_since(started_at)?.as_millis()).ok()
+    /// How long the row has been spinning, right now.
+    ///
+    /// This is the whole of the finality figure. The wallet shows one number
+    /// beside a spinner the person just watched, so the number is that wait and
+    /// nothing else: it stops at the instant the spinner does, and it is
+    /// stamped by whichever piece of news stopped it.
+    fn spun_for(&self, started_at: Instant) -> Option<u64> {
+        u64::try_from(started_at.elapsed().as_millis()).ok()
     }
 
     /// Stops the spinner on the row standing in for a transfer the account
@@ -536,18 +518,14 @@ impl AppController {
     /// the effects belong to the transaction and are still on their way, so the
     /// row keeps its place at the top of the list until the chain's own row
     /// arrives to replace it.
-    pub(super) fn settle_optimistic_row(
-        &mut self,
-        ext_msg_hash: &cc_wallet_domain::Digest32,
-        account_lt: u64,
-    ) {
+    pub(super) fn settle_optimistic_row(&mut self, ext_msg_hash: &cc_wallet_domain::Digest32) {
         let finality = self
             .session
             .pending_sends
             .iter()
             .filter_map(|(_, started_at)| *started_at)
             .min()
-            .and_then(|started_at| self.announced_finality(started_at, account_lt));
+            .and_then(|started_at| self.spun_for(started_at));
         for event in self
             .state
             .activity
@@ -613,9 +591,17 @@ impl AppController {
                     .collect();
                 optimistic_confirmation_merged |= !removed.is_empty();
                 if event.finality_ms.is_none() {
-                    event.finality_ms = self
-                        .broadcast_started_at(&hash, &removed)
-                        .and_then(|started_at| self.announced_finality(started_at, event.lt));
+                    // A row that already stopped spinning keeps the figure it
+                    // stopped at. Recomputing here would move the number under
+                    // the reader for no reason: the wait they watched is over.
+                    event.finality_ms = removed
+                        .iter()
+                        .filter_map(|(_, _, finality)| *finality)
+                        .min()
+                        .or_else(|| {
+                            self.broadcast_started_at(&hash, &removed)
+                                .and_then(|started_at| self.spun_for(started_at))
+                        });
                 }
                 self.state.activity.retain(|held| {
                     !(held.tx_hash.is_none() && held.ext_msg_hash.as_ref() == Some(&hash))

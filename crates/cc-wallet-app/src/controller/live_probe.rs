@@ -196,15 +196,23 @@ fn what_the_status_line_would_have_shown() {
         let mut blocked = false;
         let account_lt_before = c.state().wallet.as_ref().map_or(0, |w| w.last_trans_lt);
         // One character per UI tick: '#' while a history fetch is in flight,
-        // 'A' on the tick the subscription announced the account, 'L' on the
-        // tick the account state moved past its old last transaction, '.' idle.
+        // 'A' on the tick the row stopped spinning (the stream's frame), 'L' on
+        // the tick the account state moved past its old last transaction,
+        // '.' idle.
         let mut trace = String::new();
         let settled = pump_until(
             &mut c,
             "the transfer to settle",
             Duration::from_secs(90),
             |c| {
-                let announced_now = announced_at.is_none() && !c.session.announcements.is_empty();
+                // The frame from the stream is now observable exactly as the
+                // moment the row stops spinning — that is the whole point.
+                let announced_now = announced_at.is_none()
+                    && armed_at.is_some()
+                    && c.state()
+                        .activity
+                        .iter()
+                        .any(|event| event.tx_hash.is_none() && !event.pending);
                 let account_moved = c
                     .state()
                     .wallet
@@ -227,8 +235,8 @@ fn what_the_status_line_would_have_shown() {
                         .filter_map(|(_, started_at)| *started_at)
                         .min();
                 }
-                if announced_at.is_none() && armed_at.is_some() {
-                    announced_at = c.session.announcements.last().map(|(_, at)| *at);
+                if announced_now {
+                    announced_at = Some(Instant::now());
                 }
                 if account_lt_at.is_none() && armed_at.is_some() && account_moved {
                     account_lt_at = Some(Instant::now());
@@ -313,7 +321,6 @@ fn what_the_status_line_would_have_shown() {
 
         // Clear the settled row so the next round's search is unambiguous.
         c.state_mut().activity.clear();
-        c.session.announcements.clear();
         std::thread::sleep(Duration::from_secs(2));
     }
 

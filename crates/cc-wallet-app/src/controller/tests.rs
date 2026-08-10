@@ -3124,8 +3124,6 @@ fn optimistic_pending_row_is_shown_then_reconciled_by_the_confirmed_tx() {
     c.arm_awaiting_send_finality();
     assert!(c.session.pending_sends[0].1.is_some());
 
-    c.record_account_announcement(8_000_000);
-
     let confirmed = ActivityEvent {
         tx_hash: optional_digest("realtx"),
         counterparty: "0:other".to_owned(),
@@ -3150,8 +3148,8 @@ fn optimistic_pending_row_is_shown_then_reconciled_by_the_confirmed_tx() {
 }
 
 #[test]
-fn finality_stops_at_the_announcement_not_at_the_page_that_carried_the_row() {
-    let dir = temp_dir("finality-announcement-clock");
+fn the_finality_figure_is_how_long_the_row_spun_and_it_never_moves_afterwards() {
+    let dir = temp_dir("finality-is-the-spin");
     let mut c = unlocked(&dir, WalletProfile::default());
 
     let lt = c.push_pending_send(&native_request(SEND_DEST, 5_000));
@@ -3165,15 +3163,27 @@ fn finality_stops_at_the_announcement_not_at_the_page_that_carried_the_row() {
 
     let armed = Instant::now();
     c.arm_awaiting_send_finality();
-    std::thread::sleep(Duration::from_millis(20));
-    c.record_account_announcement(8_000_000);
-    let announced = armed.elapsed();
+    std::thread::sleep(Duration::from_millis(40));
 
-    // Hearing about it and reading it back are two different waits. The page
-    // that finally carries the row arrives long after the chain said so: the
-    // wallet had to schedule the read, make the call, and parse the answer.
+    // The chain says the account moved, which is what stops the spinner.
+    c.settle_optimistic_row(&digest("exthash"));
+    let spun = armed.elapsed().as_millis();
+
+    let row = &c.state().activity[0];
+    assert!(!row.pending, "the news stopped the spinner");
+    let reported = u128::from(
+        row.finality_ms
+            .expect("a row that stopped spinning says how long it spun — never a dash"),
+    );
+    assert!(
+        reported + 5 >= 40 && reported <= spun + 5,
+        "finality {reported} ms is not the {spun} ms the row actually spun"
+    );
+
+    // The transaction itself turns up much later with the fee and the hash. It
+    // brings no new answer to "how long did I wait", and must not rewrite the
+    // one already on screen.
     std::thread::sleep(Duration::from_millis(200));
-    let page_arrived = armed.elapsed();
     c.merge_activity(vec![ActivityEvent {
         tx_hash: optional_digest("realtx"),
         counterparty: SEND_DEST.to_owned(),
@@ -3184,22 +3194,12 @@ fn finality_stops_at_the_announcement_not_at_the_page_that_carried_the_row() {
         ..ActivityEvent::test_stub(8_000_000, 8_000_000)
     }]);
 
-    let reported = u128::from(
-        c.state().activity[0]
-            .finality_ms
-            .expect("the subscription announced this transaction"),
-    );
-    assert!(
-        reported <= announced.as_millis() + 10,
-        "finality {reported} ms outran the announcement at {} ms, so it is timing \
-         something other than the chain",
-        announced.as_millis()
-    );
-    assert!(
-        reported + 150 <= page_arrived.as_millis(),
-        "finality {reported} ms reaches the page that arrived at {} ms — the number \
-         is measuring our own read instead of the network",
-        page_arrived.as_millis()
+    let row = &c.state().activity[0];
+    assert!(row.tx_hash.is_some(), "the chain's row replaced ours");
+    assert_eq!(
+        row.finality_ms.map(u128::from),
+        Some(reported),
+        "the figure changed under the reader after the wait was already over"
     );
     cleanup(&dir);
 }
@@ -3294,7 +3294,6 @@ fn rpc_confirmed_activity_is_saved_before_send_reenables() {
     );
 
     std::thread::sleep(Duration::from_millis(5));
-    c.record_account_announcement(44);
     c.merge_activity(vec![ActivityEvent {
         tx_hash: Some(tx_hash),
         counterparty: SEND_DEST.to_owned(),
@@ -6268,7 +6267,6 @@ fn the_wallets_own_replay_guard_confirms_a_transfer_the_transaction_list_has_not
 
     // An account read from before our message ran carries the guard the
     // previous send left behind, and that confirms nothing.
-    c.record_account_announcement(9_000);
     let live = c.subscription_generation;
     apply_owned_auto_load(&mut c, live, wallet_with_replay_guard(SENT_MS - 1, 8_000));
     assert!(
@@ -6311,7 +6309,6 @@ fn a_row_the_replay_guard_confirmed_still_takes_its_details_from_the_chain() {
     let (mut c, _fake) = ready_to_send(&dir);
     let generation = c.subscription_generation;
     let (_record_id, endpoint, ext_hash) = awaiting_replay_guard(&mut c, SENT_MS);
-    c.record_account_announcement(9_000);
     let live = c.subscription_generation;
     apply_owned_auto_load(&mut c, live, wallet_with_replay_guard(SENT_MS, 9_000));
     assert!(!c.state().journal_blocking);
@@ -6365,7 +6362,6 @@ fn a_confirmed_row_without_its_transaction_yet_stays_at_the_top_of_the_list() {
     let dir = temp_dir("replay-guard-order");
     let (mut c, _fake) = ready_to_send(&dir);
     awaiting_replay_guard(&mut c, SENT_MS);
-    c.record_account_announcement(9_000);
     let live = c.subscription_generation;
     apply_owned_auto_load(&mut c, live, wallet_with_replay_guard(SENT_MS, 9_000));
 
@@ -11485,7 +11481,6 @@ fn a_swaps_own_row_reports_its_finality_like_any_other_send() {
     }]);
     assert_eq!(c.session.pending_externals.len(), 1);
 
-    c.record_account_announcement(50);
     c.merge_activity(vec![swap_out_event(
         50,
         "swap-ext",
@@ -12002,18 +11997,14 @@ fn a_comment_is_cut_to_the_budget_that_is_actually_in_force() {
 }
 
 #[test]
-fn a_row_the_subscription_never_announced_reports_no_finality() {
-    let dir = temp_dir("finality-needs-a-subscription");
+fn a_row_no_send_of_ours_was_waiting_on_reports_no_finality() {
+    let dir = temp_dir("finality-needs-a-send");
     let chain = FakeChain::default();
     let (mut c, _mem) = storage_controller(&dir, chain, vec![stored(1, "one", "a")]);
 
-    // An announcement from before the message went out belongs to someone
-    // else's transaction and cannot time ours.
-    c.record_account_announcement(70);
-    dispatch_record(&mut c, "quiet-ext");
-
-    // The row turns up in a read we went and made ourselves, with the
-    // subscription silent throughout.
+    // Nothing of ours is on the wire — this row is history the wallet went and
+    // read, or somebody else's transfer arriving.
+    assert!(c.session.pending_externals.is_empty());
     c.merge_activity(vec![ActivityEvent {
         direction: ActivityDirection::Out,
         tx_hash: optional_digest("quiet-tx"),
@@ -12031,8 +12022,7 @@ fn a_row_the_subscription_never_announced_reports_no_finality() {
         .expect("the transaction is in history");
     assert!(
         row.finality_ms.is_none(),
-        "how long our own poll took to notice is not how long the chain took, \
-         so the row says nothing rather than something untrue"
+        "nobody watched this one go out, so there is no wait to report"
     );
     cleanup(&dir);
 }
@@ -12063,7 +12053,6 @@ fn a_records_own_row_reports_its_finality_like_any_other_send() {
         "a record on the wire is timed from the moment it went out"
     );
 
-    c.record_account_announcement(60);
     c.merge_activity(vec![ActivityEvent {
         direction: ActivityDirection::Out,
         tx_hash: optional_digest("storage-tx"),

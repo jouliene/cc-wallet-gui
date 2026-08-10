@@ -634,6 +634,31 @@ impl AppController {
         accepted_match
     }
 
+    /// Stops the spinner the moment the stream says the account moved.
+    ///
+    /// One transfer of ours is on the wire and the chain has just said this
+    /// account changed. That is the news the person is waiting for, and it is
+    /// the earliest there is — anything else the wallet could ask costs another
+    /// round trip, which is a delay they would sit and watch for no gain they
+    /// can see. So the row settles here, on the frame itself.
+    ///
+    /// It is not *proof* the movement is ours; only the replay guard is, and
+    /// that follows a beat later and is what the Journal waits for before it
+    /// lets another transfer go out. The display leads, the ledger confirms.
+    pub(super) fn confirm_in_flight_from_announcement(&mut self) {
+        let Some((record_id, _)) = self.session.awaiting_replay.as_ref() else {
+            return;
+        };
+        let Some(record) = self.journal.record(record_id) else {
+            return;
+        };
+        if !record.is_blocking() {
+            return;
+        }
+        let ext_msg_hash = record.ext_msg_hash().clone();
+        self.settle_optimistic_row(&ext_msg_hash);
+    }
+
     /// Confirms an in-flight transfer from the wallet's own replay guard.
     ///
     /// The account state carries the timestamp the wallet contract stored the
@@ -697,7 +722,7 @@ impl AppController {
         if self.clear_in_flight_send(&record_id) {
             self.clear_broadcast_send_form();
         }
-        self.settle_optimistic_row(&ext_msg_hash, account_lt);
+        self.settle_optimistic_row(&ext_msg_hash);
         self.state.status = "Success — the wallet's own replay guard advanced".to_owned();
         self.state.error = None;
         self.refresh_journal_policy();
