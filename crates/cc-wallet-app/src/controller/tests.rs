@@ -3150,6 +3150,61 @@ fn optimistic_pending_row_is_shown_then_reconciled_by_the_confirmed_tx() {
 }
 
 #[test]
+fn finality_stops_at_the_announcement_not_at_the_page_that_carried_the_row() {
+    let dir = temp_dir("finality-announcement-clock");
+    let mut c = unlocked(&dir, WalletProfile::default());
+
+    let lt = c.push_pending_send(&native_request(SEND_DEST, 5_000));
+    c.state
+        .activity
+        .iter_mut()
+        .find(|event| event.lt == lt)
+        .expect("the optimistic row exists")
+        .ext_msg_hash = optional_digest("exthash");
+    c.session.awaiting_send_lt = Some(lt);
+
+    let armed = Instant::now();
+    c.arm_awaiting_send_finality();
+    std::thread::sleep(Duration::from_millis(20));
+    c.record_account_announcement(8_000_000);
+    let announced = armed.elapsed();
+
+    // Hearing about it and reading it back are two different waits. The page
+    // that finally carries the row arrives long after the chain said so: the
+    // wallet had to schedule the read, make the call, and parse the answer.
+    std::thread::sleep(Duration::from_millis(200));
+    let page_arrived = armed.elapsed();
+    c.merge_activity(vec![ActivityEvent {
+        tx_hash: optional_digest("realtx"),
+        counterparty: SEND_DEST.to_owned(),
+        movements: vec![movement(AssetId::Native, 5_000)],
+        fee_native: 42,
+        ext_msg_hash: optional_digest("exthash"),
+        int_msg_hash: optional_digest("int"),
+        ..ActivityEvent::test_stub(8_000_000, 8_000_000)
+    }]);
+
+    let reported = u128::from(
+        c.state().activity[0]
+            .finality_ms
+            .expect("the subscription announced this transaction"),
+    );
+    assert!(
+        reported <= announced.as_millis() + 10,
+        "finality {reported} ms outran the announcement at {} ms, so it is timing \
+         something other than the chain",
+        announced.as_millis()
+    );
+    assert!(
+        reported + 150 <= page_arrived.as_millis(),
+        "finality {reported} ms reaches the page that arrived at {} ms — the number \
+         is measuring our own read instead of the network",
+        page_arrived.as_millis()
+    );
+    cleanup(&dir);
+}
+
+#[test]
 fn a_drifted_endpoint_observation_does_not_match_or_poison_persistence() {
     let dir = temp_dir("m8-endpoint-drift");
     let (mut c, _fake) = ready_to_send(&dir);

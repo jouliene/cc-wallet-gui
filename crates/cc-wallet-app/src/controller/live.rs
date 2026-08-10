@@ -195,21 +195,6 @@ impl AppController {
             .then_some(self.session.journal_reconcile_time_floor)
             .flatten();
         let local_now = super::now_unix();
-        let pending_finality_starts = self
-            .session
-            .pending_sends
-            .iter()
-            .filter_map(|(lt, started_at)| {
-                let started_at = (*started_at)?;
-                let ext_msg_hash = self
-                    .state
-                    .activity
-                    .iter()
-                    .find(|event| event.lt == *lt && event.pending)
-                    .and_then(|event| event.ext_msg_hash.clone())?;
-                Some((ext_msg_hash, started_at))
-            })
-            .collect::<Vec<_>>();
         let tx = self.tx.clone();
         let chain = self.chain.clone();
         self.fetch_seq = self.fetch_seq.wrapping_add(1);
@@ -249,7 +234,6 @@ impl AppController {
                         break;
                     }
                 };
-                let page_observed_at = Instant::now();
                 let page_endpoint = page.source_endpoint.clone();
                 let page_request_id = page.request_id.clone();
                 let raw_page_len = match page.transactions.len().checked_add(page.skipped) {
@@ -333,23 +317,7 @@ impl AppController {
                                 .iter()
                                 .flat_map(|event| event.movements.iter().cloned())
                                 .collect();
-                            for (index, mut event) in events_for_tx.into_iter().enumerate() {
-                                if event.finality_ms.is_none()
-                                    && let Some(ext_msg_hash) = event.ext_msg_hash.as_ref()
-                                {
-                                    event.finality_ms = pending_finality_starts
-                                        .iter()
-                                        .filter(|(pending_hash, _)| pending_hash == ext_msg_hash)
-                                        .map(|(_, started_at)| {
-                                            u64::try_from(
-                                                page_observed_at
-                                                    .saturating_duration_since(*started_at)
-                                                    .as_millis(),
-                                            )
-                                            .unwrap_or(u64::MAX)
-                                        })
-                                        .max();
-                                }
+                            for (index, event) in events_for_tx.into_iter().enumerate() {
                                 if index == 0
                                     && let (Some(tx_hash), Some(ext_msg_hash)) =
                                         (event.tx_hash.clone(), event.ext_msg_hash.clone())
