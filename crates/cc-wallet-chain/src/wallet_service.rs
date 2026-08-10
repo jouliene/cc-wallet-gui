@@ -296,6 +296,7 @@ pub struct PreparedChainSend {
     prepared_record: PreparedRecord,
     route: Option<cc_wallet_tycho::ResolvedSendRoute>,
     message: Option<cc_wallet_tycho::Cell>,
+    created_at_ms: u64,
     candidate_count: usize,
 }
 
@@ -329,6 +330,16 @@ impl PreparedChainSend {
         self.prepared_record.expire_at()
     }
 
+    /// The timestamp the signed message carries.
+    ///
+    /// The wallet contract stores this value when it executes the message, so
+    /// the account state can be asked whether this exact message ran without
+    /// waiting for the node to index the transaction. Zero on a test-only
+    /// prepared send, which no account can ever match.
+    pub fn created_at_ms(&self) -> u64 {
+        self.created_at_ms
+    }
+
     pub fn route_id(&self) -> &str {
         self.prepared_record.prepare_provenance().route_id()
     }
@@ -352,6 +363,7 @@ impl PreparedChainSend {
             prepared_record,
             route: None,
             message: None,
+            created_at_ms: 0,
             candidate_count,
         })
     }
@@ -747,6 +759,7 @@ impl TychoWalletService {
             prepared_record,
             candidate_count: route.candidate_count(),
             route: Some(route),
+            created_at_ms: prepared.created_at_ms,
             message: Some(prepared.message),
         })
     }
@@ -2697,6 +2710,7 @@ fn snapshot(address: &str, state: &WalletState, global_id: i32) -> ChainResult<W
         state.last_trans_lt,
         observed_network_time,
     )
+    .map(|snapshot| snapshot.with_last_message_ms(state.last_message_ms.unwrap_or(0)))
     .map_err(ChainError::invalid_input)
 }
 

@@ -480,7 +480,7 @@ async fn broadcast_all_candidates(
 }
 
 fn settled_direction(event: &ActivityEvent, direction: ActivityDirection) -> bool {
-    !event.pending && event.tx_hash.is_some() && event.direction == direction
+    event.tx_hash.is_some() && event.direction == direction
 }
 
 fn broadcast_reached_node(outcome: &CandidateBroadcastOutcome) -> bool {

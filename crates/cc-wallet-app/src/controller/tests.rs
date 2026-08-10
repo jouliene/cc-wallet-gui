@@ -6230,6 +6230,165 @@ fn persisted_journal(dir: &Path) -> cc_wallet_domain::JournalEnvelope {
     cc_wallet_domain::JournalEnvelope::decode(&opened.journal).unwrap()
 }
 
+fn wallet_with_replay_guard(last_message_ms: u64, last_trans_lt: u64) -> WalletSnapshot {
+    let mut snapshot = timed_wallet("0:me");
+    snapshot.last_trans_lt = last_trans_lt;
+    snapshot.with_last_message_ms(last_message_ms)
+}
+
+/// A send that reached the node and is waiting to be heard about, with the
+/// timestamp its signed message carries known to the session.
+fn awaiting_replay_guard(c: &mut AppController, sent_ms: u64) -> (RecordId, String, Digest32) {
+    let ext_hash = digest("REPLAY-GUARD");
+    let (record_id, endpoint) = install_blocking_history_record(c, ext_hash.clone(), 0x61);
+    let pending_lt = c.push_pending_send(&native_request(SEND_DEST, 1));
+    c.state
+        .activity
+        .iter_mut()
+        .find(|event| event.lt == pending_lt)
+        .expect("the optimistic row exists")
+        .ext_msg_hash = Some(ext_hash.clone());
+    c.session.awaiting_send_lt = Some(pending_lt);
+    c.arm_awaiting_send_finality();
+    c.session.in_flight_record_id = Some(record_id.clone());
+    c.session.awaiting_replay = Some((record_id.clone(), sent_ms));
+    c.state.sending = true;
+    c.state.busy = true;
+    c.refresh_journal_policy();
+    (record_id, endpoint, ext_hash)
+}
+
+#[test]
+fn the_wallets_own_replay_guard_confirms_a_transfer_the_transaction_list_has_not_caught_up_with() {
+    const SENT_MS: u64 = 1_700_000_000_000;
+    let dir = temp_dir("replay-guard-confirms");
+    let (mut c, _fake) = ready_to_send(&dir);
+    awaiting_replay_guard(&mut c, SENT_MS);
+    assert!(c.state().journal_blocking, "the send starts out unresolved");
+
+    // An account read from before our message ran carries the guard the
+    // previous send left behind, and that confirms nothing.
+    c.record_account_announcement(9_000);
+    let live = c.subscription_generation;
+    apply_owned_auto_load(&mut c, live, wallet_with_replay_guard(SENT_MS - 1, 8_000));
+    assert!(
+        c.state().journal_blocking,
+        "a guard that has not reached our message is somebody else's news"
+    );
+    assert!(
+        c.state().activity.iter().any(|event| event.pending),
+        "the row keeps spinning until the wallet's own guard moves"
+    );
+
+    // And now the wallet's own storage says it ran our message.
+    let live = c.subscription_generation;
+    apply_owned_auto_load(&mut c, live, wallet_with_replay_guard(SENT_MS, 9_000));
+
+    assert!(
+        !c.state().journal_blocking,
+        "the contract's replay guard is terminal evidence, so nothing stays blocked"
+    );
+    assert!(!c.state().sending);
+    assert!(!c.state().busy);
+    assert!(c.state().send_form.destination.is_empty());
+    let row = &c.state().activity[0];
+    assert!(
+        !row.pending,
+        "the row we are standing in for stops spinning"
+    );
+    assert!(row.tx_hash.is_none(), "and it is still our row, not a read");
+    assert!(
+        row.finality_ms.is_some(),
+        "the subscription had already announced the account, so the row can say how long it took"
+    );
+    cleanup(&dir);
+}
+
+#[test]
+fn a_row_the_replay_guard_confirmed_still_takes_its_details_from_the_chain() {
+    const SENT_MS: u64 = 1_700_000_000_000;
+    let dir = temp_dir("replay-guard-details");
+    let (mut c, _fake) = ready_to_send(&dir);
+    let generation = c.subscription_generation;
+    let (_record_id, endpoint, ext_hash) = awaiting_replay_guard(&mut c, SENT_MS);
+    c.record_account_announcement(9_000);
+    let live = c.subscription_generation;
+    apply_owned_auto_load(&mut c, live, wallet_with_replay_guard(SENT_MS, 9_000));
+    assert!(!c.state().journal_blocking);
+
+    // The listing turns up later, as it always does. It has nothing left to
+    // resolve, and saying so must not read as a conflict.
+    let observation = endpoint_observation(
+        ext_hash.clone(),
+        &endpoint,
+        SEND_DEST,
+        "late-request",
+        "late-tx",
+        true,
+    );
+    let tx_hash = observation.tx_hash().clone();
+    assert!(
+        !c.reconcile_endpoint_observations(generation, vec![observation]),
+        "an already-terminal record has nothing for the listing to match"
+    );
+    assert!(c.state().error.is_none(), "and that is not an error");
+
+    c.merge_activity(vec![ActivityEvent {
+        tx_hash: Some(tx_hash.clone()),
+        counterparty: SEND_DEST.to_owned(),
+        movements: vec![movement(AssetId::Native, 1)],
+        fee_native: 2_100_000,
+        ext_msg_hash: Some(ext_hash),
+        int_msg_hash: optional_digest("late-int"),
+        ..ActivityEvent::test_stub(9_000, 1_700_000_001)
+    }]);
+
+    let rows: Vec<_> = c
+        .state()
+        .activity
+        .iter()
+        .filter(|event| event.tx_hash.is_none())
+        .collect();
+    assert!(
+        rows.is_empty(),
+        "the chain's own row replaces the one we were standing in with"
+    );
+    let row = &c.state().activity[0];
+    assert_eq!(row.tx_hash.as_ref(), Some(&tx_hash));
+    assert_eq!(row.fee_native, 2_100_000, "and it brings the fee with it");
+    cleanup(&dir);
+}
+
+#[test]
+fn a_confirmed_row_without_its_transaction_yet_stays_at_the_top_of_the_list() {
+    const SENT_MS: u64 = 1_700_000_000_000;
+    let dir = temp_dir("replay-guard-order");
+    let (mut c, _fake) = ready_to_send(&dir);
+    awaiting_replay_guard(&mut c, SENT_MS);
+    c.record_account_announcement(9_000);
+    let live = c.subscription_generation;
+    apply_owned_auto_load(&mut c, live, wallet_with_replay_guard(SENT_MS, 9_000));
+
+    // History arrives for everything except our own transfer, whose synthetic
+    // ordering number is tiny next to a real one.
+    c.merge_activity(vec![ActivityEvent {
+        tx_hash: optional_digest("older-tx"),
+        counterparty: SEND_DEST.to_owned(),
+        movements: vec![movement(AssetId::Native, 5)],
+        ext_msg_hash: optional_digest("older-ext"),
+        int_msg_hash: optional_digest("older-int"),
+        ..ActivityEvent::test_stub(8_999, 1_700_000_000)
+    }]);
+
+    assert!(
+        c.state().activity[0].tx_hash.is_none(),
+        "the newest thing that happened is the transfer just confirmed, and it \
+         is pinned by having no transaction of its own rather than by spinning"
+    );
+    assert!(!c.state().activity[0].pending);
+    cleanup(&dir);
+}
+
 fn endpoint_observation(
     ext_hash: Digest32,
     endpoint: &str,

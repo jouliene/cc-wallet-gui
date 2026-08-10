@@ -24,6 +24,9 @@ impl AppController {
             .derived_wallet_address
             .clone_from(&snapshot.address);
         self.state.wallet = Some(snapshot);
+        // Every account read is a chance to hear that the transfer ran, and
+        // this one arrives long before the transaction list carries it.
+        self.reconcile_from_replay_guard();
         self.refresh_journal_policy();
         if manual {
             self.state.selected_tab = AppTab::Wallet;

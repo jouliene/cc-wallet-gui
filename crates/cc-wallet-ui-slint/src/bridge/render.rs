@@ -638,10 +638,16 @@ fn activity_row(
     contacts: &[AddressBookEntry],
 ) -> ActivityRow {
     let movements = movement_rows(&event.movements);
+    // A row we are still standing in for has no transaction of its own, so
+    // nobody has paid a fee yet. The zero it was born with is not a fee.
     let fee = token_amount(
         AssetId::Native,
-        &format_native_fixed9(event.fee_native)
-            .expect("a decoded activity fee is in the native domain"),
+        &if event.tx_hash.is_some() {
+            format_native_fixed9(event.fee_native)
+                .expect("a decoded activity fee is in the native domain")
+        } else {
+            String::new()
+        },
     );
     let party_full = if event.counterparty.is_empty() {
         "—".to_owned()

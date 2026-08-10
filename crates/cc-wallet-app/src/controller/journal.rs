@@ -89,7 +89,7 @@ impl AppController {
             .state
             .activity
             .iter()
-            .filter(|event| !event.pending && event.tx_hash.is_some())
+            .filter(|event| event.tx_hash.is_some())
             .map(|event| event.lt)
             .max();
         let snapshot_head = self
@@ -328,6 +328,8 @@ impl AppController {
         }
         self.refresh_journal_policy();
         self.arm_awaiting_send_finality();
+        self.session.awaiting_replay =
+            Some((prepared.record_id().clone(), prepared.created_at_ms()));
 
         let tx = self.tx.clone();
         let chain = self.chain.clone();
@@ -632,6 +634,75 @@ impl AppController {
         accepted_match
     }
 
+    /// Confirms an in-flight transfer from the wallet's own replay guard.
+    ///
+    /// The account state carries the timestamp the wallet contract stored the
+    /// last time it executed one of our messages, and the node serves that as
+    /// soon as it applies the block — measurably sooner than the same
+    /// transaction reaches its transaction index, and on a slow index by
+    /// several seconds. If the guard has reached the timestamp our signed
+    /// message carries, that message ran and committed: an aborted transaction
+    /// rolls the storage back, so the guard could not have moved.
+    ///
+    /// That answers the same question the transaction listing is asked, only
+    /// earlier, so it is terminal evidence and the record stops blocking. The
+    /// listing is still wanted — for the hash, the fee and the effects — but no
+    /// longer for telling the person in front of the wallet that their transfer
+    /// went through.
+    pub(super) fn reconcile_from_replay_guard(&mut self) {
+        let Some((record_id, sent_ms)) = self.session.awaiting_replay.clone() else {
+            return;
+        };
+        let Some(record) = self.journal.record(&record_id) else {
+            self.session.awaiting_replay = None;
+            return;
+        };
+        if !record.is_blocking() {
+            self.session.awaiting_replay = None;
+            return;
+        }
+        let Some(snapshot) = self.state.wallet.as_ref() else {
+            return;
+        };
+        // A test-only prepared send carries no timestamp, and a snapshot that
+        // is not our wallet code carries no guard. Neither can confirm.
+        if sent_ms == 0 || snapshot.last_message_ms() < sent_ms {
+            return;
+        }
+        let account_lt = snapshot.last_trans_lt;
+        let ext_msg_hash = record.ext_msg_hash().clone();
+        let proof_ref = format!(
+            "ever-wallet-replay:{sent_ms}@{}#{account_lt}",
+            record.ticket().endpoint_identity()
+        );
+        if let Err(error) = self.journal.append_delivery(
+            &record_id,
+            DeliveryEvidence::VerifiedTerminal {
+                outcome: TerminalOutcome::Success,
+                proof_ref,
+            },
+        ) {
+            self.persistence_failed(format!(
+                "could not record the wallet's own confirmation: {error}"
+            ));
+            return;
+        }
+        self.session.awaiting_replay = None;
+        let persisted = self.persist_journal_barrier();
+        self.invalidate_pending_risk_after_journal_change();
+        if !persisted {
+            self.refresh_journal_policy();
+            return;
+        }
+        if self.clear_in_flight_send(&record_id) {
+            self.clear_broadcast_send_form();
+        }
+        self.settle_optimistic_row(&ext_msg_hash, account_lt);
+        self.state.status = "Success — the wallet's own replay guard advanced".to_owned();
+        self.state.error = None;
+        self.refresh_journal_policy();
+    }
+
     fn clear_in_flight_send(&mut self, record_id: &RecordId) -> bool {
         if self.session.in_flight_record_id.as_ref() != Some(record_id) {
             return false;
@@ -754,6 +825,12 @@ fn delivery_label(evidence: &DeliveryEvidence) -> &'static str {
         }
         DeliveryEvidence::VerifiedTerminal {
             outcome: TerminalOutcome::Success,
+            proof_ref,
+        } if proof_ref.starts_with("ever-wallet-replay:") => {
+            "Success — the wallet's own replay guard advanced"
+        }
+        DeliveryEvidence::VerifiedTerminal {
+            outcome: TerminalOutcome::Success,
             ..
         } => "Success — independently verified terminal evidence",
         DeliveryEvidence::VerifiedTerminal {
@@ -871,6 +948,20 @@ mod label_tests {
                     proof_ref: "proof".to_owned(),
                 },
                 "Success — independently verified terminal evidence",
+            ),
+            (
+                DeliveryEvidence::VerifiedTerminal {
+                    outcome: TerminalOutcome::Success,
+                    proof_ref: "rpc-history:endpoint#7".to_owned(),
+                },
+                "Success — confirmed in RPC transaction history",
+            ),
+            (
+                DeliveryEvidence::VerifiedTerminal {
+                    outcome: TerminalOutcome::Success,
+                    proof_ref: "ever-wallet-replay:1700000000000@endpoint#7".to_owned(),
+                },
+                "Success — the wallet's own replay guard advanced",
             ),
             (
                 DeliveryEvidence::VerifiedTerminal {

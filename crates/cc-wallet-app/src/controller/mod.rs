@@ -219,6 +219,11 @@ struct SessionRuntime {
     announcements: Vec<(u64, Instant)>,
     awaiting_send_lt: Option<u64>,
     in_flight_record_id: Option<RecordId>,
+    /// The record whose signed message is on the wire, and the timestamp that
+    /// message carries. The wallet contract stores that timestamp when it runs
+    /// the message, so the account state answers "did it run" a good deal
+    /// sooner than the node's transaction index does.
+    awaiting_replay: Option<(RecordId, u64)>,
     dest_check_task: Option<tokio::task::JoinHandle<()>>,
     dest_check_retry_at: Option<Deadline>,
     risk_cooling_started_at: Option<Instant>,

@@ -190,8 +190,14 @@ fn what_the_status_line_would_have_shown() {
 
         let mut armed_at = None;
         let mut announced_at = None;
+        let mut account_lt_at = None;
+        let mut unblocked_at = None;
+        let mut stopped_spinning_at = None;
+        let mut blocked = false;
+        let account_lt_before = c.state().wallet.as_ref().map_or(0, |w| w.last_trans_lt);
         // One character per UI tick: '#' while a history fetch is in flight,
-        // 'A' on the tick the subscription announced the account, '.' idle.
+        // 'A' on the tick the subscription announced the account, 'L' on the
+        // tick the account state moved past its old last transaction, '.' idle.
         let mut trace = String::new();
         let settled = pump_until(
             &mut c,
@@ -199,8 +205,15 @@ fn what_the_status_line_would_have_shown() {
             Duration::from_secs(90),
             |c| {
                 let announced_now = announced_at.is_none() && !c.session.announcements.is_empty();
+                let account_moved = c
+                    .state()
+                    .wallet
+                    .as_ref()
+                    .is_some_and(|w| w.last_trans_lt > account_lt_before);
                 trace.push(if announced_now {
                     'A'
+                } else if account_lt_at.is_none() && account_moved {
+                    'L'
                 } else if c.load.fetch_in_flight {
                     '#'
                 } else {
@@ -217,10 +230,28 @@ fn what_the_status_line_would_have_shown() {
                 if announced_at.is_none() && armed_at.is_some() {
                     announced_at = c.session.announcements.last().map(|(_, at)| *at);
                 }
+                if account_lt_at.is_none() && armed_at.is_some() && account_moved {
+                    account_lt_at = Some(Instant::now());
+                }
+                blocked |= c.state().journal_blocking;
+                if unblocked_at.is_none() && blocked && !c.state().journal_blocking {
+                    unblocked_at = Some(Instant::now());
+                }
+                if stopped_spinning_at.is_none()
+                    && armed_at.is_some()
+                    && c.state()
+                        .activity
+                        .iter()
+                        .any(|event| event.tx_hash.is_none() && !event.pending)
+                {
+                    stopped_spinning_at = Some(Instant::now());
+                }
+                // The round ends when the chain's own row lands, which is what
+                // the wallet used to wait for before showing anything at all.
                 c.state()
                     .activity
                     .iter()
-                    .any(|event| !event.pending && event.finality_ms.is_some())
+                    .any(|event| event.tx_hash.is_some() && event.finality_ms.is_some())
             },
         );
 
@@ -233,13 +264,13 @@ fn what_the_status_line_would_have_shown() {
             .state()
             .activity
             .iter()
-            .filter(|event| !event.pending)
+            .filter(|event| event.tx_hash.is_some())
             .filter_map(|event| event.finality_ms)
             .max();
 
         println!(
             "[round {round}] Send -> dialog usable {:.0} ms | confirm -> broadcast {:.0} ms | \
-             broadcast -> announcement {} | broadcast -> wallet shows it settled {} | \
+             broadcast -> announcement {} | broadcast -> chain row arrived {} | \
              status line says {}",
             confirmed.duration_since(clicked).as_secs_f64() * 1000.0,
             armed_at.duration_since(confirmed).as_secs_f64() * 1000.0,
@@ -259,6 +290,24 @@ fn what_the_status_line_would_have_shown() {
                 "never".to_owned()
             },
             reported.map_or_else(|| "nothing".to_owned(), |ms| format!("{ms} ms")),
+        );
+        let since_armed = |at: Option<Instant>| {
+            at.map_or_else(
+                || "never".to_owned(),
+                |at| {
+                    format!(
+                        "{:.0} ms",
+                        at.duration_since(armed_at).as_secs_f64() * 1000.0
+                    )
+                },
+            )
+        };
+        println!(
+            "[round {round}] account state moved {} | row stopped spinning {} | \
+             send form released {}",
+            since_armed(account_lt_at),
+            since_armed(stopped_spinning_at),
+            since_armed(unblocked_at),
         );
         println!("[round {round}] ticks after confirm: {trace}");
 

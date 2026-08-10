@@ -484,6 +484,7 @@ pub struct WalletSnapshot {
     native_balance: u128,
     extra_balance: BTreeMap<u32, CcAmount>,
     pub last_trans_lt: u64,
+    last_message_ms: u64,
     observed_network_time: Option<ObservedNetworkTime>,
 }
 
@@ -530,8 +531,24 @@ impl WalletSnapshot {
             native_balance,
             extra_balance,
             last_trans_lt,
+            last_message_ms: 0,
             observed_network_time,
         })
+    }
+
+    /// The timestamp the wallet contract stored for the last message it ran.
+    ///
+    /// Zero means the account state did not say — an account that is not our
+    /// wallet code, or a read that came back unchanged. Only a value that came
+    /// off a real account can confirm anything, so zero confirms nothing.
+    #[must_use]
+    pub fn with_last_message_ms(mut self, last_message_ms: u64) -> Self {
+        self.last_message_ms = last_message_ms;
+        self
+    }
+
+    pub fn last_message_ms(&self) -> u64 {
+        self.last_message_ms
     }
 
     pub fn empty(address: impl Into<String>) -> Self {

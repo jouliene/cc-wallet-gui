@@ -455,7 +455,7 @@ impl AppController {
                 .state
                 .activity
                 .iter()
-                .any(|event| event.pending && event.tx_hash.is_none() && event.lt == lt)
+                .any(|event| event.tx_hash.is_none() && event.lt == lt)
         {
             return lt;
         }
@@ -529,20 +529,61 @@ impl AppController {
         u64::try_from(announced_at.checked_duration_since(started_at)?.as_millis()).ok()
     }
 
+    /// Stops the spinner on the row standing in for a transfer the account
+    /// state has now confirmed.
+    ///
+    /// Only the spinner and the finality figure change. The fee, the hash and
+    /// the effects belong to the transaction and are still on their way, so the
+    /// row keeps its place at the top of the list until the chain's own row
+    /// arrives to replace it.
+    pub(super) fn settle_optimistic_row(
+        &mut self,
+        ext_msg_hash: &cc_wallet_domain::Digest32,
+        account_lt: u64,
+    ) {
+        let finality = self
+            .session
+            .pending_sends
+            .iter()
+            .filter_map(|(_, started_at)| *started_at)
+            .min()
+            .and_then(|started_at| self.announced_finality(started_at, account_lt));
+        for event in self
+            .state
+            .activity
+            .iter_mut()
+            .filter(|event| event.tx_hash.is_none())
+            .filter(|event| event.ext_msg_hash.as_ref() == Some(ext_msg_hash))
+        {
+            event.pending = false;
+            if event.finality_ms.is_none() {
+                event.finality_ms = finality;
+            }
+        }
+        self.sort_activity();
+    }
+
     pub(super) fn discard_awaiting_send(&mut self) {
         let Some(lt) = self.session.awaiting_send_lt.take() else {
             return;
         };
         self.state
             .activity
-            .retain(|event| !(event.pending && event.tx_hash.is_none() && event.lt == lt));
+            .retain(|event| !(event.tx_hash.is_none() && event.lt == lt));
         self.session.pending_sends.retain(|(held, _)| *held != lt);
     }
 
     pub(super) fn sort_activity(&mut self) {
-        self.state
-            .activity
-            .sort_by(|a, b| b.pending.cmp(&a.pending).then(b.lt.cmp(&a.lt)));
+        self.state.activity.sort_by(|a, b| {
+            // A row we made ourselves stays on top until the chain's own
+            // row replaces it. What pins it there is having no transaction
+            // of its own — not the spinner, which stops as soon as the
+            // account state says the transfer ran.
+            a.tx_hash
+                .is_some()
+                .cmp(&b.tx_hash.is_some())
+                .then(b.lt.cmp(&a.lt))
+        });
         // Every path that touches the activity ends here, so an open
         // conversation follows the history instead of freezing at the moment it
         // was opened.
@@ -554,7 +595,9 @@ impl AppController {
         let mut optimistic_confirmation_merged = false;
         for mut event in incoming {
             if self.state.activity.iter().any(|held| {
-                !held.pending && held.lt == event.lt && held.int_msg_hash == event.int_msg_hash
+                held.tx_hash.is_some()
+                    && held.lt == event.lt
+                    && held.int_msg_hash == event.int_msg_hash
             }) {
                 continue;
             }
@@ -617,7 +660,7 @@ impl AppController {
         let mut kept_confirmed: usize = 0;
         let mut cap_boundary_lt: Option<u64> = None;
         self.state.activity.retain(|event| {
-            if event.pending {
+            if event.tx_hash.is_none() {
                 return true;
             }
             if kept_confirmed >= super::MAX_HISTORY && cap_boundary_lt != Some(event.lt) {
@@ -659,12 +702,12 @@ fn conservative_history_age_anchor(local_now: u64, newest_chain: Option<u64>) ->
 fn newest_unambiguous_chain_time(events: &[ActivityEvent]) -> Option<u64> {
     let newest_lt = events
         .iter()
-        .filter(|event| !event.pending && event.tx_hash.is_some())
+        .filter(|event| event.tx_hash.is_some())
         .map(|event| event.lt)
         .max()?;
     let mut times = events
         .iter()
-        .filter(|event| !event.pending && event.tx_hash.is_some() && event.lt == newest_lt)
+        .filter(|event| event.tx_hash.is_some() && event.lt == newest_lt)
         .map(|event| event.time_unix);
     let first = times.next()?;
     times.all(|time| time == first).then_some(first)

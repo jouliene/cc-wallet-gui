@@ -38,7 +38,8 @@ pub use everwallet::{
     DEFAULT_WORKCHAIN, EVER_WALLET_CODE_BOC, EVER_WALLET_CONTRACT, EverTransfer, EverWallet,
     IntoStdAddr, MAX_COMMENT_BYTES, MAX_EVER_EXTRA_CURRENCY_ID, PreparedMessage, WalletState,
     comment_payload, ensure_supported_extra_currency_id as ensure_supported_ever_extra_currency_id,
-    ever_wallet_code_hash, make_wallet_state_init, parse_std_addr, read_comment,
+    ever_wallet_code_hash, ever_wallet_replay_ms, make_wallet_state_init, parse_std_addr,
+    read_comment,
 };
 pub use history::{
     BounceOutcome, ChainMessage, ChainTransaction, MAX_TRANSACTION_BOC_BYTES, MsgKind,

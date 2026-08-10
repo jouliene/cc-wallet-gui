@@ -182,6 +182,8 @@ pub struct WalletState {
     pub balance: u128,
     pub extra_balance: BTreeMap<u32, String>,
     pub last_trans_lt: u64,
+    /// The wallet's own replay guard — see [`ever_wallet_replay_ms`].
+    pub last_message_ms: Option<u64>,
     pub gen_lt: Option<u64>,
     pub gen_utime: Option<u32>,
     pub observed_network_time: Option<ObservedNetworkTime>,
@@ -195,6 +197,7 @@ impl Default for WalletState {
             balance: 0,
             extra_balance: BTreeMap::new(),
             last_trans_lt: 0,
+            last_message_ms: None,
             gen_lt: None,
             gen_utime: None,
             observed_network_time: None,
@@ -214,6 +217,7 @@ impl WalletState {
                 extra_balance: crate::history::extra_currencies_to_strings(&account.balance.other)
                     .context("account extra-currency balance is undecodable")?,
                 last_trans_lt: account.last_trans_lt,
+                last_message_ms: account_replay_ms(account),
                 gen_lt: Some(timings.gen_lt),
                 gen_utime: Some(timings.gen_utime),
                 observed_network_time: None,
@@ -251,6 +255,38 @@ pub fn ever_wallet_spec() -> ContractSpec {
         external_method: ever_wallet_external_method,
         internal_method: ever_wallet_internal_method,
     }
+}
+
+/// The moment this wallet last executed a message of ours, as the contract
+/// itself recorded it.
+///
+/// The wallet stores the timestamp of every external message it runs, and it
+/// stores it only if the transaction committed — an aborted one rolls the
+/// storage back. That makes this the earliest honest proof that one particular
+/// signed message went through, and the account state carries it as soon as the
+/// node applies the block, well before the transaction reaches the node's
+/// transaction index.
+pub fn ever_wallet_replay_ms(data: &Cell) -> Option<u64> {
+    let mut slice = data.as_slice().ok()?;
+    slice.load_u256().ok()?;
+    slice.load_u64().ok()
+}
+
+/// The same guard, but only from an account that is actually running our
+/// wallet code — another contract's first 320 bits mean something else.
+fn account_replay_ms(account: &tycho_types::models::Account) -> Option<u64> {
+    use tycho_types::models::account::AccountState as CoreAccountState;
+    let CoreAccountState::Active(state_init) = &account.state else {
+        return None;
+    };
+    let code_hash = state_init
+        .code
+        .as_ref()
+        .map(|code| format!("{:x}", code.repr_hash()))?;
+    if code_hash != ever_wallet_code_hash() {
+        return None;
+    }
+    ever_wallet_replay_ms(state_init.data.as_ref()?)
 }
 
 fn decode_ever_wallet_data(data: &Cell) -> Option<DecodedContract> {
@@ -925,6 +961,45 @@ mod tests {
         assert!(
             by_code(None).is_none(),
             "a contract with no data cell decodes to nothing"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn the_replay_guard_reads_back_exactly_what_a_message_would_store() -> Result<()> {
+        let keys = crate::crypto::KeyPair::from_seed(TEST_SEED)?;
+        let key = HashBytes(keys.public_key().to_bytes());
+        let deployed = make_wallet_state_init(keys.public_key())?;
+
+        assert_eq!(
+            ever_wallet_replay_ms(deployed.data.as_ref().expect("a deployed wallet has data")),
+            Some(0),
+            "a wallet that has run nothing has run nothing at a time of zero"
+        );
+
+        // What the contract stores is the millisecond stamp the message
+        // carried, which is exactly what a prepared send knows about itself.
+        let wallet = EverWallet::new(keys)?;
+        let transfer = EverTransfer::new(wallet.address())?.native(1)?;
+        let prepared = wallet.prepare_send_currency_at(
+            &transfer,
+            SignatureContext::empty(),
+            true,
+            1_700_000_000_123,
+            DEFAULT_TTL_SECS,
+        )?;
+        let after = CellBuilder::build_from((key, prepared.created_at_ms))?;
+        assert_eq!(
+            ever_wallet_replay_ms(&after),
+            Some(1_700_000_000_123),
+            "the guard and the message agree to the millisecond, so one can \
+             confirm the other"
+        );
+
+        assert_eq!(
+            ever_wallet_replay_ms(&CellBuilder::build_from(key)?),
+            None,
+            "a cell without the timestamp confirms nothing"
         );
         Ok(())
     }
