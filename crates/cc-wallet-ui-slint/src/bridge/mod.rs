@@ -100,6 +100,47 @@ impl SwapDrive {
     }
 }
 
+/// The conversation's development hooks, in one place.
+///
+/// A conversation is reached by clicking one icon in one activity row, and
+/// written to by typing into a field — neither of which a screenshot harness
+/// can do, because pointer events do not reach Slint. Kept together rather than
+/// as four separate values behind four separate `cfg` attributes: it was one of
+/// those attributes going missing that broke the release build, where none of
+/// this exists at all.
+#[cfg(debug_assertions)]
+#[derive(Default)]
+struct ChatHooks {
+    /// The address whose conversation to open once there is history to open it
+    /// over.
+    open: Option<String>,
+    /// "Name=address", so the contact-named side of a header can be
+    /// photographed too.
+    contact: Option<String>,
+    /// What to write in the composer, and send.
+    say: Option<String>,
+    /// Whether it has been written, so the signing dialog it raises is the one
+    /// this signs.
+    said: bool,
+}
+
+#[cfg(debug_assertions)]
+impl ChatHooks {
+    fn from_env() -> Self {
+        let var = |name: &str| {
+            std::env::var(name)
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        };
+        Self {
+            open: var("CC_WALLET_TEST_CHAT"),
+            contact: var("CC_WALLET_TEST_CONTACT"),
+            say: var("CC_WALLET_TEST_CHAT_SAY"),
+            said: false,
+        }
+    }
+}
+
 /// Drives the send form as far as the confirmation dialog and stops there.
 ///
 /// The dialog is three interactions deep — an address, MAX, then Send — and
@@ -473,30 +514,8 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
             .ok()
             .filter(|s| !s.is_empty()),
     ));
-    // The conversation is reached by clicking one icon in one activity row,
-    // which is not something a screenshot harness can be relied on to hit.
     #[cfg(debug_assertions)]
-    let pending_chat = std::rc::Rc::new(std::cell::RefCell::new(
-        std::env::var("CC_WALLET_TEST_CHAT")
-            .ok()
-            .filter(|s| !s.is_empty()),
-    ));
-    // What to say once it is open, for the same reason: the composer cannot be
-    // reached by a harness that has no way to click or type into it.
-    #[cfg(debug_assertions)]
-    let pending_contact = std::rc::Rc::new(std::cell::RefCell::new(
-        std::env::var("CC_WALLET_TEST_CONTACT")
-            .ok()
-            .filter(|s| !s.is_empty()),
-    ));
-    #[cfg(debug_assertions)]
-    let said_something = std::rc::Rc::new(std::cell::Cell::new(false));
-    #[cfg(debug_assertions)]
-    let pending_say = std::rc::Rc::new(std::cell::RefCell::new(
-        std::env::var("CC_WALLET_TEST_CHAT_SAY")
-            .ok()
-            .filter(|s| !s.is_empty()),
-    ));
+    let chat_hooks = std::rc::Rc::new(std::cell::RefCell::new(ChatHooks::from_env()));
     #[cfg(debug_assertions)]
     let pending_swap_drive = std::rc::Rc::new(std::cell::RefCell::new(SwapDrive::from_env()));
     #[cfg(debug_assertions)]
@@ -524,10 +543,8 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
         let pending_scan = pending_scan.clone();
         #[cfg(debug_assertions)]
         let pending_trace = pending_trace.clone();
-        let pending_chat = pending_chat.clone();
-        let pending_contact = pending_contact.clone();
-        let pending_say = pending_say.clone();
-        let said_something = said_something.clone();
+        #[cfg(debug_assertions)]
+        let chat_hooks = chat_hooks.clone();
         #[cfg(debug_assertions)]
         let pending_swap_drive = pending_swap_drive.clone();
         #[cfg(debug_assertions)]
@@ -582,7 +599,7 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
                     // "Name=address", so the contact-named side of a
                     // conversation header can be photographed too.
                     if c.state().phase == cc_wallet_app::AppPhase::Unlocked
-                        && let Some(entry) = pending_contact.borrow_mut().take()
+                        && let Some(entry) = chat_hooks.borrow_mut().contact.take()
                         && let Some((name, address)) = entry.split_once('=')
                     {
                         c.handle_command(AppCommand::SaveContact {
@@ -594,16 +611,16 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
                     }
                     if c.state().phase == cc_wallet_app::AppPhase::Unlocked
                         && !c.state().activity.is_empty()
-                        && let Some(peer) = pending_chat.borrow_mut().take()
+                        && let Some(peer) = chat_hooks.borrow_mut().open.take()
                     {
                         c.handle_command(AppCommand::OpenChat(peer));
                     }
                     if c.state().chat.open
                         && c.state().wallet.is_some()
                         && !c.state().chat.sending
-                        && let Some(text) = pending_say.borrow_mut().take()
+                        && let Some(text) = chat_hooks.borrow_mut().say.take()
                     {
-                        said_something.set(true);
+                        chat_hooks.borrow_mut().said = true;
                         c.handle_command(AppCommand::SetChatDraft(text));
                         c.handle_command(AppCommand::SendChatMessage);
                     }
@@ -611,10 +628,10 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
                     // so the harness has to sign it the way a person would.
                     if c.state().auth.open
                         && c.state().auth.purpose == cc_wallet_app::AuthPurpose::Send
-                        && said_something.get()
+                        && chat_hooks.borrow().said
                         && let Ok(pw) = std::env::var("CC_WALLET_TEST_PASSWORD")
                     {
-                        said_something.set(false);
+                        chat_hooks.borrow_mut().said = false;
                         c.handle_command(AppCommand::AuthSubmit {
                             pw: Password::new(pw),
                             pw2: Password::new(String::new()),
