@@ -686,16 +686,36 @@ fn activity_row(
     }
 }
 
-/// One line of a conversation, ready to draw.
-pub(super) fn chat_line_row(line: &cc_wallet_app::ChatLine) -> ChatLineRow {
-    ChatLineRow {
-        outgoing: line.outgoing,
-        time: fmt_time(line.time_unix).into(),
-        text: line.text.clone().into(),
-        sealed: line.sealed,
-        locked: line.locked,
-        pending: line.pending,
-    }
+/// A conversation, ready to draw, with each day named once.
+///
+/// A bubble carries a time and nothing else, which reads fine until the thread
+/// spans more than one day and yesterday's answer looks like this morning's.
+/// The activity list already names its days; a conversation is the same history
+/// and names them the same way.
+pub(super) fn chat_line_rows(lines: &[cc_wallet_app::ChatLine], now: u64) -> Vec<ChatLineRow> {
+    let today_bucket = day_bucket(now);
+    let mut last_bucket: Option<i64> = None;
+    lines
+        .iter()
+        .map(|line| {
+            let bucket = day_bucket(line.time_unix);
+            let day = if last_bucket == Some(bucket) {
+                String::new()
+            } else {
+                last_bucket = Some(bucket);
+                group_label(bucket, today_bucket)
+            };
+            ChatLineRow {
+                outgoing: line.outgoing,
+                time: fmt_time(line.time_unix).into(),
+                day: day.into(),
+                text: line.text.clone().into(),
+                sealed: line.sealed,
+                locked: line.locked,
+                pending: line.pending,
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -909,6 +929,38 @@ mod activity_group_tests {
                 .num_days_from_ce() as i64;
             assert_eq!(day_bucket(unix), expected);
         }
+    }
+
+    #[test]
+    fn a_conversation_names_each_day_once_and_only_at_its_first_line() {
+        let day = 86_400u64;
+        let now = 10 * day + 4_000;
+        let line = |time_unix: u64| cc_wallet_app::ChatLine {
+            outgoing: false,
+            time_unix,
+            lt: time_unix,
+            text: "said".to_owned(),
+            sealed: false,
+            locked: false,
+            pending: false,
+        };
+        let rows = super::chat_line_rows(
+            &[
+                line(8 * day + 100),
+                line(8 * day + 200),
+                line(9 * day + 100),
+                line(10 * day + 100),
+            ],
+            now,
+        );
+
+        assert_eq!(rows[0].day, "JAN 9, 1970");
+        assert_eq!(
+            rows[1].day, "",
+            "a second message the same day says nothing"
+        );
+        assert_eq!(rows[2].day, "YESTERDAY");
+        assert_eq!(rows[3].day, "TODAY");
     }
 
     #[test]

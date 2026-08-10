@@ -301,12 +301,9 @@ impl AppController {
                     self.advance_chat_send();
                 }
             }
-            AppEvent::ChatPeerKeyLoaded {
-                generation,
-                seq,
-                peer,
-                key,
-            } => self.apply_chat_peer_key(generation, seq, peer, key),
+            AppEvent::ChatPeerKeyLoaded { seq, peer, key } => {
+                self.apply_chat_peer_key(seq, peer, key)
+            }
             AppEvent::ValidatorClockLoaded {
                 generation,
                 seq,

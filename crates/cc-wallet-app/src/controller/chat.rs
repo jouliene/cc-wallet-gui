@@ -137,7 +137,6 @@ impl AppController {
         self.session.chat_peer_key = None;
         self.chat_key_seq = self.chat_key_seq.wrapping_add(1);
         let seq = self.chat_key_seq;
-        let generation = self.subscription_generation;
         let peer = self.state.chat.peer.clone();
         let Ok(inputs) = self.endpoint_address_inputs() else {
             return;
@@ -154,7 +153,6 @@ impl AppController {
             .ok()
             .and_then(Result::ok);
             let _ = tx.send(crate::event::AppEvent::ChatPeerKeyLoaded {
-                generation,
                 seq,
                 peer,
                 key: report.and_then(|report| report.encrypt_key),
@@ -162,17 +160,15 @@ impl AppController {
         });
     }
 
-    pub(super) fn apply_chat_peer_key(
-        &mut self,
-        generation: u64,
-        seq: u64,
-        peer: String,
-        key: Option<[u8; 32]>,
-    ) {
-        if generation != self.subscription_generation
-            || seq != self.chat_key_seq
-            || self.state.chat.peer != peer
-        {
+    /// Takes the answer, or the absence of one.
+    ///
+    /// Deliberately not gated on the subscription generation: which peer was
+    /// asked about is settled by the sequence and the address, and the wallet
+    /// resubscribing in the meantime says nothing about whether this answer is
+    /// still the right one. Gating on it left the conversation reading
+    /// "opening…" forever whenever the two raced.
+    pub(super) fn apply_chat_peer_key(&mut self, seq: u64, peer: String, key: Option<[u8; 32]>) {
+        if seq != self.chat_key_seq || self.state.chat.peer != peer {
             return;
         }
         self.state.chat.loading = false;

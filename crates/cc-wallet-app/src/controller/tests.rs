@@ -12513,3 +12513,56 @@ fn a_reply_to_an_account_that_cannot_receive_says_so_instead_of_hanging() {
     );
     cleanup(&dir);
 }
+
+/// The peer's key is asked for once when a conversation opens, and the wallet
+/// resubscribing while the question is in flight used to throw the answer away
+/// — leaving the header reading "opening…" for as long as the thread was open.
+#[test]
+fn the_peer_key_answer_survives_the_wallet_resubscribing_under_it() {
+    let dir = temp_dir("chat-key-race");
+    let fake = FakeChain::default();
+    let mut c = unlocked_with_fake(&dir, &fake);
+    c.state_mut().wallet = Some(timed_wallet("0:me"));
+    c.state_mut().activity = vec![spoken(1, false, SEND_DEST, plain("hello"))];
+    c.handle_command(AppCommand::OpenChat(SEND_DEST.to_owned()));
+    assert!(c.state().chat.loading, "the key was asked for");
+
+    c.subscription_generation = c.subscription_generation.wrapping_add(3);
+    c.apply_event(AppEvent::ChatPeerKeyLoaded {
+        seq: c.chat_key_seq,
+        peer: SEND_DEST.to_owned(),
+        key: Some([9u8; 32]),
+    });
+
+    assert!(!c.state().chat.loading, "the answer arrived and was taken");
+    assert!(c.state().chat.peer_key_known);
+    cleanup(&dir);
+}
+
+#[test]
+fn an_answer_about_another_conversation_is_ignored() {
+    let dir = temp_dir("chat-key-stale");
+    let fake = FakeChain::default();
+    let mut c = unlocked_with_fake(&dir, &fake);
+    c.state_mut().wallet = Some(timed_wallet("0:me"));
+    c.state_mut().activity = vec![spoken(1, false, SEND_DEST, plain("hello"))];
+    c.handle_command(AppCommand::OpenChat(SEND_DEST.to_owned()));
+
+    c.apply_event(AppEvent::ChatPeerKeyLoaded {
+        seq: c.chat_key_seq.wrapping_sub(1),
+        peer: SEND_DEST.to_owned(),
+        key: Some([9u8; 32]),
+    });
+    assert!(!c.state().chat.peer_key_known, "a superseded question");
+
+    c.apply_event(AppEvent::ChatPeerKeyLoaded {
+        seq: c.chat_key_seq,
+        peer: "0:2222222222222222222222222222222222222222222222222222222222222222".to_owned(),
+        key: Some([9u8; 32]),
+    });
+    assert!(
+        !c.state().chat.peer_key_known,
+        "another peer's key is not ours"
+    );
+    cleanup(&dir);
+}

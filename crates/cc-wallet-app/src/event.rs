@@ -66,7 +66,6 @@ pub enum AppEvent {
         report: Option<DestinationReport>,
     },
     ChatPeerKeyLoaded {
-        generation: u64,
         seq: u64,
         peer: String,
         key: Option<[u8; 32]>,

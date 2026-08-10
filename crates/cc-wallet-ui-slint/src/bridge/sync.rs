@@ -16,8 +16,8 @@ use super::render::{
     short_addr, today_bucket, token_amount, token_units, trace_edges, trace_parties, units_exact,
 };
 use super::{
-    AccountView, ActivityFilters, ActivityRow, AppWindow, AssetRow, ChatLineRow, ContactRow,
-    CurrencyRow, FieldRow, NetworkStatsView, RiskOverlapRow, StorageRow, TokenAmount, TraceEdgeRow,
+    AccountView, ActivityFilters, ActivityRow, AppWindow, AssetRow, ContactRow, CurrencyRow,
+    FieldRow, NetworkStatsView, RiskOverlapRow, StorageRow, TokenAmount, TraceEdgeRow,
     TracePartyCol, UiCache,
 };
 
@@ -705,12 +705,7 @@ pub(super) fn sync_ui(ui: &AppWindow, state: &AppState, form_locked: bool, cache
     ui.set_chat_busy(state.chat.sending || state.sending);
     ui.set_chat_can_send(state.chat.can_send() && !state.sending);
     if state.chat.open {
-        let lines: Vec<ChatLineRow> = state
-            .chat
-            .lines
-            .iter()
-            .map(crate::bridge::render::chat_line_row)
-            .collect();
+        let lines = crate::bridge::render::chat_line_rows(&state.chat.lines, now);
         ui.set_chat_lines(ModelRc::from(Rc::new(VecModel::from(lines))));
     }
 

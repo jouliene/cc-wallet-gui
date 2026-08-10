@@ -726,6 +726,10 @@ component ConversationComposer inherits Rectangle {
     callback set_encrypt(bool);
     callback send();
     height: row.preferred-height;
+    // Its own ground, not a continuation of the thread. A hairline alone left
+    // the last bubble sitting on the field, and buying the separation with
+    // empty space would spend height the conversation has none of.
+    background: Palette.surface_sunken;
     Rectangle {
         y: 0;
         height: 1px;
@@ -734,11 +738,14 @@ component ConversationComposer inherits Rectangle {
     row := VerticalLayout {
         padding-left: Space.s_16;
         padding-right: Space.s_16;
-        padding-top: Space.s_10;
-        padding-bottom: Space.s_4;
-        spacing: Space.s_6;
+        padding-top: Space.s_8;
+        padding-bottom: Space.s_8;
+        spacing: Space.s_4;
         HorizontalLayout {
-            height: Sizes.label_row_h;
+            // Shorter than a form's label row: this one carries a toggle and a
+            // counter, not a heading, and the conversation above it has no
+            // room to spare.
+            height: Sizes.control_dense;
             spacing: Space.s_8;
             alignment: start;
             Rectangle {
@@ -834,7 +841,31 @@ component ConversationView inherits Rectangle {
         thread := VerticalLayout {
             padding-top: Space.s_8;
             padding-bottom: Space.s_8;
-            for line in root.lines: ConversationBubble { line: line; }
+            for line in root.lines: VerticalLayout {
+                if line.day != "": Rectangle {
+                    height: 26px;
+                    Rectangle {
+                        x: Space.s_16;
+                        width: parent.width - 2 * Space.s_16;
+                        height: 20px;
+                        y: (parent.height - self.height) / 2;
+                        background: Palette.surface_overlay;
+                        border-radius: Radii.sm;
+                    }
+                    Text {
+                        width: 100%;
+                        text: line.day;
+                        color: Palette.text_quiet;
+                        font-family: Fonts.ui;
+                        font-weight: Fonts.bold;
+                        font-size: Fonts.micro;
+                        letter-spacing: Fonts.tracking_caps;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                ConversationBubble { line: line; }
+            }
         }
     }
     if root.error != "": Rectangle {
