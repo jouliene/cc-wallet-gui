@@ -42,10 +42,17 @@ pub const COMMENT_CELLS: usize =
 pub const MAX_ENCRYPTED_COMMENT_BYTES: usize = MAX_COMMENT_BYTES - 57 - 16;
 
 pub fn truncate_comment(text: &str) -> &str {
-    if text.len() <= MAX_COMMENT_BYTES {
+    truncate_comment_to(text, MAX_COMMENT_BYTES)
+}
+
+/// Cut to what will actually fit, on a character boundary. Sealing spends part
+/// of the budget, so the limit is not one number — and a comment allowed past
+/// it is not a longer comment, it is a transfer that cannot be built.
+pub fn truncate_comment_to(text: &str, limit: usize) -> &str {
+    if text.len() <= limit {
         return text;
     }
-    let mut end = MAX_COMMENT_BYTES;
+    let mut end = limit;
     while end > 0 && !text.is_char_boundary(end) {
         end -= 1;
     }

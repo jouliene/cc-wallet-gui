@@ -872,6 +872,16 @@ impl AppState {
         self.recipient_encrypt_key
     }
 
+    /// What a comment may run to right now. Sealing spends part of the budget,
+    /// so the answer changes with the toggle and the field has to follow it.
+    pub fn comment_limit(&self) -> usize {
+        if self.send_form.encrypt {
+            cc_wallet_domain::MAX_ENCRYPTED_COMMENT_BYTES
+        } else {
+            cc_wallet_domain::MAX_COMMENT_BYTES
+        }
+    }
+
     /// Whether this comment could be encrypted at all: the recipient's account
     /// has to be there, and it has to publish the key to encrypt to.
     pub fn encrypt_available(&self) -> bool {
@@ -983,7 +993,15 @@ impl AppState {
             && !self.max_refining
             && self.recipient_valid()
             && self.amount_positive()
+            && self.comment_fits()
             && self.can_afford_send()
+    }
+
+    /// The field is cut to the budget as it is typed, so this should never be
+    /// false. It is here because the alternative to catching it is a transfer
+    /// the builder refuses after the user has already pressed Send.
+    pub fn comment_fits(&self) -> bool {
+        self.send_form.comment.len() <= self.comment_limit()
     }
 
     pub fn send_ready(&self) -> bool {

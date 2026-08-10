@@ -21,7 +21,7 @@ use cc_wallet_chain::{AccountTrace, ChainService, TychoWalletService};
 use cc_wallet_domain::{
     ActivityEvent, Digest32, EndpointAddressInputs, EndpointTransactionEvidence, JournalEnvelope,
     NetworkRegistry, RecordId, Reservation, RiskGrantConsumption, SeedPhrase, SendAuthorization,
-    SendRequest, WalletProfile, truncate_comment,
+    SendRequest, WalletProfile, truncate_comment_to,
 };
 use cc_wallet_storage::{
     DEFAULT_WALLET_NAME, InstanceLock, LockOutcome, SelectedCandidate, StartupCwd, VaultStore,
@@ -710,13 +710,20 @@ impl AppController {
             }
             AppCommand::SetSendComment(comment) => {
                 self.state.clear_send_form_error();
-                self.state.send_form.comment = truncate_comment(&comment).to_owned();
+                let limit = self.state.comment_limit();
+                self.state.send_form.comment = truncate_comment_to(&comment, limit).to_owned();
                 self.schedule_fee_reestimate();
             }
             AppCommand::SetEncryptComment(on) => {
                 // A longer payload is a different fee, so the estimate is owed
                 // a fresh answer for the same reason a changed amount is.
                 self.state.send_form.encrypt = on && self.state.encrypt_available();
+                // Turning it on shrinks the budget under a comment already
+                // written, and a comment over budget is a transfer that cannot
+                // be built rather than a longer note.
+                let limit = self.state.comment_limit();
+                let kept = truncate_comment_to(&self.state.send_form.comment, limit).to_owned();
+                self.state.send_form.comment = kept;
                 self.state.clear_send_form_error();
                 self.schedule_fee_reestimate();
             }

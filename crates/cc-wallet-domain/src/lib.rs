@@ -55,7 +55,7 @@ pub use risk::{RiskGrant, RiskGrantConsumption};
 pub use send::{
     COMMENT_CELL_BYTES, COMMENT_CELLS, COMMENT_ROOT_BYTES, MAX_COMMENT_BYTES,
     MAX_ENCRYPTED_COMMENT_BYTES, SendAuthorization, SendForm, SendRequest, SendToken,
-    truncate_comment,
+    truncate_comment, truncate_comment_to,
 };
 pub use storage::{
     MAX_RECORD_DATA_BYTES, MAX_RECORD_TITLE_BYTES, STORAGE_KEY_CONTEXT, StorageError, StorageOp,

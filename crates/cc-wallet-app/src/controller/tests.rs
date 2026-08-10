@@ -11695,6 +11695,45 @@ fn an_announcement_makes_a_settling_record_look_again_at_once() {
 }
 
 #[test]
+fn a_comment_is_cut_to_the_budget_that_is_actually_in_force() {
+    let dir = temp_dir("comment-budget");
+    let mut c = unlocked(&dir, WalletProfile::default());
+
+    let long = "x".repeat(cc_wallet_domain::MAX_COMMENT_BYTES + 200);
+    c.handle_command(AppCommand::SetSendComment(long.clone()));
+    assert_eq!(
+        c.state().send_form.comment.len(),
+        cc_wallet_domain::MAX_COMMENT_BYTES,
+        "pasting more than fits leaves what fits, not a transfer that cannot be built"
+    );
+
+    // Sealing spends part of the budget, so turning it on shortens what is
+    // already there rather than leaving it over the line.
+    c.state_mut().recipient_encrypt_key = Some([4u8; 32]);
+    c.state_mut().send_form.destination = SEND_DEST.to_owned();
+    c.handle_command(AppCommand::SetEncryptComment(true));
+    assert_eq!(
+        c.state().send_form.comment.len(),
+        cc_wallet_domain::MAX_ENCRYPTED_COMMENT_BYTES
+    );
+    assert!(c.state().comment_fits());
+
+    c.handle_command(AppCommand::SetSendComment(long));
+    assert_eq!(
+        c.state().send_form.comment.len(),
+        cc_wallet_domain::MAX_ENCRYPTED_COMMENT_BYTES,
+        "and the shorter budget is the one the field is cut to while it is in force"
+    );
+
+    c.handle_command(AppCommand::SetEncryptComment(false));
+    assert!(
+        c.state().comment_fits(),
+        "turning it off leaves what was kept, which fits the larger budget too"
+    );
+    cleanup(&dir);
+}
+
+#[test]
 fn a_row_the_subscription_never_announced_reports_no_finality() {
     let dir = temp_dir("finality-needs-a-subscription");
     let chain = FakeChain::default();
