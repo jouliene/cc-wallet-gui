@@ -34,6 +34,9 @@ export global Theme {
     // checkbox plus "Send encrypted" needs, and what puts the comment field's
     // right edge on the token selector's.
     out property <length> send_btn_w: 124px;
+    /// Two lines of a message, which is where a composer stops growing and
+    /// starts scrolling.
+    out property <length> chat_input_h: 58px;
     // What the swap form needs before it starts clipping: a token selector, a
     // MAX chip and enough room left to read the amount being typed.
     out property <length> swap_form_min_w: root.token_selector_w

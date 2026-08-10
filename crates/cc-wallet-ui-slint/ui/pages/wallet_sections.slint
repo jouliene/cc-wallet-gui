@@ -559,7 +559,9 @@ export component SendCard inherits Card {
 /// stays one card and the page does not grow a second title bar.
 component ConversationHeader inherits Rectangle {
     in property <string> peer;
-    in property <string> peer_label;
+    in property <string> peer_name;
+    in property <string> peer_mark;
+    in property <color> peer_tone;
     in property <bool> loading;
     callback back();
     height: row.preferred-height;
@@ -594,13 +596,30 @@ component ConversationHeader inherits Rectangle {
             alignment: center;
             spacing: Space.s_2;
             horizontal-stretch: 1;
-            Text {
-                text: "Conversation" + (root.peer_label == "" ? "" : " · " + root.peer_label);
-                color: Palette.text_primary;
-                font-family: Fonts.ui;
-                font-weight: Fonts.semibold;
-                font-size: Fonts.title;
-                overflow: elide;
+            HorizontalLayout {
+                spacing: Space.s_8;
+                alignment: start;
+                Text {
+                    text: "Conversation";
+                    color: Palette.text_primary;
+                    font-family: Fonts.ui;
+                    font-weight: Fonts.semibold;
+                    font-size: Fonts.title;
+                    vertical-alignment: center;
+                }
+                if root.peer_name != "": VerticalLayout {
+                    alignment: center;
+                    Avatar { initial: root.peer_mark; tint: root.peer_tone; size: 20px; }
+                }
+                if root.peer_name != "": Text {
+                    text: root.peer_name;
+                    color: Palette.text_primary;
+                    font-family: Fonts.ui;
+                    font-weight: Fonts.semibold;
+                    font-size: Fonts.title;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
             }
             HorizontalLayout {
                 spacing: Space.s_6;
@@ -804,18 +823,27 @@ component ConversationComposer inherits Rectangle {
         }
         HorizontalLayout {
             spacing: Space.s_10;
-            Field {
+            composer_field := Field {
                 horizontal-stretch: 1;
+                // A conversation is opened to say something, so the cursor is
+                // already where the saying happens.
+                init => { self.focus(); }
                 text <=> root.draft;
                 enabled: !root.busy;
                 placeholder: "Write a message";
-                height_: Theme.field_h;
+                // Two lines' worth, and it scrolls past that: enough to see
+                // that the line broke without the composer taking the room the
+                // conversation needs.
+                height_: Theme.chat_input_h;
                 font_size: Fonts.body;
+                multiline: true;
+                enter_accepts: true;
                 edited(t) => { root.edited(t); }
+                accepted => { root.send(); }
             }
             VerticalLayout {
                 width: Theme.send_btn_w;
-                alignment: center;
+                alignment: end;
                 PrimaryButton {
                     label: root.busy ? "Sending" : "Send";
                     enabled: root.can_send && !root.busy;
@@ -895,7 +923,9 @@ export component ActivityCard inherits Card {
     in property <[ActivityRow]> activity;
     in property <bool> chat_open;
     in property <string> chat_peer;
-    in property <string> chat_peer_label;
+    in property <string> chat_peer_name;
+    in property <string> chat_peer_mark;
+    in property <color> chat_peer_tone;
     in property <[ChatLineRow]> chat_lines;
     in property <bool> chat_loading;
     in property <string> chat_error;
@@ -1151,7 +1181,9 @@ export component ActivityCard inherits Card {
             padding-bottom: Space.s_10;
             ConversationHeader {
                 peer: root.chat_peer;
-                peer_label: root.chat_peer_label;
+                peer_name: root.chat_peer_name;
+                peer_mark: root.chat_peer_mark;
+                peer_tone: root.chat_peer_tone;
                 loading: root.chat_loading;
                 back => { root.close_chat(); }
             }

@@ -82,7 +82,9 @@ export component AppWindow inherits Window {
     in property <[ActivityRow]> activity: [];
     in property <bool> chat_open: false;
     in property <string> chat_peer: "";
-    in property <string> chat_peer_label: "";
+    in property <string> chat_peer_name: "";
+    in property <string> chat_peer_mark: "";
+    in property <color> chat_peer_tone;
     in property <[ChatLineRow]> chat_lines: [];
     in property <bool> chat_loading: false;
     in property <string> chat_error: "";
@@ -448,7 +450,9 @@ export component AppWindow inherits Window {
                 activity: root.activity;
                 chat_open: root.chat_open;
                 chat_peer: root.chat_peer;
-                chat_peer_label: root.chat_peer_label;
+                chat_peer_name: root.chat_peer_name;
+                chat_peer_mark: root.chat_peer_mark;
+                chat_peer_tone: root.chat_peer_tone;
                 chat_lines: root.chat_lines;
                 chat_loading: root.chat_loading;
                 chat_draft <=> root.chat_draft;

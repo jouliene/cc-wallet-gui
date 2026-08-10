@@ -837,6 +837,10 @@ export component Field inherits Rectangle {
     in property <bool> show_focus_border: true;
     callback edited(string);
     callback accepted();
+    /// Whether a bare Return means "done" even in a multiline field. A chat
+    /// composer wants Return to send and Shift+Return to break the line; a note
+    /// field wants Return to break the line and nothing else.
+    in property <bool> enter_accepts: false;
     callback paste_requested();
     callback escape_pressed();
     in property <bool> handles_escape: false;
@@ -958,6 +962,12 @@ export component Field inherits Rectangle {
         }
         accepted => { root.accepted(); }
         key-pressed(event) => {
+            // Ahead of the built-in behaviour, which is the only place a
+            // newline can be stopped before it is inserted.
+            if (root.enter_accepts && event.text == Key.Return && !event.modifiers.shift) {
+                root.accepted();
+                return accept;
+            }
             if (event.text == Key.Escape) {
                 if (root.handles_escape) {
                     root.escape_pressed();

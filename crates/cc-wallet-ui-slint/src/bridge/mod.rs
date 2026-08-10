@@ -484,6 +484,12 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
     // What to say once it is open, for the same reason: the composer cannot be
     // reached by a harness that has no way to click or type into it.
     #[cfg(debug_assertions)]
+    let pending_contact = std::rc::Rc::new(std::cell::RefCell::new(
+        std::env::var("CC_WALLET_TEST_CONTACT")
+            .ok()
+            .filter(|s| !s.is_empty()),
+    ));
+    #[cfg(debug_assertions)]
     let said_something = std::rc::Rc::new(std::cell::Cell::new(false));
     #[cfg(debug_assertions)]
     let pending_say = std::rc::Rc::new(std::cell::RefCell::new(
@@ -519,6 +525,7 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
         #[cfg(debug_assertions)]
         let pending_trace = pending_trace.clone();
         let pending_chat = pending_chat.clone();
+        let pending_contact = pending_contact.clone();
         let pending_say = pending_say.clone();
         let said_something = said_something.clone();
         #[cfg(debug_assertions)]
@@ -571,6 +578,19 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
                             }
                             None => c.handle_command(AppCommand::InspectAccount(address)),
                         }
+                    }
+                    // "Name=address", so the contact-named side of a
+                    // conversation header can be photographed too.
+                    if c.state().phase == cc_wallet_app::AppPhase::Unlocked
+                        && let Some(entry) = pending_contact.borrow_mut().take()
+                        && let Some((name, address)) = entry.split_once('=')
+                    {
+                        c.handle_command(AppCommand::SaveContact {
+                            index: None,
+                            name: name.to_owned(),
+                            address: address.to_owned(),
+                            tag: String::new(),
+                        });
                     }
                     if c.state().phase == cc_wallet_app::AppPhase::Unlocked
                         && !c.state().activity.is_empty()

@@ -690,8 +690,31 @@ pub(super) fn sync_ui(ui: &AppWindow, state: &AppState, form_locked: bool, cache
 
     ui.set_chat_open(state.chat.open);
     ui.set_chat_peer(state.chat.peer.clone().into());
-    ui.set_chat_peer_label(
-        crate::bridge::render::party_pill_label(&state.chat.peer, &state.contacts).into(),
+    // A conversation with someone in the address book is named for them, with
+    // the same mark they carry on the Contacts page. With anyone else there is
+    // nothing to add: the address is written out directly underneath, and
+    // saying it twice, once abbreviated, tells nobody anything.
+    let peer_contact = state
+        .contacts
+        .iter()
+        .find(|entry| entry.address == state.chat.peer);
+    ui.set_chat_peer_name(
+        peer_contact
+            .map(|entry| entry.name.clone())
+            .unwrap_or_default()
+            .into(),
+    );
+    ui.set_chat_peer_mark(
+        peer_contact
+            .map(|entry| crate::bridge::render::contact_row(&entry.name, &entry.address, ""))
+            .map(|row| row.initial)
+            .unwrap_or_default(),
+    );
+    ui.set_chat_peer_tone(
+        peer_contact
+            .map(|entry| crate::bridge::render::contact_row(&entry.name, &entry.address, ""))
+            .map(|row| row.color)
+            .unwrap_or(slint::Color::from_argb_u8(0, 0, 0, 0)),
     );
     ui.set_chat_loading(state.chat.loading);
     ui.set_chat_error(state.chat.error.clone().into());
