@@ -888,24 +888,25 @@ export component Field inherits Rectangle {
         }
     }
 
-    // The band of whole lines the field actually shows. Without it the text is
-    // clipped by the box instead of by the band, and a second line appears in a
-    // one-line field with its top sliced off.
+    // The area the text is actually allowed to occupy — inside the padding, and
+    // for a multiline field a whole number of lines. Without it the text is
+    // clipped by the box instead: a scrolled line runs under the left border,
+    // and a second line appears in a one-line field with its top sliced off.
     band := Rectangle {
-        x: 0px;
+        x: root.pad_left;
         y: root.pad_v;
-        width: parent.width;
+        width: root.inner_w;
         height: root.multiline ? root.inner_h : parent.height;
-        clip: root.multiline;
+        clip: true;
 
     input := TextInput {
         text <=> root.text;
         enabled: root.enabled;
         read-only: root.read_only;
         input-type: root.input_type;
-        x: root.pad_left + (root.multiline
+        x: root.multiline
             ? 0px
-            : min(0px, max(root.inner_w - self.width - self.text-cursor-width, root.caret_x)));
+            : min(0px, max(root.inner_w - self.width - self.text-cursor-width, root.caret_x));
         y: root.multiline
             ? min(0px, max(root.inner_h - self.height, root.caret_y))
             : 0px;
@@ -978,11 +979,13 @@ export component Field inherits Rectangle {
             return reject;
         }
     }
-    }
 
+    // The heavier integer part is drawn over the same glyphs, so it has to
+    // travel with them: inside the band, at the input's own offset. Left
+    // outside it, it stayed put while the text scrolled and printed twice.
     if root.money_int != "": Text {
         text: root.money_int;
-        x: root.pad_left;
+        x: input.x;
         height: 100%;
         color: Palette.text_primary;
         font-family: root.font_family;
@@ -991,6 +994,7 @@ export component Field inherits Rectangle {
         horizontal-alignment: root.alignment;
         vertical-alignment: center;
         accessible-role: none;
+    }
     }
 
     Text {
