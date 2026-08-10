@@ -615,20 +615,25 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
                     {
                         c.handle_command(AppCommand::OpenChat(peer));
                     }
-                    if c.state().chat.open
-                        && c.state().wallet.is_some()
-                        && !c.state().chat.sending
-                        && let Some(text) = chat_hooks.borrow_mut().say.take()
+                    // These hooks all live in one cell now, so each one reads
+                    // what it needs out of it and lets go before doing anything
+                    // — a borrow held across the body panicked the moment the
+                    // body wanted the cell again.
+                    if c.state().chat.open && c.state().wallet.is_some() && !c.state().chat.sending
                     {
-                        chat_hooks.borrow_mut().said = true;
-                        c.handle_command(AppCommand::SetChatDraft(text));
-                        c.handle_command(AppCommand::SendChatMessage);
+                        let say = chat_hooks.borrow_mut().say.take();
+                        if let Some(text) = say {
+                            chat_hooks.borrow_mut().said = true;
+                            c.handle_command(AppCommand::SetChatDraft(text));
+                            c.handle_command(AppCommand::SendChatMessage);
+                        }
                     }
                     // The reply stops at the signing dialog like any transfer,
                     // so the harness has to sign it the way a person would.
-                    if c.state().auth.open
+                    let said = chat_hooks.borrow().said;
+                    if said
+                        && c.state().auth.open
                         && c.state().auth.purpose == cc_wallet_app::AuthPurpose::Send
-                        && chat_hooks.borrow().said
                         && let Ok(pw) = std::env::var("CC_WALLET_TEST_PASSWORD")
                     {
                         chat_hooks.borrow_mut().said = false;

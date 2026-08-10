@@ -774,6 +774,18 @@ component ConversationComposer inherits Rectangle {
     property <length> inset: Space.s_16;
     property <length> gap: Space.s_10;
 
+    // Until the other end's key is in, there is nothing to type into and the
+    // field is disabled — and a disabled field cannot take the focus the
+    // conversation gave it on the way in. That focus does not stay nowhere: it
+    // lands on the first thing in the window, which is the Wallet tab, and
+    // draws a ring there that the reader never asked for. So the field asks
+    // again the moment it can actually hold it.
+    changed can_encrypt => {
+        if (root.can_encrypt && !root.busy) {
+            composer_field.focus();
+        }
+    }
+
     height: row.preferred-height;
     // Its own ground, not a continuation of the thread. A hairline alone left
     // the last bubble sitting on the field, and buying the separation with

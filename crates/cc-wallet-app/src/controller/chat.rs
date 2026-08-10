@@ -3,6 +3,19 @@ use cc_wallet_domain::{
     ActivityDirection, ActivityMessage, canonicalize_recipient, truncate_comment_to,
 };
 
+/// One message in the open conversation, with what decides where it sits.
+struct Said {
+    /// A message of ours the chain has not handed back yet. It is the newest
+    /// thing in the thread by definition, and it carries an ordering number we
+    /// invented, so it sorts by this first and by that number second.
+    awaiting_chain: bool,
+    lt: u64,
+    time_unix: u64,
+    outgoing: bool,
+    pending: bool,
+    message: ActivityMessage,
+}
+
 use super::AppController;
 use crate::state::{ChatLine, ChatUi};
 
@@ -41,7 +54,7 @@ impl AppController {
         }
         let peer = self.state.chat.peer.clone();
 
-        let mut carried: Vec<(u64, u64, bool, bool, ActivityMessage)> = Vec::new();
+        let mut carried: Vec<Said> = Vec::new();
         for event in &self.state.activity {
             let Some(message) = event.message.as_ref() else {
                 continue;
@@ -49,21 +62,26 @@ impl AppController {
             if event.counterparty != peer {
                 continue;
             }
-            carried.push((
-                event.lt,
-                event.time_unix,
-                event.direction == ActivityDirection::Out,
-                event.pending,
-                message.clone(),
-            ));
+            carried.push(Said {
+                awaiting_chain: event.tx_hash.is_none(),
+                lt: event.lt,
+                time_unix: event.time_unix,
+                outgoing: event.direction == ActivityDirection::Out,
+                pending: event.pending,
+                message: message.clone(),
+            });
         }
-        carried.sort_by_key(|(lt, ..)| *lt);
+        // Ours-not-yet-on-chain last: their ordering numbers are ones we made
+        // up, tiny beside a real one, and sorting on those alone put a message
+        // just sent at the top of the thread until the chain handed it back and
+        // it jumped to the bottom.
+        carried.sort_by_key(|said| (said.awaiting_chain, said.lt));
 
         let sealed: Vec<SealedComment<'_>> = carried
             .iter()
-            .filter_map(|(_, _, outgoing, _, message)| match message {
+            .filter_map(|said| match &said.message {
                 ActivityMessage::Sealed { sender_key, blob } => Some(SealedComment {
-                    outgoing: *outgoing,
+                    outgoing: said.outgoing,
                     sender_key: sender_key.as_bytes(),
                     blob,
                 }),
@@ -76,31 +94,29 @@ impl AppController {
 
         self.state.chat.lines = carried
             .iter()
-            .map(
-                |(lt, time_unix, outgoing, pending, message)| match message {
-                    ActivityMessage::Plain { text } => ChatLine {
-                        outgoing: *outgoing,
-                        time_unix: *time_unix,
-                        lt: *lt,
-                        text: text.clone(),
-                        sealed: false,
-                        locked: false,
-                        pending: *pending,
-                    },
-                    ActivityMessage::Sealed { .. } => {
-                        let text = opened.next().flatten();
-                        ChatLine {
-                            outgoing: *outgoing,
-                            time_unix: *time_unix,
-                            lt: *lt,
-                            locked: text.is_none(),
-                            text: text.unwrap_or_default(),
-                            sealed: true,
-                            pending: *pending,
-                        }
-                    }
+            .map(|said| match &said.message {
+                ActivityMessage::Plain { text } => ChatLine {
+                    outgoing: said.outgoing,
+                    time_unix: said.time_unix,
+                    lt: said.lt,
+                    text: text.clone(),
+                    sealed: false,
+                    locked: false,
+                    pending: said.pending,
                 },
-            )
+                ActivityMessage::Sealed { .. } => {
+                    let text = opened.next().flatten();
+                    ChatLine {
+                        outgoing: said.outgoing,
+                        time_unix: said.time_unix,
+                        lt: said.lt,
+                        locked: text.is_none(),
+                        text: text.unwrap_or_default(),
+                        sealed: true,
+                        pending: said.pending,
+                    }
+                }
+            })
             .collect();
     }
 

@@ -12512,6 +12512,51 @@ fn a_conversation_is_one_counterpartys_messages_oldest_first() {
 }
 
 #[test]
+fn a_message_just_sent_sits_at_the_end_of_the_thread_not_the_start() {
+    let dir = temp_dir("chat-order");
+    let fake = FakeChain::default();
+    let mut c = unlocked_with_fake(&dir, &fake);
+    c.state_mut().wallet = Some(timed_wallet("0:me"));
+
+    // What the chain has handed back, with a real ordering number.
+    c.state_mut().activity.push(ActivityEvent {
+        counterparty: SEND_DEST.to_owned(),
+        message: Some(ActivityMessage::Plain {
+            text: "said earlier".to_owned(),
+        }),
+        ..ActivityEvent::test_stub(9_000_000, 1_700_000_000)
+    });
+    // And what we have only just said: no transaction of its own yet, and an
+    // ordering number we invented, which is tiny beside a real one.
+    c.state_mut().activity.push(ActivityEvent {
+        counterparty: SEND_DEST.to_owned(),
+        tx_hash: None,
+        pending: true,
+        message: Some(ActivityMessage::Plain {
+            text: "just said".to_owned(),
+        }),
+        ..ActivityEvent::test_stub(1, 1_700_000_100)
+    });
+
+    c.handle_command(AppCommand::OpenChat(SEND_DEST.to_owned()));
+
+    let said: Vec<&str> = c
+        .state()
+        .chat
+        .lines
+        .iter()
+        .map(|line| line.text.as_str())
+        .collect();
+    assert_eq!(
+        said,
+        vec!["said earlier", "just said"],
+        "a message just sent belongs at the bottom of the thread, not above \
+         everything that was said before it"
+    );
+    cleanup(&dir);
+}
+
+#[test]
 fn a_sealed_message_that_will_not_open_is_locked_not_missing() {
     let dir = temp_dir("chat-locked");
     let fake = FakeChain::default();
