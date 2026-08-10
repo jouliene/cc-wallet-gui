@@ -12556,3 +12556,51 @@ fn an_answer_about_another_conversation_is_ignored() {
     );
     cleanup(&dir);
 }
+
+/// The signing dialog describes the transfer being signed. It used to read the
+/// send form instead, which for a reply written in a conversation held nothing
+/// at all — an empty amount, an unknown recipient, and a confirm button the
+/// gate would not let anyone press.
+#[test]
+fn the_signing_dialog_describes_a_reply_and_not_the_empty_form_behind_it() {
+    let dir = temp_dir("chat-dialog");
+    let fake = FakeChain::default();
+    let mut c = conversation_with(
+        &dir,
+        &fake,
+        DestinationReport {
+            status: DestinationAccountStatus::Active,
+            encrypt_key: Some([5u8; 32]),
+        },
+    );
+
+    c.handle_command(AppCommand::SetChatDraft("answering".to_owned()));
+    c.handle_command(AppCommand::SendChatMessage);
+
+    let shown = c
+        .state()
+        .pending_transfer
+        .as_ref()
+        .expect("the dialog has a transfer to describe");
+    assert_eq!(shown.destination(), SEND_DEST);
+    assert_eq!(
+        shown.value().native_units(),
+        Some(crate::state::CHAT_ATTACH_NANOS)
+    );
+    assert!(
+        c.state().pending_transfer_is_verified_chat_reply(),
+        "the conversation vouched for this recipient, so the gate must not ask the form"
+    );
+
+    assert!(
+        !c.refuse_unpermitted_send(),
+        "the gate at the signing step asks about the transfer, not about the form"
+    );
+
+    c.handle_command(AppCommand::AuthCancel);
+    assert!(
+        c.state().pending_transfer.is_none(),
+        "nothing is being signed, so nothing is described"
+    );
+    cleanup(&dir);
+}

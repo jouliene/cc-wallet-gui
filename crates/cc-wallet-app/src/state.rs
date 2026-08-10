@@ -419,6 +419,10 @@ pub struct AppState {
     pub swap: SwapUi,
     pub storage: StorageUi,
     pub chat: ChatUi,
+    /// The transfer a signing dialog is currently about. The dialog describes
+    /// what is being signed, which is not always what the send form holds — a
+    /// reply written in a conversation never goes near that form.
+    pub pending_transfer: Option<cc_wallet_domain::SendRequest>,
     pub records_reveal_deadline: Option<Deadline>,
 }
 
@@ -512,6 +516,7 @@ impl Default for AppState {
             swap: SwapUi::default(),
             storage: StorageUi::default(),
             chat: ChatUi::default(),
+            pending_transfer: None,
             records_reveal_deadline: None,
         }
     }
@@ -914,6 +919,26 @@ impl AppState {
     /// A reply is checked against this rather than against the send form: they
     /// are two screens with two recipients, and the one being sent to is the
     /// one that has to be permitted.
+    /// Whether the transfer now being signed is one the conversation vouched
+    /// for. The send form's opinion is about a different address.
+    pub fn pending_transfer_is_verified_chat_reply(&self) -> bool {
+        match (self.pending_transfer.as_ref(), self.verified_chat_peer()) {
+            (Some(request), Some(peer)) => request.destination() == peer,
+            _ => false,
+        }
+    }
+
+    /// Whether the recipient of the transfer now being signed may be sent to.
+    ///
+    /// Two screens can raise a signing dialog and each has its own recipient in
+    /// it, so the question has to be asked of the transfer rather than of the
+    /// form. Asked of the form, a reply the conversation had already verified
+    /// was refused at the last step by a screen that knew nothing about it.
+    pub fn signing_recipient_permitted(&self, risk_override: bool) -> bool {
+        self.pending_transfer_is_verified_chat_reply()
+            || self.recipient_send_permitted(risk_override)
+    }
+
     pub fn verified_chat_peer(&self) -> Option<&str> {
         (self.chat.open && self.chat.peer_active && self.chat.peer_key_known)
             .then_some(self.chat.peer.as_str())

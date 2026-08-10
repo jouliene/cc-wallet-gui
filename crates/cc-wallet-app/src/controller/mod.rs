@@ -501,6 +501,20 @@ impl AppController {
         &self.state
     }
 
+    /// Keeps the view of the transfer being signed in step with the
+    /// authorization itself. Derived rather than mirrored by hand: the
+    /// authorization is created and dropped in half a dozen places, and a copy
+    /// maintained at each of them is a copy that will eventually disagree.
+    fn refresh_pending_transfer(&mut self) {
+        let request = self
+            .pending_authorization
+            .as_ref()
+            .map(|authorization| authorization.request().clone());
+        if self.state.pending_transfer != request {
+            self.state.pending_transfer = request;
+        }
+    }
+
     pub fn send_form_locked(&self) -> bool {
         self.pending_authorization.is_some() || self.state.sending
     }
@@ -796,6 +810,7 @@ impl AppController {
             AppCommand::TestEndpoint(url) => self.test_endpoint(url),
             AppCommand::ClearError => self.state.clear_error(),
         }
+        self.refresh_pending_transfer();
     }
 
     fn probe_phase(&mut self) {

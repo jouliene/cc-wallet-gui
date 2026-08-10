@@ -215,6 +215,10 @@ impl AppController {
         };
         self.state.chat.error.clear();
         self.state.chat.sending = true;
+        // The dialog quotes whatever the last estimate was, and the last
+        // estimate was about the send form. A reply is a different transfer —
+        // one nano and a sealed comment — so it is priced before it is shown.
+        self.spawn_fee_estimate(request.clone(), false);
         self.authorize_transfer(request);
         // The dialog is up or it never opened; either way the waiting is over.
         self.state.chat.sending = self.pending_authorization.is_some();

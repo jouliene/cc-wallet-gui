@@ -895,9 +895,26 @@ fn sync_auth(ui: &AppWindow, state: &AppState, cache: &mut UiCache) {
 
     if show_summary {
         if auth_opened {
-            let amount = display_send_amount(state.selected_asset, &state.send_form.amount);
-            ui.set_tx_amount(token_amount(state.selected_asset, &amount));
-            let dest = state.send_form.destination.trim();
+            // The dialog describes the transfer being signed. Usually that is
+            // what the send form holds, but a reply written in a conversation
+            // never goes near the form — and reading the form anyway left this
+            // screen showing an empty amount and an unknown recipient for a
+            // transfer that was perfectly well specified.
+            let (asset, amount, dest) = match state.pending_transfer.as_ref() {
+                Some(request) => (
+                    request.value().asset_id(),
+                    format_fixed9_amount(request.value())
+                        .expect("an authorized amount is in its asset's domain"),
+                    request.destination().to_owned(),
+                ),
+                None => (
+                    state.selected_asset,
+                    display_send_amount(state.selected_asset, &state.send_form.amount),
+                    state.send_form.destination.trim().to_owned(),
+                ),
+            };
+            ui.set_tx_amount(token_amount(asset, &amount));
+            let dest = dest.as_str();
             let canonical = canonicalize_recipient(dest).unwrap_or_else(|_| dest.to_owned());
             let contact = state.contacts.iter().find(|c| c.address == canonical);
             let name = contact
@@ -934,6 +951,9 @@ fn sync_auth(ui: &AppWindow, state: &AppState, cache: &mut UiCache) {
 }
 
 fn recipient_advisory(state: &AppState) -> (&'static str, String, &'static str) {
+    if state.pending_transfer_is_verified_chat_reply() {
+        return ("active", String::new(), "");
+    }
     match state.recipient_check {
         RecipientCheck::Known(status) if status.is_active() => ("active", String::new(), ""),
         RecipientCheck::Known(status) => {

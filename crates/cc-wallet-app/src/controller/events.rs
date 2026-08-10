@@ -692,6 +692,7 @@ impl AppController {
             } => self.apply_storage_finished(generation, op, result),
             AppEvent::Error(error) => self.state.set_error(error),
         }
+        self.refresh_pending_transfer();
     }
 }
 

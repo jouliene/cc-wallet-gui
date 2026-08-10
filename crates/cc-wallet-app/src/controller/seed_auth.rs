@@ -441,7 +441,7 @@ impl AppController {
 
     pub(super) fn refuse_unpermitted_send(&mut self) -> bool {
         let risk_flow = !self.state.auth.send_options_editable;
-        if self.state.recipient_send_permitted(risk_flow) {
+        if self.state.signing_recipient_permitted(risk_flow) {
             return false;
         }
         self.state.auth.error = match self.state.recipient_check {
