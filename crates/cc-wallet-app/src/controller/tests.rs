@@ -4071,7 +4071,6 @@ fn a_stale_generation_destination_check_is_dropped() {
         report: Some(DestinationReport {
             status: DestinationAccountStatus::NonExist,
             encrypt_key: None,
-            min_attach_native: 0,
         }),
     });
     assert_eq!(
@@ -4096,7 +4095,6 @@ fn the_destination_check_records_non_exist_and_uninit_distinctly() {
         report: Some(DestinationReport {
             status: DestinationAccountStatus::Uninit,
             encrypt_key: None,
-            min_attach_native: 0,
         }),
     });
     assert!(c.state().recipient_inactive());
@@ -4112,7 +4110,6 @@ fn the_destination_check_records_non_exist_and_uninit_distinctly() {
         report: Some(DestinationReport {
             status: DestinationAccountStatus::NonExist,
             encrypt_key: None,
-            min_attach_native: 0,
         }),
     });
     assert!(c.state().recipient_inactive());
@@ -4160,7 +4157,6 @@ fn a_frozen_recipient_counts_as_inactive_and_is_recorded_distinctly() {
         report: Some(DestinationReport {
             status: DestinationAccountStatus::Frozen,
             encrypt_key: None,
-            min_attach_native: 0,
         }),
     });
     assert_eq!(
@@ -4357,7 +4353,6 @@ fn a_superseded_check_result_never_overwrites_a_fresher_status() {
         report: Some(DestinationReport {
             status: DestinationAccountStatus::Uninit,
             encrypt_key: None,
-            min_attach_native: 0,
         }),
     });
     assert_eq!(
@@ -4393,7 +4388,6 @@ fn a_resolved_check_clears_a_stale_gate_refusal() {
         report: Some(DestinationReport {
             status: DestinationAccountStatus::Active,
             encrypt_key: None,
-            min_attach_native: 0,
         }),
     });
     assert!(
@@ -4619,7 +4613,6 @@ fn an_inactive_destination_stays_bounceable_unless_explicitly_opted_in() {
         report: Some(DestinationReport {
             status: DestinationAccountStatus::NonExist,
             encrypt_key: None,
-            min_attach_native: 0,
         }),
     });
     assert_eq!(
@@ -4660,7 +4653,6 @@ fn a_second_topup_to_the_same_address_re_runs_the_destination_check() {
         report: Some(DestinationReport {
             status: DestinationAccountStatus::NonExist,
             encrypt_key: None,
-            min_attach_native: 0,
         }),
     });
     assert!(
@@ -4681,7 +4673,6 @@ fn a_second_topup_to_the_same_address_re_runs_the_destination_check() {
         report: Some(DestinationReport {
             status: DestinationAccountStatus::NonExist,
             encrypt_key: None,
-            min_attach_native: 0,
         }),
     });
     assert!(
@@ -6392,7 +6383,6 @@ impl ChainService for FakeChain {
             .map(|status| DestinationReport {
                 status,
                 encrypt_key: None,
-                min_attach_native: 0,
             });
         Box::pin(async move { result })
     }

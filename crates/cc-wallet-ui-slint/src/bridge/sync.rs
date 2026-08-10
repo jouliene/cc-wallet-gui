@@ -561,7 +561,6 @@ pub(super) fn sync_ui(ui: &AppWindow, state: &AppState, form_locked: bool, cache
     ui.set_recipient_valid(state.recipient_valid());
     ui.set_send_enabled(state.send_ready());
     ui.set_insufficient_balance(state.amount_exceeds_balance());
-    ui.set_amount_floor_hint(state.amount_floor_hint().into());
     ui.set_journal_blocking(state.journal_blocking);
     ui.set_risk_override_eligible(state.risk_override_eligible);
     ui.set_risk_override_form_ready(state.risk_override_form_ready());

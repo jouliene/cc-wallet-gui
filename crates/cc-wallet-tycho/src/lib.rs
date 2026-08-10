@@ -44,9 +44,7 @@ pub use history::{
     BounceOutcome, ChainMessage, ChainTransaction, MAX_TRANSACTION_BOC_BYTES, MsgKind,
     parse_transaction,
 };
-pub use network::{
-    CoinSupply, ElectionStake, elector_election_stake, key_block_supply, min_bounceable_attach,
-};
+pub use network::{CoinSupply, ElectionStake, elector_election_stake, key_block_supply};
 pub use storage::{
     MAX_BLOB_BYTES as MAX_STORAGE_BLOB_BYTES, MAX_RECORDS as MAX_STORAGE_RECORDS,
     MIN_OP_ATTACH as STORAGE_MIN_OP_ATTACH, STORAGE_CONTRACT, STORAGE_WORKCHAIN, StorageData,

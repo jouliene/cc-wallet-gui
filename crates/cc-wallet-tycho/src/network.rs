@@ -3,9 +3,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result, anyhow};
 use tycho_types::dict::Dict;
 use tycho_types::error::Error;
-use tycho_types::models::{
-    Account, AccountState, BlockchainConfig, ExtraCurrencyCollection, ShardIdent,
-};
+use tycho_types::models::{Account, AccountState, ExtraCurrencyCollection, ShardIdent};
 use tycho_types::num::{Tokens, VarUint248};
 use tycho_types::prelude::*;
 
@@ -163,69 +161,11 @@ fn extra_currency_supply_unless_pruned(
     Ok(Some(supply))
 }
 
-/// The least a bounceable message may carry for the account it arrives at to
-/// run any code at all.
-///
-/// A bounceable message is not credited to the account before the compute
-/// phase, so the receiving side buys its gas out of what the message brought
-/// and nothing else. The network sells the first `flat_gas_limit` units for a
-/// flat price, and that price is indivisible: a message that cannot cover it
-/// buys no gas, the compute phase is skipped as `NoGas`, and what happens next
-/// depends on whether the leftovers can even pay for the bounce back.
-///
-/// This is arithmetic from the network's own config, not a policy — below it
-/// nothing can execute, on any account, in any contract.
-pub fn min_bounceable_attach(config: &BlockchainConfig, workchain: i8) -> Result<u128> {
-    let prices = config
-        .get_gas_prices(workchain == -1)
-        .context("blockchain config lacks gas prices for the recipient's workchain")?;
-    Ok(u128::from(prices.flat_gas_price))
-}
-
 #[cfg(test)]
 mod tests {
     use tycho_types::merkle::make_pruned_branch;
-    use tycho_types::models::GasLimitsPrices;
 
     use super::*;
-
-    /// The prices this network actually charges, read off the live testnet
-    /// config on 2026-08-10. A transfer of 0.0001 COIN to a masterchain wallet
-    /// was skipped as `NoGas` against exactly these numbers.
-    fn measured_config() -> BlockchainConfig {
-        let mut config = BlockchainConfig::new_empty(HashBytes([0x55; 32]));
-        let prices = |gas_price: u64, flat_gas_price: u64| GasLimitsPrices {
-            gas_price,
-            gas_limit: 1_000_000,
-            special_gas_limit: 100_000_000,
-            gas_credit: 10_000,
-            block_gas_limit: 11_000_000,
-            freeze_due_limit: 100_000_000,
-            delete_due_limit: 1_000_000_000,
-            flat_gas_limit: 1_000,
-            flat_gas_price,
-        };
-        config
-            .set_gas_prices(true, &prices(655_360_000, 10_000_000))
-            .unwrap();
-        config
-            .set_gas_prices(false, &prices(65_536_000, 1_000_000))
-            .unwrap();
-        config
-    }
-
-    #[test]
-    fn the_floor_is_the_flat_gas_price_of_the_recipients_own_workchain() {
-        let config = measured_config();
-        assert_eq!(min_bounceable_attach(&config, 0).unwrap(), 1_000_000);
-        assert_eq!(min_bounceable_attach(&config, -1).unwrap(), 10_000_000);
-    }
-
-    #[test]
-    fn a_config_without_gas_prices_refuses_to_invent_a_floor() {
-        let empty = BlockchainConfig::new_empty(HashBytes([0x55; 32]));
-        assert!(min_bounceable_attach(&empty, 0).is_err());
-    }
 
     fn frozen_validator(stake: u128) -> Cell {
         let mut builder = CellBuilder::new();
