@@ -1,7 +1,5 @@
 use cc_wallet_domain::{AssetMovement, Digest32};
-use cc_wallet_tycho::{
-    BounceOutcome, ChainMessage, ChainTransaction, ComputePhaseSkipReason, MsgKind,
-};
+use cc_wallet_tycho::{BounceOutcome, ChainMessage, ChainTransaction, MsgKind};
 
 use crate::activity::message_movements;
 use crate::wallet_service::{ChainError, ChainResult};
@@ -78,26 +76,6 @@ pub fn failure_reason(tx: &ChainTransaction) -> String {
         return "value returned".to_owned();
     }
     String::new()
-}
-
-/// What the chain says went wrong with a transaction whose value still arrived.
-///
-/// A failure here is a failure of execution, not of delivery: nothing ran, and
-/// the reason nothing ran is the whole story. It is reported apart from
-/// [`failure_reason`] because the two answer different questions — that one
-/// asks whether the money got where it was going, this one whether the
-/// receiving account did anything about it.
-pub fn abort_explanation(tx: &ChainTransaction) -> &'static str {
-    if !tx.aborted {
-        return "";
-    }
-    match tx.compute_skip_reason {
-        Some(ComputePhaseSkipReason::NoGas) => "not enough value to pay for gas",
-        Some(ComputePhaseSkipReason::NoState) => "account has no code to run",
-        Some(ComputePhaseSkipReason::BadState) => "account state is unusable",
-        Some(ComputePhaseSkipReason::Suspended) => "account is suspended",
-        None => "aborted",
-    }
 }
 
 pub fn account_tx_from_chain_tx(tx: &ChainTransaction) -> ChainResult<AccountTx> {

@@ -1627,7 +1627,6 @@ mod explorer_tests {
                 fee_native: 7_400_000,
                 success,
                 failure: failure.to_owned(),
-                note: String::new(),
             }),
         }
     }

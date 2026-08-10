@@ -6627,6 +6627,37 @@ fn activating_a_new_seed_clears_the_chain_key_cache() {
     cleanup(&dir);
 }
 
+/// The cached network parameters never expire on their own, so an endpoint that
+/// serves a different chain has to evict them. This is the whole of what keeps
+/// the cache honest, which is why it is pinned here rather than left to
+/// whichever code path happens to call the clear.
+#[test]
+fn changing_the_endpoint_evicts_the_network_parameters() {
+    let dir = temp_dir("endpoint-clears-config");
+    let fake = FakeChain::default();
+    let mut c = unlocked_with_fake(&dir, &fake);
+    c.state_mut()
+        .custom_endpoints
+        .push("https://elsewhere.test/".to_owned());
+
+    let before = fake.clear_config_cache_calls();
+    let last = c.state().custom_endpoints.len();
+    c.handle_command(AppCommand::SelectEndpoint(last));
+    assert!(
+        fake.clear_config_cache_calls() > before,
+        "another endpoint may be another chain, so its parameters are not ours"
+    );
+
+    let before = fake.clear_config_cache_calls();
+    let gone = c.state().custom_endpoints[last - 1].clone();
+    c.handle_command(AppCommand::RemoveEndpoint(gone));
+    assert!(
+        fake.clear_config_cache_calls() > before,
+        "removing an endpoint moves the selection, so its parameters go too"
+    );
+    cleanup(&dir);
+}
+
 #[test]
 fn send_form_locked_tracks_the_busy_gate() {
     let dir = temp_dir("send-form-locked");

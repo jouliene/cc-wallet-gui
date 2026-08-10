@@ -79,24 +79,6 @@ const FEE_ESTIMATE_FLOOR_NANOS: u128 = 100_000;
 pub const RISK_OVERRIDE_COOLING_SECS: u64 =
     cc_wallet_tycho::DEFAULT_TTL_SECS as u64 + 2 * cc_wallet_tycho::CLOCK_SKEW_MARGIN_SECS;
 
-/// How long the network's own parameters are taken on trust.
-///
-/// They change at a key block and almost never otherwise, so this is not a
-/// guess about volatility — it is the price of never being the last to know.
-/// Gas and forward prices decide what a transfer is quoted at and how little it
-/// may carry; the global id and the capability flags decide how it is signed.
-/// Reading them once at launch would leave a wallet that stays open for days
-/// signing and quoting from the day it started.
-///
-/// The parsed emulation config carries the clock it was parsed with, but only
-/// to pick which storage-price epoch is in force — an hour of drift there
-/// changes nothing, so the window is set by the parameters, not by the clock.
-const CONFIG_CACHE_TTL: Duration = Duration::from_secs(600);
-
-fn config_cache_age_is_fresh(age: Duration) -> bool {
-    age < CONFIG_CACHE_TTL
-}
-
 const FEE_EMULATION_TIMEOUT: Duration = Duration::from_secs(5);
 
 const SEND_EMULATION_HANDOFF_TIMEOUT: Duration = Duration::from_secs(10);
@@ -403,7 +385,6 @@ pub struct TransactionPage {
 struct CachedConfig {
     state: Arc<BlockchainConfigState>,
     emulation: Arc<EmulationConfig>,
-    fetched_at: Instant,
     request_id: String,
     observed_at_mono: Instant,
 }
@@ -1696,6 +1677,13 @@ impl TychoWalletService {
         Ok(classify_broadcast(outcome, "storage request"))
     }
 
+    /// The network's own parameters, read once per endpoint and kept.
+    ///
+    /// They change at a key block and effectively never otherwise, so there is
+    /// no expiry here: the cache lives until something makes it wrong, and the
+    /// things that make it wrong are all events we already see — selecting or
+    /// removing an endpoint, switching wallets, locking. Each of those clears
+    /// it outright.
     async fn blockchain_config(&self, transport: &Transport) -> ChainResult<CachedConfig> {
         let endpoint = transport.endpoint();
         if let Some(config) = self
@@ -1703,7 +1691,6 @@ impl TychoWalletService {
             .lock()
             .expect("config cache poisoned")
             .get(endpoint)
-            .filter(|config| config_cache_age_is_fresh(config.fetched_at.elapsed()))
         {
             return Ok(config.clone());
         }
@@ -1719,7 +1706,6 @@ impl TychoWalletService {
         let config = CachedConfig {
             state,
             emulation,
-            fetched_at: Instant::now(),
             request_id: observed.request_id().to_owned(),
             observed_at_mono: observed.observed_at_mono(),
         };
@@ -2862,18 +2848,6 @@ mod tests {
         let maximum = LOCAL_SEND_FEE_CEILING_NANOS - LOCAL_SEND_FEE_HEADROOM_NANOS;
         assert!(fee_within_bounds(maximum));
         assert!(!fee_within_bounds(maximum + 1), "an absurd fee is rejected");
-    }
-
-    #[test]
-    fn blockchain_config_cache_expires_exactly_at_its_window() {
-        assert!(config_cache_age_is_fresh(Duration::ZERO));
-        assert!(config_cache_age_is_fresh(
-            CONFIG_CACHE_TTL - Duration::from_nanos(1)
-        ));
-        assert!(!config_cache_age_is_fresh(CONFIG_CACHE_TTL));
-        assert!(!config_cache_age_is_fresh(
-            CONFIG_CACHE_TTL + Duration::from_secs(1)
-        ));
     }
 
     #[test]

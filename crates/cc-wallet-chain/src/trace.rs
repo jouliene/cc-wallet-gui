@@ -7,7 +7,7 @@ use cc_wallet_tycho::{
 };
 
 use crate::activity::message_movements;
-use crate::explorer::{abort_explanation, failure_reason};
+use crate::explorer::failure_reason;
 use crate::wallet_service::{ChainError, ChainResult};
 
 pub const TRACE_MAX_TRANSACTIONS: usize = 64;
@@ -38,11 +38,6 @@ pub struct TraceTx {
     pub fee_native: u128,
     pub success: bool,
     pub failure: String,
-    /// What the chain aborted over, when the value arrived anyway. A wallet
-    /// that could not run still kept what it was sent, so this is a remark
-    /// rather than a failure — but a scanner that says nothing at all here
-    /// shows a green transaction the chain marked aborted.
-    pub note: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -261,11 +256,6 @@ fn code_hash_of<'a>(contracts: &'a ContractIndex, address: &str) -> Option<&'a s
 
 fn trace_tx(tx: &ChainTransaction) -> ChainResult<TraceTx> {
     let failure = failure_reason(tx);
-    let note = if failure.is_empty() {
-        abort_explanation(tx).to_owned()
-    } else {
-        String::new()
-    };
     Ok(TraceTx {
         hash: parse_hash(&tx.hash)?,
         lt: tx.lt,
@@ -273,7 +263,6 @@ fn trace_tx(tx: &ChainTransaction) -> ChainResult<TraceTx> {
         fee_native: tx.total_fees_native,
         success: failure.is_empty(),
         failure,
-        note,
     })
 }
 
@@ -588,7 +577,6 @@ mod tests {
             child.failure, "",
             "nothing came back, so nothing may say it did"
         );
-        assert_eq!(child.note, "not enough value to pay for gas");
         assert_eq!(trace.failed, 0, "the value stayed where it landed");
     }
 
