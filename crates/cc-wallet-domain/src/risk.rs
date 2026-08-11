@@ -1,4 +1,4 @@
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
 use crate::ids::{Digest32, RecordId, RiskNonce};
 
@@ -27,20 +27,15 @@ struct RiskGrantWire {
     overlap_reservation_set_digest: Digest32,
 }
 
-impl<'de> Deserialize<'de> for RiskGrant {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let wire = RiskGrantWire::deserialize(deserializer)?;
-        Ok(Self::new(
-            wire.old_blocker_set_digest,
-            wire.old_reservation_set_digest,
-            wire.new_ticket_digest,
-            wire.new_record_id,
-            wire.one_use_nonce,
-            wire.warning_version,
-            wire.overlap_reservation_set_digest,
-        ))
-    }
-}
+wire_deserialize!(RiskGrant via RiskGrantWire infallible {
+    old_blocker_set_digest,
+    old_reservation_set_digest,
+    new_ticket_digest,
+    new_record_id,
+    one_use_nonce,
+    warning_version,
+    overlap_reservation_set_digest
+});
 
 impl RiskGrant {
     pub fn new(
@@ -95,16 +90,11 @@ struct RiskGrantConsumptionWire {
     new_ticket_digest: Digest32,
 }
 
-impl<'de> Deserialize<'de> for RiskGrantConsumption {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let wire = RiskGrantConsumptionWire::deserialize(deserializer)?;
-        Ok(Self::new(
-            wire.one_use_nonce,
-            wire.new_record_id,
-            wire.new_ticket_digest,
-        ))
-    }
-}
+wire_deserialize!(RiskGrantConsumption via RiskGrantConsumptionWire infallible {
+    one_use_nonce,
+    new_record_id,
+    new_ticket_digest
+});
 
 impl RiskGrantConsumption {
     pub fn new(

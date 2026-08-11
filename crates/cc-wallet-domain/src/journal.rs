@@ -240,23 +240,17 @@ accessors!(SendTicket {
     auth_nonce: copy u64
 });
 
-impl<'de> Deserialize<'de> for SendTicket {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let wire = SendTicketWire::deserialize(deserializer)?;
-        Self::new(
-            wire.record_id,
-            wire.sender_wallet_id,
-            wire.sender_address,
-            wire.network_global_id,
-            wire.endpoint_identity,
-            wire.request,
-            wire.bounce,
-            wire.auth_generation,
-            wire.auth_nonce,
-        )
-        .map_err(de::Error::custom)
-    }
-}
+wire_deserialize!(SendTicket via SendTicketWire {
+    record_id,
+    sender_wallet_id,
+    sender_address,
+    network_global_id,
+    endpoint_identity,
+    request,
+    bounce,
+    auth_generation,
+    auth_nonce
+});
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct NetworkTimeProvenance {
@@ -302,18 +296,12 @@ accessors!(NetworkTimeProvenance {
     request_id: ref str
 });
 
-impl<'de> Deserialize<'de> for NetworkTimeProvenance {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let wire = NetworkTimeProvenanceWire::deserialize(deserializer)?;
-        Self::new(
-            wire.value,
-            wire.source_endpoint,
-            wire.request_id,
-            wire.observed_at_mono_ms,
-        )
-        .map_err(de::Error::custom)
-    }
-}
+wire_deserialize!(NetworkTimeProvenance via NetworkTimeProvenanceWire {
+    value,
+    source_endpoint,
+    request_id,
+    observed_at_mono_ms
+});
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PrepareProvenance {
@@ -448,29 +436,23 @@ accessors!(PrepareProvenance {
     authorized_overlap: ref [Reservation]
 });
 
-impl<'de> Deserialize<'de> for PrepareProvenance {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let wire = PrepareProvenanceWire::deserialize(deserializer)?;
-        Self::new(
-            wire.source_endpoint,
-            wire.route_id,
-            wire.request_ids,
-            wire.observed_at_mono_ms,
-            wire.account_state_hash,
-            wire.state_init_required,
-            wire.balances,
-            wire.signature_context_hash,
-            wire.signature_global_id,
-            wire.signature_with_id,
-            wire.network_time,
-            wire.fee_input_hash,
-            wire.estimated_fee_native,
-            wire.local_fee_ceiling_native,
-            wire.authorized_overlap,
-        )
-        .map_err(de::Error::custom)
-    }
-}
+wire_deserialize!(PrepareProvenance via PrepareProvenanceWire {
+    source_endpoint,
+    route_id,
+    request_ids,
+    observed_at_mono_ms,
+    account_state_hash,
+    state_init_required,
+    balances,
+    signature_context_hash,
+    signature_global_id,
+    signature_with_id,
+    network_time,
+    fee_input_hash,
+    estimated_fee_native,
+    local_fee_ceiling_native,
+    authorized_overlap
+});
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -556,23 +538,17 @@ accessors!(EndpointTransactionEvidence {
     effects: ref [AssetMovement]
 });
 
-impl<'de> Deserialize<'de> for EndpointTransactionEvidence {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let wire = EndpointTransactionEvidenceWire::deserialize(deserializer)?;
-        Self::new(
-            wire.source_endpoint,
-            wire.request_id,
-            wire.sender_address,
-            wire.tx_hash,
-            wire.ext_msg_hash,
-            wire.lt,
-            wire.success,
-            wire.exit_code,
-            wire.effects,
-        )
-        .map_err(de::Error::custom)
-    }
-}
+wire_deserialize!(EndpointTransactionEvidence via EndpointTransactionEvidenceWire {
+    source_endpoint,
+    request_id,
+    sender_address,
+    tx_hash,
+    ext_msg_hash,
+    lt,
+    success,
+    exit_code,
+    effects
+});
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(

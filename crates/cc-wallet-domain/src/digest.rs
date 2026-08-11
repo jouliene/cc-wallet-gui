@@ -1,6 +1,6 @@
 use std::fmt;
 
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 
 use crate::amount::AssetAmount;
@@ -249,12 +249,11 @@ struct ReservationWire {
     kind: ReservationKind,
 }
 
-impl<'de> Deserialize<'de> for Reservation {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let wire = ReservationWire::deserialize(deserializer)?;
-        Self::new(wire.record_id, wire.amount, wire.kind).map_err(serde::de::Error::custom)
-    }
-}
+wire_deserialize!(Reservation via ReservationWire {
+    record_id,
+    amount,
+    kind
+});
 
 impl Reservation {
     pub fn new(

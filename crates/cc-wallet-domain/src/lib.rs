@@ -1,5 +1,5 @@
 #[macro_use]
-mod accessors;
+mod macros;
 
 mod activity;
 mod address;
