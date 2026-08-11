@@ -931,8 +931,16 @@ mod activity_group_tests {
 
     #[test]
     fn a_conversation_names_each_day_once_and_only_at_its_first_line() {
-        let day = 86_400u64;
-        let now = 10 * day + 4_000;
+        use chrono::TimeZone;
+
+        let noon = |day: u32| {
+            chrono::Local
+                .with_ymd_and_hms(1970, 1, day, 12, 0, 0)
+                .single()
+                .expect("a 1970 midday is unambiguous in every zone")
+                .timestamp() as u64
+        };
+        let now = noon(11);
         let line = |time_unix: u64| cc_wallet_app::ChatLine {
             outgoing: false,
             time_unix,
@@ -944,10 +952,10 @@ mod activity_group_tests {
         };
         let rows = super::chat_line_rows(
             &[
-                line(8 * day + 100),
-                line(8 * day + 200),
-                line(9 * day + 100),
-                line(10 * day + 100),
+                line(noon(9) + 100),
+                line(noon(9) + 200),
+                line(noon(10) + 100),
+                line(noon(11) + 100),
             ],
             now,
         );
