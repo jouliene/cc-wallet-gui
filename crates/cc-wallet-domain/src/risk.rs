@@ -63,40 +63,22 @@ impl RiskGrant {
         }
     }
 
-    pub fn old_blocker_set_digest(&self) -> &Digest32 {
-        &self.old_blocker_set_digest
-    }
-
-    pub fn old_reservation_set_digest(&self) -> &Digest32 {
-        &self.old_reservation_set_digest
-    }
-
-    pub fn new_ticket_digest(&self) -> &Digest32 {
-        &self.new_ticket_digest
-    }
-
-    pub fn new_record_id(&self) -> &RecordId {
-        &self.new_record_id
-    }
-
-    pub fn one_use_nonce(&self) -> &RiskNonce {
-        &self.one_use_nonce
-    }
-
-    pub fn warning_version(&self) -> u16 {
-        self.warning_version
-    }
-
-    pub fn overlap_reservation_set_digest(&self) -> &Digest32 {
-        &self.overlap_reservation_set_digest
-    }
-
     pub fn authorizes(&self, consumption: &RiskGrantConsumption) -> bool {
         self.one_use_nonce == consumption.one_use_nonce
             && self.new_record_id == consumption.new_record_id
             && self.new_ticket_digest == consumption.new_ticket_digest
     }
 }
+
+accessors!(RiskGrant {
+    old_blocker_set_digest: ref Digest32,
+    old_reservation_set_digest: ref Digest32,
+    new_ticket_digest: ref Digest32,
+    new_record_id: ref RecordId,
+    one_use_nonce: ref RiskNonce,
+    warning_version: copy u16,
+    overlap_reservation_set_digest: ref Digest32
+});
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RiskGrantConsumption {
@@ -136,19 +118,13 @@ impl RiskGrantConsumption {
             new_ticket_digest,
         }
     }
-
-    pub fn one_use_nonce(&self) -> &RiskNonce {
-        &self.one_use_nonce
-    }
-
-    pub fn new_record_id(&self) -> &RecordId {
-        &self.new_record_id
-    }
-
-    pub fn new_ticket_digest(&self) -> &Digest32 {
-        &self.new_ticket_digest
-    }
 }
+
+accessors!(RiskGrantConsumption {
+    one_use_nonce: ref RiskNonce,
+    new_record_id: ref RecordId,
+    new_ticket_digest: ref Digest32
+});
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(

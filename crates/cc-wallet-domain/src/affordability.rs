@@ -46,42 +46,21 @@ pub struct AssetAffordability {
 }
 
 impl AssetAffordability {
-    pub fn asset(&self) -> AssetId {
-        self.asset
-    }
-
-    pub fn balance(&self) -> &AssetAmount {
-        &self.balance
-    }
-
-    pub fn reserved(&self) -> Option<&AssetAmount> {
-        self.reserved.as_ref()
-    }
-
-    pub fn available(&self) -> Option<&AssetAmount> {
-        self.available.as_ref()
-    }
-
-    pub fn requested(&self) -> &AssetAmount {
-        &self.requested
-    }
-
-    pub fn reservation_components(&self) -> &[AssetAmount] {
-        &self.reservation_components
-    }
-
     pub fn is_sufficient(&self) -> bool {
         self.sufficient
     }
-
-    pub fn worst_case(&self) -> Option<&AssetAmount> {
-        self.worst_case.as_ref()
-    }
-
-    pub fn worst_case_warns(&self) -> bool {
-        self.worst_case_warns
-    }
 }
+
+accessors!(AssetAffordability {
+    asset: copy AssetId,
+    balance: ref AssetAmount,
+    reserved: opt AssetAmount,
+    available: opt AssetAmount,
+    requested: ref AssetAmount,
+    reservation_components: ref [AssetAmount],
+    worst_case: opt AssetAmount,
+    worst_case_warns: copy bool
+});
 
 #[derive(Debug, Clone)]
 pub struct AffordabilityReport {
@@ -93,14 +72,14 @@ impl AffordabilityReport {
         self.outcomes.iter().all(AssetAffordability::is_sufficient)
     }
 
-    pub fn outcomes(&self) -> &[AssetAffordability] {
-        &self.outcomes
-    }
-
     pub fn outcome(&self, asset: AssetId) -> Option<&AssetAffordability> {
         self.outcomes.iter().find(|outcome| outcome.asset == asset)
     }
 }
+
+accessors!(AffordabilityReport {
+    outcomes: ref [AssetAffordability]
+});
 
 fn zero_amount(asset: &AssetId) -> AssetAmount {
     match asset {

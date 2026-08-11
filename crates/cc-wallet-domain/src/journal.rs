@@ -208,42 +208,6 @@ impl SendTicket {
         })
     }
 
-    pub fn record_id(&self) -> &RecordId {
-        &self.record_id
-    }
-
-    pub fn sender_wallet_id(&self) -> &str {
-        &self.sender_wallet_id
-    }
-
-    pub fn sender_address(&self) -> &str {
-        &self.sender_address
-    }
-
-    pub fn network_global_id(&self) -> i32 {
-        self.network_global_id
-    }
-
-    pub fn endpoint_identity(&self) -> &str {
-        &self.endpoint_identity
-    }
-
-    pub fn request(&self) -> &SendRequest {
-        &self.request
-    }
-
-    pub fn bounce(&self) -> bool {
-        self.bounce
-    }
-
-    pub fn auth_generation(&self) -> u64 {
-        self.auth_generation
-    }
-
-    pub fn auth_nonce(&self) -> u64 {
-        self.auth_nonce
-    }
-
     pub fn digest(&self) -> Result<Digest32, DigestError> {
         let sender_address = parse_canonical_address(&self.sender_address)
             .expect("SendTicket construction keeps its sender address canonical");
@@ -263,6 +227,18 @@ impl SendTicket {
         })
     }
 }
+
+accessors!(SendTicket {
+    record_id: ref RecordId,
+    sender_wallet_id: ref str,
+    sender_address: ref str,
+    network_global_id: copy i32,
+    endpoint_identity: ref str,
+    request: ref SendRequest,
+    bounce: copy bool,
+    auth_generation: copy u64,
+    auth_nonce: copy u64
+});
 
 impl<'de> Deserialize<'de> for SendTicket {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -318,19 +294,13 @@ impl NetworkTimeProvenance {
             observed_at_mono_ms,
         })
     }
-
-    pub fn value(&self) -> u32 {
-        self.value
-    }
-
-    pub fn source_endpoint(&self) -> &str {
-        &self.source_endpoint
-    }
-
-    pub fn request_id(&self) -> &str {
-        &self.request_id
-    }
 }
+
+accessors!(NetworkTimeProvenance {
+    value: copy u32,
+    source_endpoint: ref str,
+    request_id: ref str
+});
 
 impl<'de> Deserialize<'de> for NetworkTimeProvenance {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -466,31 +436,16 @@ impl PrepareProvenance {
             authorized_overlap,
         })
     }
-
-    pub fn source_endpoint(&self) -> &str {
-        &self.source_endpoint
-    }
-
-    pub fn route_id(&self) -> &str {
-        &self.route_id
-    }
-
-    pub fn request_ids(&self) -> &[String] {
-        &self.request_ids
-    }
-
-    pub fn balances(&self) -> &[AssetAmount] {
-        &self.balances
-    }
-
-    pub fn network_time(&self) -> Option<&NetworkTimeProvenance> {
-        self.network_time.as_ref()
-    }
-
-    pub fn authorized_overlap(&self) -> &[Reservation] {
-        &self.authorized_overlap
-    }
 }
+
+accessors!(PrepareProvenance {
+    source_endpoint: ref str,
+    route_id: ref str,
+    request_ids: ref [String],
+    balances: ref [AssetAmount],
+    network_time: opt NetworkTimeProvenance,
+    authorized_overlap: ref [Reservation]
+});
 
 impl<'de> Deserialize<'de> for PrepareProvenance {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -603,43 +558,19 @@ impl EndpointTransactionEvidence {
         validate_endpoint_tx(&evidence)?;
         Ok(evidence)
     }
-
-    pub fn source_endpoint(&self) -> &str {
-        &self.source_endpoint
-    }
-
-    pub fn request_id(&self) -> &str {
-        &self.request_id
-    }
-
-    pub fn sender_address(&self) -> &str {
-        &self.sender_address
-    }
-
-    pub fn tx_hash(&self) -> &Digest32 {
-        &self.tx_hash
-    }
-
-    pub fn ext_msg_hash(&self) -> &Digest32 {
-        &self.ext_msg_hash
-    }
-
-    pub fn lt(&self) -> u64 {
-        self.lt
-    }
-
-    pub fn success(&self) -> bool {
-        self.success
-    }
-
-    pub fn exit_code(&self) -> i32 {
-        self.exit_code
-    }
-
-    pub fn effects(&self) -> &[AssetMovement] {
-        &self.effects
-    }
 }
+
+accessors!(EndpointTransactionEvidence {
+    source_endpoint: ref str,
+    request_id: ref str,
+    sender_address: ref str,
+    tx_hash: ref Digest32,
+    ext_msg_hash: ref Digest32,
+    lt: copy u64,
+    success: copy bool,
+    exit_code: copy i32,
+    effects: ref [AssetMovement]
+});
 
 impl<'de> Deserialize<'de> for EndpointTransactionEvidence {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -788,15 +719,12 @@ impl DeliveryEvent {
             evidence,
         })
     }
-
-    pub fn journal_seq(&self) -> u64 {
-        self.journal_seq
-    }
-
-    pub fn evidence(&self) -> &DeliveryEvidence {
-        &self.evidence
-    }
 }
+
+accessors!(DeliveryEvent {
+    journal_seq: copy u64,
+    evidence: ref DeliveryEvidence
+});
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -816,10 +744,6 @@ impl RiskEvent {
         })
     }
 
-    pub fn journal_seq(&self) -> u64 {
-        self.journal_seq
-    }
-
     pub fn grant(&self) -> Option<&RiskGrant> {
         match &self.action {
             RiskAction::Granted(grant) => Some(grant),
@@ -834,6 +758,10 @@ impl RiskEvent {
         }
     }
 }
+
+accessors!(RiskEvent {
+    journal_seq: copy u64
+});
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreparedRecord {
@@ -872,27 +800,15 @@ impl PreparedRecord {
             reservations,
         })
     }
-
-    pub fn ticket(&self) -> &SendTicket {
-        &self.ticket
-    }
-
-    pub fn prepare_provenance(&self) -> &PrepareProvenance {
-        &self.prepare_provenance
-    }
-
-    pub fn ext_msg_hash(&self) -> &Digest32 {
-        &self.ext_msg_hash
-    }
-
-    pub fn expire_at(&self) -> u32 {
-        self.expire_at
-    }
-
-    pub fn reservations(&self) -> &[Reservation] {
-        &self.reservations
-    }
 }
+
+accessors!(PreparedRecord {
+    ticket: ref SendTicket,
+    prepare_provenance: ref PrepareProvenance,
+    ext_msg_hash: ref Digest32,
+    expire_at: copy u32,
+    reservations: ref [Reservation]
+});
 
 fn validate_reservations(
     ticket: &SendTicket,
@@ -956,30 +872,6 @@ pub struct SendRecord {
 }
 
 impl SendRecord {
-    pub fn ticket(&self) -> &SendTicket {
-        &self.ticket
-    }
-
-    pub fn prepare_provenance(&self) -> &PrepareProvenance {
-        &self.prepare_provenance
-    }
-
-    pub fn ext_msg_hash(&self) -> &Digest32 {
-        &self.ext_msg_hash
-    }
-
-    pub fn expire_at(&self) -> u32 {
-        self.expire_at
-    }
-
-    pub fn reservations(&self) -> &[Reservation] {
-        &self.reservations
-    }
-
-    pub fn delivery_events(&self) -> &[DeliveryEvent] {
-        &self.delivery_events
-    }
-
     pub fn latest_evidence(&self) -> &DeliveryEvidence {
         &self
             .delivery_events
@@ -1078,6 +970,15 @@ impl SendRecord {
         Ok(())
     }
 }
+
+accessors!(SendRecord {
+    ticket: ref SendTicket,
+    prepare_provenance: ref PrepareProvenance,
+    ext_msg_hash: ref Digest32,
+    expire_at: copy u32,
+    reservations: ref [Reservation],
+    delivery_events: ref [DeliveryEvent]
+});
 
 fn valid_delivery_transition(previous: &DeliveryEvidence, next: &DeliveryEvidence) -> bool {
     match (previous, next) {

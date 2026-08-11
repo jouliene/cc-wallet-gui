@@ -98,14 +98,6 @@ impl JournalEnvelope {
         }
     }
 
-    pub fn records(&self) -> &[SendRecord] {
-        &self.records
-    }
-
-    pub fn risk_events(&self) -> &[RiskEvent] {
-        &self.risk_events
-    }
-
     pub fn record(&self, record_id: &RecordId) -> Option<&SendRecord> {
         self.records
             .iter()
@@ -235,6 +227,11 @@ impl JournalEnvelope {
     }
 }
 
+accessors!(JournalEnvelope {
+    records: ref [SendRecord],
+    risk_events: ref [RiskEvent]
+});
+
 fn next_sequence_after(last: u64) -> Result<u64, JournalError> {
     last.checked_add(1).ok_or(JournalError::SequenceOverflow)
 }
@@ -262,10 +259,6 @@ impl ActivityEnvelope {
         Self { events }
     }
 
-    pub fn events(&self) -> &[ActivityEvent] {
-        &self.events
-    }
-
     pub fn into_events(self) -> Vec<ActivityEvent> {
         self.events
     }
@@ -287,6 +280,10 @@ impl ActivityEnvelope {
         Ok(Self { events })
     }
 }
+
+accessors!(ActivityEnvelope {
+    events: ref [ActivityEvent]
+});
 
 #[cfg(test)]
 mod tests {

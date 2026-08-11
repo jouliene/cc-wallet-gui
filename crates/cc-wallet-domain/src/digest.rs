@@ -271,19 +271,13 @@ impl Reservation {
             kind,
         })
     }
-
-    pub fn record_id(&self) -> &RecordId {
-        &self.record_id
-    }
-
-    pub fn amount(&self) -> &AssetAmount {
-        &self.amount
-    }
-
-    pub fn kind(&self) -> ReservationKind {
-        self.kind
-    }
 }
+
+accessors!(Reservation {
+    record_id: ref RecordId,
+    amount: ref AssetAmount,
+    kind: copy ReservationKind
+});
 
 fn assemble_set_blob(rows: &[Vec<u8>]) -> Result<Vec<u8>, DigestError> {
     let count = checked_row_count(rows.len())?;

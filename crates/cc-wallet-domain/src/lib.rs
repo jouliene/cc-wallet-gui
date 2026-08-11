@@ -1,3 +1,6 @@
+#[macro_use]
+mod accessors;
+
 mod activity;
 mod address;
 mod affordability;

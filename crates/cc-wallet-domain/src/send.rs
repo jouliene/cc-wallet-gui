@@ -143,14 +143,6 @@ impl SendRequest {
         self
     }
 
-    pub fn comment(&self) -> &str {
-        &self.comment
-    }
-
-    pub fn encrypt_to(&self) -> Option<&[u8; 32]> {
-        self.encrypt_to.as_ref()
-    }
-
     #[must_use]
     pub fn sealed_to(mut self, key: Option<[u8; 32]>) -> Self {
         self.encrypt_to = key;
@@ -171,18 +163,17 @@ impl SendRequest {
         Self::new(destination, AssetAmount::currency_collection(id, units))
     }
 
-    pub fn destination(&self) -> &str {
-        &self.destination
-    }
-
-    pub fn value(&self) -> &AssetAmount {
-        &self.value
-    }
-
     pub fn asset_id(&self) -> AssetId {
         self.value.asset_id()
     }
 }
+
+accessors!(SendRequest {
+    comment: ref str,
+    encrypt_to: opt [u8; 32],
+    destination: ref str,
+    value: ref AssetAmount
+});
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct SendAuthorization {
@@ -237,10 +228,6 @@ impl SendAuthorization {
         self.ticket.auth_generation() == generation && self.ticket.auth_nonce() == nonce
     }
 
-    pub fn inputs(&self) -> &WalletInputs {
-        &self.inputs
-    }
-
     pub fn request(&self) -> &SendRequest {
         self.ticket.request()
     }
@@ -249,14 +236,15 @@ impl SendAuthorization {
         self.ticket.bounce()
     }
 
-    pub fn ticket(&self) -> &SendTicket {
-        &self.ticket
-    }
-
     pub fn into_parts(self) -> (WalletInputs, SendTicket) {
         (self.inputs, self.ticket)
     }
 }
+
+accessors!(SendAuthorization {
+    inputs: ref WalletInputs,
+    ticket: ref SendTicket
+});
 
 #[cfg(test)]
 mod tests {

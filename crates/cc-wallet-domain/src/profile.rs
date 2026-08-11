@@ -393,15 +393,12 @@ impl EndpointAddressInputs {
         let address = crate::address::canonicalize_recipient(&address)?;
         Ok(Self { endpoint, address })
     }
-
-    pub fn endpoint(&self) -> &str {
-        &self.endpoint
-    }
-
-    pub fn address(&self) -> &str {
-        &self.address
-    }
 }
+
+accessors!(EndpointAddressInputs {
+    endpoint: ref str,
+    address: ref str
+});
 
 impl fmt::Debug for EndpointAddressInputs {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -458,23 +455,14 @@ impl ObservedNetworkTime {
             observed_at_mono,
         })
     }
-
-    pub fn value(&self) -> u32 {
-        self.value
-    }
-
-    pub fn source_endpoint(&self) -> &str {
-        &self.source_endpoint
-    }
-
-    pub fn request_id(&self) -> &str {
-        &self.request_id
-    }
-
-    pub fn observed_at_mono(&self) -> Instant {
-        self.observed_at_mono
-    }
 }
+
+accessors!(ObservedNetworkTime {
+    value: copy u32,
+    source_endpoint: ref str,
+    request_id: ref str,
+    observed_at_mono: copy Instant
+});
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WalletSnapshot {
@@ -542,25 +530,9 @@ impl WalletSnapshot {
         self
     }
 
-    pub fn last_message_ms(&self) -> u64 {
-        self.last_message_ms
-    }
-
     pub fn empty(address: impl Into<String>) -> Self {
         Self::new(address, 0, "Unknown", 0, BTreeMap::new(), 0)
             .expect("the empty snapshot is in-domain")
-    }
-
-    pub fn native_balance(&self) -> u128 {
-        self.native_balance
-    }
-
-    pub fn extra_balance(&self) -> &BTreeMap<u32, CcAmount> {
-        &self.extra_balance
-    }
-
-    pub fn observed_network_time(&self) -> Option<&ObservedNetworkTime> {
-        self.observed_network_time.as_ref()
     }
 
     pub fn replace_balances(
@@ -592,6 +564,13 @@ impl WalletSnapshot {
         }
     }
 }
+
+accessors!(WalletSnapshot {
+    last_message_ms: copy u64,
+    native_balance: copy u128,
+    extra_balance: ref BTreeMap<u32, CcAmount>,
+    observed_network_time: opt ObservedNetworkTime
+});
 
 pub fn normalize_seed(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
