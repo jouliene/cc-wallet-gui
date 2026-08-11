@@ -52,9 +52,6 @@ pub const COMMENT_CELL_BYTES: usize = 127;
 /// transfer costs. Raising it later leaves older messages readable.
 pub const MAX_COMMENT_BYTES: usize = 1024;
 
-pub const COMMENT_CELLS: usize =
-    (MAX_COMMENT_BYTES - COMMENT_ROOT_BYTES).div_ceil(COMMENT_CELL_BYTES);
-
 pub fn comment_payload(text: &str) -> Result<Cell> {
     let bytes = text.as_bytes();
     ensure!(
@@ -850,6 +847,8 @@ impl IntoTupleResult for tycho_types::abi::AbiValue {
 
 #[cfg(test)]
 mod tests {
+    const COMMENT_CELLS: usize =
+        (MAX_COMMENT_BYTES - COMMENT_ROOT_BYTES).div_ceil(COMMENT_CELL_BYTES);
 
     #[test]
     fn a_comment_fills_the_root_cell_then_chains_as_many_as_the_budget_needs() {

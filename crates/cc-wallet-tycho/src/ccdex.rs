@@ -28,8 +28,6 @@ pub const OP_SET_PAUSED: u32 = 0xCCDE_0005;
 pub const OP_SET_OWNER: u32 = 0xCCDE_0006;
 pub const OP_SKIM: u32 = 0xCCDE_0007;
 
-pub const FEE_DENOM: u128 = 10_000;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Asset {
     pub is_native: bool,
