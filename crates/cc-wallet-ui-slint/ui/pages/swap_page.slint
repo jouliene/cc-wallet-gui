@@ -633,13 +633,11 @@ export component SwapPage inherits VerticalLayout {
                                     if root.receipt_state == "filled": ReceiptRow {
                                         label: "RECEIVED";
                                         amount: root.receipt_received;
-                                        sign: "+";
                                         tint: Palette.positive;
                                     }
                                     if root.receipt_state == "returned": ReceiptRow {
                                         label: "RETURNED";
                                         amount: root.receipt_received;
-                                        sign: "+";
                                         tint: Palette.warning;
                                         note: "the pool could not fill it";
                                     }
