@@ -821,13 +821,11 @@ component ConversationComposer inherits Rectangle {
             // conversation needs.
             height_: Theme.chat_input_h;
             font_size: Fonts.body;
-            // The counter sits inside this field, so the text stops short of it
-            // instead of running underneath. Only while it is up: a field that
-            // is permanently narrower for a figure nobody is being shown pays
-            // for it on every short message.
-            pad_right: counter.visible
-                ? Space.s_10 + counter.width + Space.s_8
-                : Space.s_12;
+            // The counter sits in the corner of this field, so the text stops
+            // short of it rather than running underneath. Always the same room,
+            // whatever the counter currently reads: a right edge that moved
+            // with the number would rewrap the line being typed.
+            pad_right: Space.s_10 + gauge.width + Space.s_8;
             multiline: true;
             enter_accepts: true;
             edited(t) => { root.edited(t); }
@@ -846,15 +844,18 @@ component ConversationComposer inherits Rectangle {
             }
         }
     }
-    // Only near the ceiling, and inside the field it is about. Counting bytes
-    // at someone who has typed four words is noise; saying nothing when the
-    // field quietly stops accepting them is worse.
-    //
-    // It is built whether or not it is shown, rather than living inside an
-    // `if`: the field reads this width to know how much room to leave for it,
-    // and an element inside an `if` cannot be pointed at from outside one.
+    // How much room the counter takes is how much room its widest reading
+    // takes, not its current one — a corner that gave a digit back as the
+    // number shrank would rewrap the message being typed.
+    gauge := Text {
+        visible: false;
+        text: root.draft_limit + " / " + root.draft_limit;
+        font-family: Fonts.mono;
+        font-size: Fonts.micro;
+    }
+    // In the corner of the field it is about, and up from the first character:
+    // the ceiling on a message is worth knowing before the message is near it.
     counter := Text {
-        visible: root.draft_bytes * 5 >= root.draft_limit * 4;
         x: root.width - root.inset - Theme.send_btn_w - root.gap - self.width - Space.s_10;
         y: root.height - root.gap - Space.s_6 - self.height;
         text: root.draft_bytes + " / " + root.draft_limit;
