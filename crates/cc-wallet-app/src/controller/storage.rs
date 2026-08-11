@@ -6,7 +6,7 @@ use zeroize::Zeroizing;
 
 use super::AppController;
 use crate::event::{AppEvent, BroadcastDispatch};
-use crate::state::{AuthModal, AuthMode, AuthPurpose, Deadline, StorageUi};
+use crate::state::{AuthPurpose, Deadline, StorageUi};
 
 pub(super) struct PendingStorage {
     pub op: StorageOp,
@@ -244,13 +244,7 @@ impl AppController {
         if self.state.storage.records.is_empty() {
             return;
         }
-        self.state.auth = AuthModal {
-            open: true,
-            mode: AuthMode::Enter,
-            purpose: AuthPurpose::RevealRecords,
-            send_options_editable: false,
-            error: String::new(),
-        };
+        self.open_auth(AuthPurpose::RevealRecords);
     }
 
     pub(super) fn show_records_for_one_minute(&mut self) {
@@ -312,18 +306,7 @@ impl AppController {
             inputs,
             generation,
         });
-        let mode = if self.state.within_autosign() {
-            AuthMode::Confirm
-        } else {
-            AuthMode::Enter
-        };
-        self.state.auth = AuthModal {
-            open: true,
-            mode,
-            purpose: AuthPurpose::Storage,
-            send_options_editable: false,
-            error: String::new(),
-        };
+        self.open_signing_auth(AuthPurpose::Storage, false);
     }
 
     pub(super) fn clear_pending_storage(&mut self) {

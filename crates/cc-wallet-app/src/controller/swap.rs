@@ -9,9 +9,7 @@ use cc_wallet_domain::{
 
 use super::AppController;
 use crate::event::{AppEvent, BroadcastDispatch};
-use crate::state::{
-    AuthModal, AuthMode, AuthPurpose, SWAP_MAX_NATIVE_RESERVE, SwapFigures, SwapReceipt,
-};
+use crate::state::{AuthPurpose, SWAP_MAX_NATIVE_RESERVE, SwapFigures, SwapReceipt};
 
 pub(super) struct PendingSwap {
     pub request: SwapRequest,
@@ -272,18 +270,7 @@ impl AppController {
             pool,
             generation,
         });
-        let mode = if self.state.within_autosign() {
-            AuthMode::Confirm
-        } else {
-            AuthMode::Enter
-        };
-        self.state.auth = AuthModal {
-            open: true,
-            mode,
-            purpose: AuthPurpose::Swap,
-            send_options_editable: false,
-            error: String::new(),
-        };
+        self.open_signing_auth(AuthPurpose::Swap, false);
     }
 
     pub(super) fn clear_pending_swap(&mut self) {

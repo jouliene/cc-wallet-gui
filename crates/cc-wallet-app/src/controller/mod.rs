@@ -1027,14 +1027,7 @@ impl AppController {
     }
 
     fn delete_wallet(&mut self) {
-        use crate::state::AuthModal;
-        self.state.auth = AuthModal {
-            open: true,
-            mode: AuthMode::Enter,
-            purpose: AuthPurpose::DeleteWallet,
-            send_options_editable: false,
-            error: String::new(),
-        };
+        self.open_auth(AuthPurpose::DeleteWallet);
     }
 
     pub(crate) fn do_delete_wallet(&mut self) {

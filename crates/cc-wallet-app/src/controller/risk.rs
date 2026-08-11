@@ -8,7 +8,7 @@ use cc_wallet_domain::{
 
 use super::{AppController, PendingRiskConsumption, PendingRiskReview};
 use crate::event::AppEvent;
-use crate::state::{AuthModal, AuthMode, AuthPurpose, PersistenceHealth};
+use crate::state::{AuthPurpose, PersistenceHealth};
 
 impl AppController {
     pub(super) fn request_risk_override(&mut self) {
@@ -416,18 +416,7 @@ impl AppController {
         self.state.risk_review_details.clear();
         self.state.risk_overlap_labels.clear();
         self.state.risk_overlap_selected.clear();
-        let mode = if self.state.within_autosign() {
-            AuthMode::Confirm
-        } else {
-            AuthMode::Enter
-        };
-        self.state.auth = AuthModal {
-            open: true,
-            mode,
-            purpose: AuthPurpose::Send,
-            send_options_editable: false,
-            error: String::new(),
-        };
+        self.open_signing_auth(AuthPurpose::Send, false);
         self.state.status =
             "One-use duplicate-risk grant is durable; authenticate this exact ticket".to_owned();
     }

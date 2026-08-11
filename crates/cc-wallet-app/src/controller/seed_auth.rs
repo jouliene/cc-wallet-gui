@@ -24,6 +24,33 @@ pub(super) const GATE_MSG_PENDING: &str =
     "Still verifying the recipient account — try again in a moment";
 
 impl AppController {
+    pub(super) fn open_auth(&mut self, purpose: AuthPurpose) {
+        self.state.auth = AuthModal {
+            open: true,
+            mode: AuthMode::Enter,
+            purpose,
+            send_options_editable: false,
+            error: String::new(),
+        };
+    }
+
+    pub(super) fn open_signing_auth(&mut self, purpose: AuthPurpose, send_options_editable: bool) {
+        let mode = if self.state.within_autosign() {
+            AuthMode::Confirm
+        } else {
+            AuthMode::Enter
+        };
+        self.state.auth = AuthModal {
+            open: true,
+            mode,
+            purpose,
+            send_options_editable,
+            error: String::new(),
+        };
+    }
+}
+
+impl AppController {
     pub(super) fn create_password(&mut self, pw: Password, pw2: Password) {
         if pw.char_count() < 8 {
             self.state.lock_error = "Use at least 8 characters".to_owned();
@@ -331,18 +358,7 @@ impl AppController {
             }
         };
         self.pending_authorization = Some(authorization);
-        let mode = if self.state.within_autosign() {
-            AuthMode::Confirm
-        } else {
-            AuthMode::Enter
-        };
-        self.state.auth = AuthModal {
-            open: true,
-            mode,
-            purpose: AuthPurpose::Send,
-            send_options_editable: true,
-            error: String::new(),
-        };
+        self.open_signing_auth(AuthPurpose::Send, true);
         self.session.fee_reestimate_at = None;
         self.check_destination();
     }
@@ -388,13 +404,7 @@ impl AppController {
     }
 
     pub(super) fn change_password_request(&mut self) {
-        self.state.auth = AuthModal {
-            open: true,
-            mode: AuthMode::Enter,
-            purpose: AuthPurpose::ChangePassword,
-            send_options_editable: false,
-            error: String::new(),
-        };
+        self.open_auth(AuthPurpose::ChangePassword);
     }
 
     pub(super) fn request_security_setting(&mut self, setting: SecuritySetting) {
@@ -406,13 +416,7 @@ impl AppController {
             return;
         }
         self.pending_security_setting = Some(setting);
-        self.state.auth = AuthModal {
-            open: true,
-            mode: AuthMode::Enter,
-            purpose: AuthPurpose::ChangeSecuritySetting,
-            send_options_editable: false,
-            error: String::new(),
-        };
+        self.open_auth(AuthPurpose::ChangeSecuritySetting);
     }
 
     pub(super) fn apply_security_setting(&mut self, setting: SecuritySetting) {
@@ -588,13 +592,7 @@ impl AppController {
     }
 
     pub(super) fn reveal_seed(&mut self) {
-        self.state.auth = AuthModal {
-            open: true,
-            mode: AuthMode::Enter,
-            purpose: AuthPurpose::RevealSeed,
-            send_options_editable: false,
-            error: String::new(),
-        };
+        self.open_auth(AuthPurpose::RevealSeed);
     }
 
     pub(super) fn show_seed_for_one_minute(&mut self) {
