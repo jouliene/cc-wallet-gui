@@ -173,8 +173,6 @@ export component AssetsCard inherits Card {
     in property <int> asset_count;
     callback select_asset(int);
 
-    // The card's own width comes from the page, so it is the one place in this
-    // column that can decide anything without asking its contents.
     property <length> row_avatar_w: 32px;
     property <length> row_free_w: max(0px, root.width
         - 2 * Space.s_12
@@ -195,8 +193,6 @@ export component AssetsCard inherits Card {
                 asset_list := ScrollView {
                     max-height: Theme.asset_list_max_h;
                     viewport-height: root.assets.length * 59px - 5px;
-                    // The rows divide themselves by the width they are given,
-                    // so the width they are given must not come back from them.
                     viewport-width: asset_list.width;
                     scrolled => { UserActivity.ping(); }
                     vertical-scrollbar-policy: ScrollBarPolicy.always-off;
@@ -360,15 +356,7 @@ export component SendCard inherits Card {
                             horizontal-stretch: 1;
                             min-width: 0px;
                             height: Theme.amount_h;
-                            // The clear and MAX chips ride on top of the field,
-                            // so the text has to stop where they begin: one
-                            // width drives the inset, the position and the box.
                             property <length> actions_w: Sizes.control_dense + Space.s_4 + Sizes.max_chip_w;
-                            // The step down is a question about this field's
-                            // room, not about a count of characters someone
-                            // measured once against a narrower field. Mono
-                            // digits are 0.6 of their size, so the answer is
-                            // arithmetic and follows the field when it grows.
                             property <length> number_room: parent.width - Space.s_12 - self.actions_w - Space.s_6 - Space.s_24;
                             property <length> number_w: root.amount.character-count * 0.6px;
                             amount_field := Field {
@@ -437,10 +425,6 @@ export component SendCard inherits Card {
                             }
                             TouchArea { enabled: !root.form_locked; mouse-cursor: pointer; clicked => { root.open_token(); } }
                         }
-                        // The ticker is already in the selector to its left, so
-                        // the button carries neither it nor an icon, and it takes
-                        // the field's height rather than the taller button one:
-                        // beside a 46px field the two would not line up.
                         PrimaryButton {
                             width: Theme.send_btn_w;
                             height_: Theme.amount_h;
@@ -483,8 +467,6 @@ export component SendCard inherits Card {
                     }
                 }
 
-                // Sits under the Send button and shares its width, which is
-                // what puts the comment's right edge on the token selector's.
                 VerticalLayout {
                     width: Theme.send_btn_w;
                     alignment: end;
@@ -553,10 +535,6 @@ export component SendCard inherits Card {
     paste_timer := Timer { interval: Motion.ack_dwell; running: false; triggered => { root.pasted = false; self.running = false; } }
 }
 
-/// The header a conversation wears in place of the activity filters.
-///
-/// It replaces the card's own header rather than sitting above it, so the card
-/// stays one card and the page does not grow a second title bar.
 component ConversationHeader inherits Rectangle {
     in property <string> peer;
     in property <string> peer_name;
@@ -610,8 +588,6 @@ component ConversationHeader inherits Rectangle {
                 }
                 if root.peer_name != "": VerticalLayout {
                     alignment: center;
-                    // 22, not 20: the mark's cap-height centring lands true at the size
-                    // the token badges use, and a pixel high at twenty.
                     Avatar { initial: root.peer_mark; tint: root.peer_tone; size: 22px; }
                 }
                 if root.peer_name != "": Text {
@@ -664,29 +640,17 @@ component ConversationHeader inherits Rectangle {
     }
 }
 
-/// One thing said, in a bubble that leans the way it travelled.
 component ConversationBubble inherits Rectangle {
     in property <ChatLineRow> line;
-    /// The column's width, handed down rather than read off this row. Reading
-    /// it here would ask the scroll area how wide it is, and the scroll area
-    /// answers by asking its content — which is this.
     in property <length> room;
-    // The gap between messages is this row's padding, not an offset inside it.
-    // Setting `y` on the layout left it as tall as the row and the bubble grew
-    // to match — which is why bubbles touched, and why the words and the time
-    // drifted apart inside them: the extra height had to go somewhere.
     height: bubble.preferred-height;
     bubble := HorizontalLayout {
         padding-left: Space.s_16;
         padding-right: Space.s_16;
         padding-top: Space.s_4;
         padding-bottom: Space.s_4;
-        // Ours to the right, theirs to the left. The stretch does the leaning,
-        // so a bubble never has to be measured to be placed.
         if root.line.outgoing: Rectangle { horizontal-stretch: 1; min-width: Space.s_24; }
         Rectangle {
-            // A bubble is as wide as what was said, up to a point. Stretching it
-            // to the column would make every message look the same length.
             horizontal-stretch: 0;
             max-width: root.room * 0.62;
             border-radius: Radii.md;
@@ -753,11 +717,6 @@ component ConversationBubble inherits Rectangle {
     }
 }
 
-/// Where a reply is written.
-///
-/// It sends nothing itself: pressing send fills in the transfer form above and
-/// hands it to the same authorization every other transfer goes through, which
-/// is why there is no amount here. A message carries the least a transfer can.
 component ConversationComposer inherits Rectangle {
     in-out property <string> draft;
     in property <int> draft_bytes;
@@ -768,18 +727,9 @@ component ConversationComposer inherits Rectangle {
     callback edited(string);
     callback send();
 
-    // One inset, used everywhere: the strip's sides match the thread's, so the
-    // field starts where the messages start and the button ends where they end,
-    // and the space above and below the field is the same as between them.
     property <length> inset: Space.s_16;
     property <length> gap: Space.s_10;
 
-    // Until the other end's key is in, there is nothing to type into and the
-    // field is disabled — and a disabled field cannot take the focus the
-    // conversation gave it on the way in. That focus does not stay nowhere: it
-    // lands on the first thing in the window, which is the Wallet tab, and
-    // draws a ring there that the reader never asked for. So the field asks
-    // again the moment it can actually hold it.
     changed can_encrypt => {
         if (root.can_encrypt && !root.busy) {
             composer_field.focus();
@@ -787,9 +737,6 @@ component ConversationComposer inherits Rectangle {
     }
 
     height: row.preferred-height;
-    // Its own ground, not a continuation of the thread. A hairline alone left
-    // the last bubble sitting on the field, and buying the separation with
-    // empty space would spend height the conversation has none of.
     background: Palette.surface_sunken;
     Rectangle {
         y: 0;
@@ -804,27 +751,14 @@ component ConversationComposer inherits Rectangle {
         spacing: root.gap;
         composer_field := Field {
             horizontal-stretch: 1;
-            // A conversation is opened to say something, so the cursor is
-            // already where the saying happens.
             init => { self.focus(); }
             text <=> root.draft;
             enabled: !root.busy && root.can_encrypt;
-            // The one thing that can stop a conversation is said in the field
-            // itself. A line of its own above the box cost a whole row of a
-            // card that has none to spare, and this is where the eye already
-            // is when nothing can be typed.
             placeholder: root.can_encrypt
                 ? "Write a message"
                 : "This account publishes no key — write from the Send form instead";
-            // Two lines' worth, and it scrolls past that: enough to see that
-            // the line broke without the composer taking the room the
-            // conversation needs.
             height_: Theme.chat_input_h;
             font_size: Fonts.body;
-            // The counter sits in the corner of this field, so the text stops
-            // short of it rather than running underneath. Always the same room,
-            // whatever the counter currently reads: a right edge that moved
-            // with the number would rewrap the line being typed.
             pad_right: Space.s_10 + gauge.width + Space.s_8;
             multiline: true;
             enter_accepts: true;
@@ -832,10 +766,7 @@ component ConversationComposer inherits Rectangle {
             accepted => { root.send(); }
         }
         VerticalLayout {
-            // The same width the Send button has on the transfer form, so the
-            // two read as one control in two places.
             width: Theme.send_btn_w;
-            // Beside the field, not hanging off its bottom edge.
             alignment: center;
             PrimaryButton {
                 label: root.busy ? "Sending" : "Send";
@@ -844,17 +775,12 @@ component ConversationComposer inherits Rectangle {
             }
         }
     }
-    // How much room the counter takes is how much room its widest reading
-    // takes, not its current one — a corner that gave a digit back as the
-    // number shrank would rewrap the message being typed.
     gauge := Text {
         visible: false;
         text: root.draft_limit + " / " + root.draft_limit;
         font-family: Fonts.mono;
         font-size: Fonts.micro;
     }
-    // In the corner of the field it is about, and up from the first character:
-    // the ceiling on a message is worth knowing before the message is near it.
     counter := Text {
         x: root.width - root.inset - Theme.send_btn_w - root.gap - self.width - Space.s_10;
         y: root.height - root.gap - Space.s_6 - self.height;
@@ -865,7 +791,6 @@ component ConversationComposer inherits Rectangle {
     }
 }
 
-/// The conversation itself: everything said with one address, oldest first.
 component ConversationView inherits Rectangle {
     in property <[ChatLineRow]> lines;
     in property <string> error;
@@ -882,15 +807,9 @@ component ConversationView inherits Rectangle {
         width: 100%;
         height: 100%;
         scrolled => { UserActivity.ping(); }
-        // Every list in this wallet scrolls without a bar. This one kept the
-        // platform's, which stays hidden until the pointer crosses it and then
-        // arrives in the platform's own colours — white, on a dark thread.
         vertical-scrollbar-policy: ScrollBarPolicy.always-off;
         horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
         viewport-height: thread.preferred-height;
-        // A conversation opens where it left off, and follows what arrives.
-        // Reading from the top would mean scrolling past everything ever said
-        // to reach the thing that just came in.
         changed viewport-height => {
             self.viewport-y = min(0px, self.visible-height - self.viewport-height);
         }
@@ -1182,16 +1101,11 @@ export component ActivityCard inherits Card {
         }
     }
 
-    // The conversation covers the card rather than replacing what is in it.
-    // The filter pills the popups anchor to live in the header, and an element
-    // inside an `if` cannot be pointed at from outside one — so the list stays
-    // built, and the reader simply sits on top of it.
     if root.chat_open: Rectangle {
         width: 100%;
         height: 100%;
         background: Palette.surface_raised;
         border-radius: Radii.lg;
-        // Nothing behind this is meant to be clickable while it is up.
         TouchArea { }
         VerticalLayout {
             padding-bottom: Space.s_10;

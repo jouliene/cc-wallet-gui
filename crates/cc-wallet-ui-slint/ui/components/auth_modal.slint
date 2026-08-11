@@ -145,20 +145,6 @@ export component AuthModal inherits Rectangle {
                         MicroLabel { text: "AMOUNT"; }
                         HorizontalLayout {
                             spacing: Space.s_10;
-                            // A balance can run to twenty-five characters, and
-                            // at display size that is wider than the dialog. The
-                            // integer is never cut — it is the figure being
-                            // agreed to — so the size steps down until it fits
-                            // and the fraction gives way at a group boundary for
-                            // whatever room is left. Mono digits are 0.6 of
-                            // their size, so both answers are arithmetic.
-                            // The badge's own width cannot be read here: it is
-                            // laid out by this same row, and asking it would put
-                            // the amount's size in a loop with it. So it is
-                            // reckoned instead — border, padding, avatar and a
-                            // generous allowance per letter of the ticker.
-                            // Over-reckoning costs the amount a few pixels;
-                            // under-reckoning would put it through the wall.
                             property <length> badge_w: 2px + Space.s_4 + 16px + Space.s_6
                                 + root.tx_amount.symbol.character-count * 0.7px * (Fonts.small / 1px)
                                 + Space.s_8;
@@ -166,12 +152,6 @@ export component AuthModal inherits Rectangle {
                             property <int> int_chars: root.tx_amount.amount_int.character-count;
                             property <int> all_chars: self.int_chars
                                 + root.tx_amount.amount_frac.character-count;
-                            // Sized to the whole figure, not just its integer:
-                            // this is the number being agreed to, and dropping
-                            // the decimals to keep the type large would hide
-                            // part of what is being sent. Only when even the
-                            // smallest size cannot hold all of it does the
-                            // fraction start giving way.
                             property <length> size: self.all_chars * 0.6px * (Fonts.display / 1px) <= self.room
                                 ? Fonts.display
                                 : (self.all_chars * 0.6px * (Fonts.amount / 1px) <= self.room

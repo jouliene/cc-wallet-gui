@@ -15,9 +15,6 @@ component RecordRow inherits Rectangle {
     callback delete_record(int);
     callback copy_record(int);
 
-    // A record may be several lines long, and a record you cannot read in full
-    // is not much use — so the row grows to fit one, while a single-line record
-    // keeps the compact height that lets more of them fit on screen.
     height: max(Sizes.control_dense + 2 * Space.s_12, body.preferred-height);
     background: ta.has-hover ? Palette.hover_row : transparent;
     animate background { duration: Motion.base; easing: Motion.curve; }
@@ -93,8 +90,6 @@ component RecordRow inherits Rectangle {
             HorizontalLayout {
                 spacing: Space.s_4;
                 alignment: end;
-                // Copying is reading. Offering it while the record is hidden
-                // handed out the contents the password was standing in front of.
                 if root.revealed: SecretCopyButton {
                     copy => { root.copy_record(root.record.id); }
                 }
@@ -151,16 +146,6 @@ export component StoragePage inherits VerticalLayout {
     height: root.page_height;
     spacing: Space.stack_gap;
 
-    // The heading row and the record rows read these same three, so a column
-    // and its label can never end up starting in different places.
-    // The columns are sized by what they hold, not by numbers picked against one
-    // screen: the ordinal fits three digits of the mono face, the actions fit
-    // their two buttons, and the two text columns divide whatever is left over,
-    // so a wider window widens the reading area instead of the margins.
-    //
-    // The share is measured off the page width rather than left to the layout,
-    // because a text reports the width it would take on ONE line: one very long
-    // record would otherwise claim the row and squeeze the name to nothing.
     property <length> col_number_w: 4 * Theme.mono_char;
     property <length> col_actions_w: 2 * Sizes.control_dense + Space.s_4;
     property <length> col_gap: Space.s_12;
@@ -171,9 +156,6 @@ export component StoragePage inherits VerticalLayout {
     property <length> col_title_w: root.col_free_w / 4;
     property <length> col_data_w: root.col_free_w - root.col_title_w;
 
-    // The form starts at the card inset and its first column swallows the
-    // ordinal gutter: a record being written has no number yet, and the field
-    // still ends where the NAME column ends.
     property <length> form_title_w: root.col_number_w + root.col_gap + root.col_title_w;
     property <length> form_btn_h: 40px;
 
@@ -346,9 +328,6 @@ export component StoragePage inherits VerticalLayout {
 
                 if root.count > 0: hold := Rectangle {
                     vertical-stretch: 1;
-                    // Measured against the LIST's own height: taking it from the
-                    // wrapper left the hint claiming there was more after the
-                    // list had already reached its end.
                     property <bool> more_below:
                         list.viewport-height - list.height + list.viewport-y > 1px;
                     list := Flickable {
@@ -372,9 +351,6 @@ export component StoragePage inherits VerticalLayout {
                     }
                     }
 
-                    // Anything below the fold is invisible otherwise, so the
-                    // list says so: the rows fade out under a count of what is
-                    // still down there, and both go away at the bottom.
                     if hold.more_below: Rectangle {
                         y: parent.height - self.height;
                         height: 44px;
