@@ -1922,207 +1922,56 @@ pub trait ChainService: Send + Sync {
     ) -> ChainFuture<'_, ()>;
 }
 
+macro_rules! forward_to_inherent {
+    (unit $name:ident ( $( $arg:ident : $ty:ty ),* $(,)? )) => {
+        fn $name(&self $(, $arg: $ty)*) {
+            TychoWalletService::$name(self $(, $arg)*);
+        }
+    };
+    (sync $name:ident ( $( $arg:ident : $ty:ty ),* $(,)? ) -> $ret:ty) => {
+        fn $name(&self $(, $arg: $ty)*) -> $ret {
+            TychoWalletService::$name(self $(, $arg)*)
+        }
+    };
+    (fut $name:ident ( $( $arg:ident : $ty:ty ),* $(,)? ) -> $ret:ty) => {
+        fn $name(&self $(, $arg: $ty)*) -> $ret {
+            Box::pin(TychoWalletService::$name(self $(, $arg)*))
+        }
+    };
+    (fut_lt <$lt:lifetime> $name:ident ( $( $arg:ident : $ty:ty ),* $(,)? ) -> $ret:ty) => {
+        fn $name<$lt>(&$lt self $(, $arg: $ty)*) -> $ret {
+            Box::pin(TychoWalletService::$name(self $(, $arg)*))
+        }
+    };
+}
+
 impl ChainService for TychoWalletService {
-    fn generate_seed(&self) -> ChainResult<SeedPhrase> {
-        TychoWalletService::generate_seed(self)
-    }
-
-    fn clear_config_cache(&self) {
-        TychoWalletService::clear_config_cache(self);
-    }
-
-    fn seal_key_ops(&self) {
-        TychoWalletService::seal_key_ops(self);
-    }
-
-    fn unseal_key_ops(&self) {
-        TychoWalletService::unseal_key_ops(self);
-    }
-
-    fn derive_wallet_address(&self, inputs: &WalletInputs) -> ChainResult<String> {
-        TychoWalletService::derive_wallet_address(self, inputs)
-    }
-
-    fn drain_emulation_jobs(&self, timeout: Duration) -> bool {
-        TychoWalletService::drain_emulation_jobs(self, timeout)
-    }
-
-    fn load_wallet<'a>(
-        &'a self,
-        inputs: &'a EndpointAddressInputs,
-    ) -> ChainFuture<'a, WalletSnapshot> {
-        Box::pin(TychoWalletService::load_wallet(self, inputs))
-    }
-
-    fn prepare_transaction(
-        &self,
-        inputs: WalletInputs,
-        ticket: SendTicket,
-        active_reservations: Vec<Reservation>,
-        authorized_overlap: Vec<Reservation>,
-    ) -> ChainFuture<'_, PreparedChainSend> {
-        Box::pin(TychoWalletService::prepare_transaction(
-            self,
-            inputs,
-            ticket,
-            active_reservations,
-            authorized_overlap,
-        ))
-    }
-
-    fn broadcast_prepared_candidate<'a>(
-        &'a self,
-        prepared: &'a PreparedChainSend,
-        candidate_index: usize,
-    ) -> ChainFuture<'a, CandidateBroadcastOutcome> {
-        Box::pin(TychoWalletService::broadcast_prepared_candidate(
-            self,
-            prepared,
-            candidate_index,
-        ))
-    }
-
-    fn estimate_fee(
-        &self,
-        inputs: WalletInputs,
-        request: SendRequest,
-        bounce: bool,
-    ) -> ChainFuture<'_, FeeEstimate> {
-        Box::pin(TychoWalletService::estimate_fee(
-            self, inputs, request, bounce,
-        ))
-    }
-
-    fn load_pool_state<'a>(
-        &'a self,
-        endpoint: &'a str,
-        pool: &'a str,
-    ) -> ChainFuture<'a, PoolSnapshot> {
-        Box::pin(TychoWalletService::load_pool_state(self, endpoint, pool))
-    }
-
-    fn prepare_swap(
-        &self,
-        inputs: WalletInputs,
-        pool: String,
-        request: SwapRequest,
-    ) -> ChainFuture<'_, PreparedSwap> {
-        Box::pin(TychoWalletService::prepare_swap(
-            self, inputs, pool, request,
-        ))
-    }
-
-    fn broadcast_swap<'a>(
-        &'a self,
-        prepared: &'a PreparedSwap,
-        candidate_index: usize,
-    ) -> ChainFuture<'a, CandidateBroadcastOutcome> {
-        Box::pin(TychoWalletService::broadcast_swap(
-            self,
-            prepared,
-            candidate_index,
-        ))
-    }
-
-    fn storage_address_for(&self, inputs: &WalletInputs) -> ChainResult<String> {
-        TychoWalletService::storage_address_for(self, inputs)
-    }
-
-    fn load_storage(&self, inputs: WalletInputs) -> ChainFuture<'_, StorageSnapshot> {
-        Box::pin(TychoWalletService::load_storage(self, inputs))
-    }
-
-    fn prepare_storage_op(
-        &self,
-        inputs: WalletInputs,
-        op: StorageOp,
-    ) -> ChainFuture<'_, PreparedStorageOp> {
-        Box::pin(TychoWalletService::prepare_storage_op(self, inputs, op))
-    }
-
-    fn broadcast_storage_op<'a>(
-        &'a self,
-        prepared: &'a PreparedStorageOp,
-        candidate_index: usize,
-    ) -> ChainFuture<'a, CandidateBroadcastOutcome> {
-        Box::pin(TychoWalletService::broadcast_storage_op(
-            self,
-            prepared,
-            candidate_index,
-        ))
-    }
-
-    fn check_destination<'a>(
-        &'a self,
-        inputs: &'a EndpointAddressInputs,
-        address: String,
-    ) -> ChainFuture<'a, DestinationReport> {
-        Box::pin(TychoWalletService::check_destination(self, inputs, address))
-    }
-
-    fn open_conversation(
-        &self,
-        inputs: &WalletInputs,
-        peer: &str,
-        peer_key: Option<&[u8; 32]>,
-        sealed: &[SealedComment<'_>],
-    ) -> ChainResult<Vec<Option<String>>> {
-        TychoWalletService::open_conversation(self, inputs, peer, peer_key, sealed)
-    }
-
-    fn load_transactions<'a>(
-        &'a self,
-        inputs: &'a EndpointAddressInputs,
-        limit: u32,
-        before_lt: Option<u64>,
-    ) -> ChainFuture<'a, TransactionPage> {
-        Box::pin(TychoWalletService::load_transactions(
-            self, inputs, limit, before_lt,
-        ))
-    }
-
-    fn probe_endpoint(&self, endpoint: String) -> ChainFuture<'_, i32> {
-        Box::pin(TychoWalletService::probe_endpoint(self, endpoint))
-    }
-
-    fn validator_clock(&self, endpoint: String) -> ChainFuture<'_, ValidatorCycle> {
-        Box::pin(TychoWalletService::validator_clock(self, endpoint))
-    }
-
-    fn network_stats(&self, endpoint: String) -> ChainFuture<'_, NetworkStats> {
-        Box::pin(TychoWalletService::network_stats(self, endpoint))
-    }
-
-    fn inspect_account(
-        &self,
-        endpoint: String,
-        address: String,
-    ) -> ChainFuture<'_, AccountInspection> {
-        Box::pin(TychoWalletService::inspect_account(self, endpoint, address))
-    }
-
-    fn account_transactions(
-        &self,
-        endpoint: String,
-        address: String,
-        limit: u32,
-    ) -> ChainFuture<'_, AccountTxPage> {
-        Box::pin(TychoWalletService::account_transactions(
-            self, endpoint, address, limit,
-        ))
-    }
-
-    fn trace_transaction(
-        &self,
-        endpoint: String,
-        transaction_hash: String,
-    ) -> ChainFuture<'_, AccountTrace> {
-        Box::pin(TychoWalletService::trace_transaction(
-            self,
-            endpoint,
-            transaction_hash,
-        ))
-    }
+    forward_to_inherent!(sync generate_seed() -> ChainResult<SeedPhrase>);
+    forward_to_inherent!(unit clear_config_cache());
+    forward_to_inherent!(unit seal_key_ops());
+    forward_to_inherent!(unit unseal_key_ops());
+    forward_to_inherent!(sync derive_wallet_address(inputs: &WalletInputs) -> ChainResult<String>);
+    forward_to_inherent!(sync drain_emulation_jobs(timeout: Duration) -> bool);
+    forward_to_inherent!(fut_lt <'a> load_wallet(inputs: &'a EndpointAddressInputs) -> ChainFuture<'a, WalletSnapshot>);
+    forward_to_inherent!(fut prepare_transaction(inputs: WalletInputs, ticket: SendTicket, active_reservations: Vec<Reservation>, authorized_overlap: Vec<Reservation>) -> ChainFuture<'_, PreparedChainSend>);
+    forward_to_inherent!(fut_lt <'a> broadcast_prepared_candidate(prepared: &'a PreparedChainSend, candidate_index: usize) -> ChainFuture<'a, CandidateBroadcastOutcome>);
+    forward_to_inherent!(fut estimate_fee(inputs: WalletInputs, request: SendRequest, bounce: bool) -> ChainFuture<'_, FeeEstimate>);
+    forward_to_inherent!(fut_lt <'a> load_pool_state(endpoint: &'a str, pool: &'a str) -> ChainFuture<'a, PoolSnapshot>);
+    forward_to_inherent!(fut prepare_swap(inputs: WalletInputs, pool: String, request: SwapRequest) -> ChainFuture<'_, PreparedSwap>);
+    forward_to_inherent!(fut_lt <'a> broadcast_swap(prepared: &'a PreparedSwap, candidate_index: usize) -> ChainFuture<'a, CandidateBroadcastOutcome>);
+    forward_to_inherent!(sync storage_address_for(inputs: &WalletInputs) -> ChainResult<String>);
+    forward_to_inherent!(fut load_storage(inputs: WalletInputs) -> ChainFuture<'_, StorageSnapshot>);
+    forward_to_inherent!(fut prepare_storage_op(inputs: WalletInputs, op: StorageOp) -> ChainFuture<'_, PreparedStorageOp>);
+    forward_to_inherent!(fut_lt <'a> broadcast_storage_op(prepared: &'a PreparedStorageOp, candidate_index: usize) -> ChainFuture<'a, CandidateBroadcastOutcome>);
+    forward_to_inherent!(fut_lt <'a> check_destination(inputs: &'a EndpointAddressInputs, address: String) -> ChainFuture<'a, DestinationReport>);
+    forward_to_inherent!(sync open_conversation(inputs: &WalletInputs, peer: &str, peer_key: Option<&[u8; 32]>, sealed: &[SealedComment<'_>]) -> ChainResult<Vec<Option<String>>>);
+    forward_to_inherent!(fut_lt <'a> load_transactions(inputs: &'a EndpointAddressInputs, limit: u32, before_lt: Option<u64>) -> ChainFuture<'a, TransactionPage>);
+    forward_to_inherent!(fut probe_endpoint(endpoint: String) -> ChainFuture<'_, i32>);
+    forward_to_inherent!(fut validator_clock(endpoint: String) -> ChainFuture<'_, ValidatorCycle>);
+    forward_to_inherent!(fut network_stats(endpoint: String) -> ChainFuture<'_, NetworkStats>);
+    forward_to_inherent!(fut inspect_account(endpoint: String, address: String) -> ChainFuture<'_, AccountInspection>);
+    forward_to_inherent!(fut account_transactions(endpoint: String, address: String, limit: u32) -> ChainFuture<'_, AccountTxPage>);
+    forward_to_inherent!(fut trace_transaction(endpoint: String, transaction_hash: String) -> ChainFuture<'_, AccountTrace>);
 
     fn subscribe(
         &self,
