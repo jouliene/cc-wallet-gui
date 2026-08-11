@@ -755,7 +755,7 @@ dependencies = [
 
 [[package]]
 name = "cc-wallet-app"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "arboard",
  "cc-wallet-chain",
@@ -771,7 +771,7 @@ dependencies = [
 
 [[package]]
 name = "cc-wallet-chain"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "blake3",
  "cc-wallet-domain",
@@ -786,7 +786,7 @@ dependencies = [
 
 [[package]]
 name = "cc-wallet-domain"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "cc-wallet-vault",
  "num-bigint",
@@ -799,7 +799,7 @@ dependencies = [
 
 [[package]]
 name = "cc-wallet-storage"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "cc-wallet-vault",
  "getrandom 0.4.3",
@@ -811,7 +811,7 @@ dependencies = [
 
 [[package]]
 name = "cc-wallet-tycho"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "base64",
@@ -835,7 +835,7 @@ dependencies = [
 
 [[package]]
 name = "cc-wallet-ui-slint"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "cc-wallet-app",
  "cc-wallet-domain",
@@ -850,7 +850,7 @@ dependencies = [
 
 [[package]]
 name = "cc-wallet-vault"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "argon2",
  "blake3",
