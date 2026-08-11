@@ -1767,6 +1767,10 @@ pub struct NetworkStats {
     pub supply: Option<CoinSupply>,
 }
 
+fn unsupported<'a, T: 'a>(what: &'static str) -> ChainFuture<'a, T> {
+    Box::pin(async move { Err(ChainError::Wallet(what.to_owned())) })
+}
+
 pub trait ChainService: Send + Sync {
     fn generate_seed(&self) -> ChainResult<SeedPhrase>;
     fn clear_config_cache(&self);
@@ -1801,11 +1805,7 @@ pub trait ChainService: Send + Sync {
         _endpoint: &'a str,
         _pool: &'a str,
     ) -> ChainFuture<'a, PoolSnapshot> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not read DEX pool state".to_owned(),
-            ))
-        })
+        unsupported("this chain service does not read DEX pool state")
     }
     fn prepare_swap(
         &self,
@@ -1813,22 +1813,14 @@ pub trait ChainService: Send + Sync {
         _pool: String,
         _request: SwapRequest,
     ) -> ChainFuture<'_, PreparedSwap> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not implement swap preparation".to_owned(),
-            ))
-        })
+        unsupported("this chain service does not implement swap preparation")
     }
     fn broadcast_swap<'a>(
         &'a self,
         _prepared: &'a PreparedSwap,
         _candidate_index: usize,
     ) -> ChainFuture<'a, CandidateBroadcastOutcome> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not implement swap broadcasting".to_owned(),
-            ))
-        })
+        unsupported("this chain service does not implement swap broadcasting")
     }
     fn storage_address_for(&self, _inputs: &WalletInputs) -> ChainResult<String>;
     fn load_storage(&self, _inputs: WalletInputs) -> ChainFuture<'_, StorageSnapshot>;
@@ -1842,11 +1834,7 @@ pub trait ChainService: Send + Sync {
         _prepared: &'a PreparedStorageOp,
         _candidate_index: usize,
     ) -> ChainFuture<'a, CandidateBroadcastOutcome> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not implement storage broadcasting".to_owned(),
-            ))
-        })
+        unsupported("this chain service does not implement storage broadcasting")
     }
     fn check_destination<'a>(
         &'a self,
@@ -1868,29 +1856,17 @@ pub trait ChainService: Send + Sync {
     ) -> ChainFuture<'a, TransactionPage>;
     fn probe_endpoint(&self, endpoint: String) -> ChainFuture<'_, i32>;
     fn network_stats(&self, _endpoint: String) -> ChainFuture<'_, NetworkStats> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not provide network stats".to_owned(),
-            ))
-        })
+        unsupported("this chain service does not provide network stats")
     }
     fn validator_clock(&self, _endpoint: String) -> ChainFuture<'_, ValidatorCycle> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not provide validator-clock data".to_owned(),
-            ))
-        })
+        unsupported("this chain service does not provide validator-clock data")
     }
     fn inspect_account(
         &self,
         _endpoint: String,
         _address: String,
     ) -> ChainFuture<'_, AccountInspection> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not support account inspection".to_owned(),
-            ))
-        })
+        unsupported("this chain service does not support account inspection")
     }
     fn account_transactions(
         &self,
@@ -1898,22 +1874,14 @@ pub trait ChainService: Send + Sync {
         _address: String,
         _limit: u32,
     ) -> ChainFuture<'_, AccountTxPage> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not serve account history".to_owned(),
-            ))
-        })
+        unsupported("this chain service does not serve account history")
     }
     fn trace_transaction(
         &self,
         _endpoint: String,
         _transaction_hash: String,
     ) -> ChainFuture<'_, AccountTrace> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not walk message trees".to_owned(),
-            ))
-        })
+        unsupported("this chain service does not walk message trees")
     }
     fn subscribe(
         &self,
