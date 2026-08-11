@@ -5,6 +5,11 @@
 .ccwallet-storage-probe-*
 cc-wallet-profile*
 
+*.log
+
 # Local-only audit reports (kept out of the repo)
 REVIEW_REPORT.md
 REVIEW_REPORT_ru.md
+
+# Local-only design handoffs (kept out of the repo)
+design_handoff_*/
