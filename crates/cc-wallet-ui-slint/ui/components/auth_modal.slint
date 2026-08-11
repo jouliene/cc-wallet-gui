@@ -123,7 +123,7 @@ export component AuthModal inherits Rectangle {
                     padding: Space.s_16;
                     spacing: Space.s_10;
                     MicroLabel { text: "SWAP"; }
-                    SwapLine { label: "SEND"; amount: root.swap_in; sign: "−"; }
+                    SwapLine { label: "SEND"; amount: root.swap_in; }
                     if root.swap_out_known: SwapLine { label: "RECEIVE"; amount: root.swap_out; sign: "≈"; }
                     if !root.swap_out_known: InlineError {
                         text: "The pool has no price for this pair — it would return your input.";

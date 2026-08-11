@@ -628,7 +628,6 @@ export component SwapPage inherits VerticalLayout {
                                     ReceiptRow {
                                         label: "SENT";
                                         amount: root.receipt_sent;
-                                        sign: "−";
                                         tint: Palette.text_primary;
                                     }
                                     if root.receipt_state == "filled": ReceiptRow {
