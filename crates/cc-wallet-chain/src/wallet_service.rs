@@ -1770,11 +1770,9 @@ pub struct NetworkStats {
 pub trait ChainService: Send + Sync {
     fn generate_seed(&self) -> ChainResult<SeedPhrase>;
     fn clear_config_cache(&self);
-    fn seal_key_ops(&self) {}
-    fn unseal_key_ops(&self) {}
-    fn drain_emulation_jobs(&self, _timeout: Duration) -> bool {
-        true
-    }
+    fn seal_key_ops(&self);
+    fn unseal_key_ops(&self);
+    fn drain_emulation_jobs(&self, _timeout: Duration) -> bool;
     fn derive_wallet_address(&self, inputs: &WalletInputs) -> ChainResult<String>;
     fn load_wallet<'a>(
         &'a self,
@@ -1786,24 +1784,12 @@ pub trait ChainService: Send + Sync {
         _ticket: SendTicket,
         _active_reservations: Vec<Reservation>,
         _authorized_overlap: Vec<Reservation>,
-    ) -> ChainFuture<'_, PreparedChainSend> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not implement the durable prepare pipeline".to_owned(),
-            ))
-        })
-    }
+    ) -> ChainFuture<'_, PreparedChainSend>;
     fn broadcast_prepared_candidate<'a>(
         &'a self,
         _prepared: &'a PreparedChainSend,
         _candidate_index: usize,
-    ) -> ChainFuture<'a, CandidateBroadcastOutcome> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not implement candidate broadcasting".to_owned(),
-            ))
-        })
-    }
+    ) -> ChainFuture<'a, CandidateBroadcastOutcome>;
     fn estimate_fee(
         &self,
         inputs: WalletInputs,
@@ -1844,29 +1830,13 @@ pub trait ChainService: Send + Sync {
             ))
         })
     }
-    fn storage_address_for(&self, _inputs: &WalletInputs) -> ChainResult<String> {
-        Err(ChainError::Wallet(
-            "this chain service does not derive storage addresses".to_owned(),
-        ))
-    }
-    fn load_storage(&self, _inputs: WalletInputs) -> ChainFuture<'_, StorageSnapshot> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not read storage state".to_owned(),
-            ))
-        })
-    }
+    fn storage_address_for(&self, _inputs: &WalletInputs) -> ChainResult<String>;
+    fn load_storage(&self, _inputs: WalletInputs) -> ChainFuture<'_, StorageSnapshot>;
     fn prepare_storage_op(
         &self,
         _inputs: WalletInputs,
         _op: StorageOp,
-    ) -> ChainFuture<'_, PreparedStorageOp> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not implement storage preparation".to_owned(),
-            ))
-        })
-    }
+    ) -> ChainFuture<'_, PreparedStorageOp>;
     fn broadcast_storage_op<'a>(
         &'a self,
         _prepared: &'a PreparedStorageOp,
