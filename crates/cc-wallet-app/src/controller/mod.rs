@@ -4,8 +4,6 @@ mod endpoints;
 mod events;
 mod journal;
 mod live;
-#[cfg(test)]
-mod live_probe;
 mod risk;
 mod save;
 mod seed_auth;
