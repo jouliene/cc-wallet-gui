@@ -163,7 +163,7 @@ export component AuthModal inherits Rectangle {
                                 + root.tx_amount.symbol.character-count * 0.7px * (Fonts.small / 1px)
                                 + Space.s_8;
                             property <length> room: parent.width - self.badge_w - Space.s_10;
-                            property <int> int_chars: 1 + root.tx_amount.amount_int.character-count;
+                            property <int> int_chars: root.tx_amount.amount_int.character-count;
                             property <int> all_chars: self.int_chars
                                 + root.tx_amount.amount_frac.character-count;
                             // Sized to the whole figure, not just its integer:
@@ -184,7 +184,6 @@ export component AuthModal inherits Rectangle {
                             Amount {
                                 horizontal-stretch: 0;
                                 amount: root.tx_amount;
-                                sign: "−";
                                 tint: Palette.text_primary;
                                 font_size: parent.size;
                                 frac_groups: parent.frac_groups;
