@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use serde::de::{self, DeserializeOwned};
+use serde::de::{self};
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::value::RawValue;
@@ -349,7 +349,8 @@ struct PrepareProvenanceWire {
     signature_context_hash: Digest32,
     signature_global_id: i32,
     signature_with_id: bool,
-    network_time: RequiredNullable<NetworkTimeProvenance>,
+    #[serde(deserialize_with = "crate::strict::required_nullable")]
+    network_time: Option<NetworkTimeProvenance>,
     fee_input_hash: Digest32,
     #[serde(with = "crate::amount::native_scalar")]
     estimated_fee_native: u128,
@@ -461,30 +462,13 @@ impl<'de> Deserialize<'de> for PrepareProvenance {
             wire.signature_context_hash,
             wire.signature_global_id,
             wire.signature_with_id,
-            wire.network_time.0,
+            wire.network_time,
             wire.fee_input_hash,
             wire.estimated_fee_native,
             wire.local_fee_ceiling_native,
             wire.authorized_overlap,
         )
         .map_err(de::Error::custom)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct RequiredNullable<T>(Option<T>);
-
-impl<'de, T: DeserializeOwned> Deserialize<'de> for RequiredNullable<T> {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = Box::<RawValue>::deserialize(deserializer)?;
-        if raw.get() == "null" {
-            Ok(Self(None))
-        } else {
-            serde_json::from_str(raw.get())
-                .map(Some)
-                .map(Self)
-                .map_err(de::Error::custom)
-        }
     }
 }
 

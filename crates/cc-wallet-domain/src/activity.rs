@@ -1,6 +1,4 @@
-use serde::de::{self, DeserializeOwned};
-use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::value::RawValue;
+use serde::{Deserialize, Serialize};
 
 use crate::amount::AssetAmount;
 use crate::asset::AssetId;
@@ -78,11 +76,13 @@ mod hex_bytes {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ActivityEvent {
     pub direction: ActivityDirection,
     pub lt: u64,
     pub time_unix: u64,
+    #[serde(deserialize_with = "crate::strict::required_nullable")]
     pub tx_hash: Option<Digest32>,
     pub counterparty: String,
     pub movements: Vec<AssetMovement>,
@@ -91,72 +91,15 @@ pub struct ActivityEvent {
     pub success: bool,
     pub bounced: bool,
     pub exit_code: i32,
+    #[serde(deserialize_with = "crate::strict::required_nullable")]
     pub ext_msg_hash: Option<Digest32>,
+    #[serde(deserialize_with = "crate::strict::required_nullable")]
     pub int_msg_hash: Option<Digest32>,
+    #[serde(deserialize_with = "crate::strict::required_nullable")]
     pub finality_ms: Option<u64>,
     pub pending: bool,
+    #[serde(deserialize_with = "crate::strict::required_nullable")]
     pub message: Option<ActivityMessage>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ActivityEventWire {
-    direction: ActivityDirection,
-    lt: u64,
-    time_unix: u64,
-    tx_hash: RequiredNullable<Digest32>,
-    counterparty: String,
-    movements: Vec<AssetMovement>,
-    #[serde(with = "crate::amount::native_scalar")]
-    fee_native: u128,
-    success: bool,
-    bounced: bool,
-    exit_code: i32,
-    ext_msg_hash: RequiredNullable<Digest32>,
-    int_msg_hash: RequiredNullable<Digest32>,
-    finality_ms: RequiredNullable<u64>,
-    pending: bool,
-    message: RequiredNullable<ActivityMessage>,
-}
-
-#[derive(Debug)]
-struct RequiredNullable<T>(Option<T>);
-
-impl<'de, T: DeserializeOwned> Deserialize<'de> for RequiredNullable<T> {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = Box::<RawValue>::deserialize(deserializer)?;
-        if raw.get() == "null" {
-            Ok(Self(None))
-        } else {
-            serde_json::from_str(raw.get())
-                .map(Some)
-                .map(Self)
-                .map_err(de::Error::custom)
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for ActivityEvent {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let wire = ActivityEventWire::deserialize(deserializer)?;
-        Ok(Self {
-            direction: wire.direction,
-            lt: wire.lt,
-            time_unix: wire.time_unix,
-            tx_hash: wire.tx_hash.0,
-            counterparty: wire.counterparty,
-            movements: wire.movements,
-            fee_native: wire.fee_native,
-            success: wire.success,
-            bounced: wire.bounced,
-            exit_code: wire.exit_code,
-            ext_msg_hash: wire.ext_msg_hash.0,
-            int_msg_hash: wire.int_msg_hash.0,
-            finality_ms: wire.finality_ms.0,
-            pending: wire.pending,
-            message: wire.message.0,
-        })
-    }
 }
 
 impl ActivityEvent {
