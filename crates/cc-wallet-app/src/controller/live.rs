@@ -544,10 +544,26 @@ impl AppController {
     /// row keeps its place at the top of the list until the chain's own row
     /// arrives to replace it.
     pub(super) fn settle_optimistic_row(&mut self, ext_msg_hash: &cc_wallet_domain::Digest32) {
+        // The wait belongs to the transfer being settled and to no other. The
+        // replay guard confirms a transfer before its transaction is indexed,
+        // and a confirmed send keeps its place in `pending_sends` until that
+        // transaction lands — so by the time the next transfer is armed, the
+        // earliest start held here is the previous one's, and reading it would
+        // report that whole wait again on top of this one. The rows standing in
+        // for this message say which of the held starts is ours.
+        let ours: Vec<u64> = self
+            .state
+            .activity
+            .iter()
+            .filter(|event| event.tx_hash.is_none())
+            .filter(|event| event.ext_msg_hash.as_ref() == Some(ext_msg_hash))
+            .map(|event| event.lt)
+            .collect();
         let finality = self
             .session
             .pending_sends
             .iter()
+            .filter(|(lt, _)| ours.contains(lt))
             .filter_map(|(_, started_at)| *started_at)
             .min()
             .and_then(|started_at| self.spun_for(started_at));

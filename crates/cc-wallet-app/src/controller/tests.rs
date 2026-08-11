@@ -3205,6 +3205,85 @@ fn the_finality_figure_is_how_long_the_row_spun_and_it_never_moves_afterwards() 
 }
 
 #[test]
+fn a_second_transfer_is_timed_from_its_own_start_and_not_the_one_before_it() {
+    let dir = temp_dir("finality-per-send");
+    let mut c = unlocked(&dir, WalletProfile::default());
+
+    // The first transfer goes out and the wallet's own replay guard confirms
+    // it. That is what the guard is for: it answers before the endpoint's
+    // transaction index does, so this row settles here and the journal lets the
+    // next transfer go out.
+    let first = c.push_pending_send(&native_request(SEND_DEST, 5_000));
+    c.state
+        .activity
+        .iter_mut()
+        .find(|event| event.lt == first)
+        .expect("the first optimistic row exists")
+        .ext_msg_hash = optional_digest("ext-one");
+    c.session.awaiting_send_lt = Some(first);
+    c.arm_awaiting_send_finality();
+    std::thread::sleep(Duration::from_millis(40));
+    c.settle_optimistic_row(&digest("ext-one"));
+    // All that clearing the in-flight send does on that path: the transfer is
+    // no longer in flight, but its row and the start it was timed from stay
+    // until the transaction is indexed.
+    c.session.awaiting_send_lt = None;
+    let first_reported = c.state().activity[0]
+        .finality_ms
+        .expect("the first row says how long it spun");
+
+    // The index is still catching up on the first transfer when the second one
+    // is sent — the gap the guard exists to skip, and seconds wide on a slow
+    // endpoint.
+    std::thread::sleep(Duration::from_millis(150));
+    assert!(
+        c.session.pending_sends.iter().any(|(lt, _)| *lt == first),
+        "the first send is still held: only its indexed transaction releases it"
+    );
+
+    let second = c.push_pending_send(&native_request(SEND_DEST, 6_000));
+    c.state
+        .activity
+        .iter_mut()
+        .find(|event| event.lt == second)
+        .expect("the second optimistic row exists")
+        .ext_msg_hash = optional_digest("ext-two");
+    c.session.awaiting_send_lt = Some(second);
+    let armed = Instant::now();
+    c.arm_awaiting_send_finality();
+    std::thread::sleep(Duration::from_millis(40));
+    c.settle_optimistic_row(&digest("ext-two"));
+    let spun = armed.elapsed().as_millis();
+
+    let row = c
+        .state()
+        .activity
+        .iter()
+        .find(|event| event.lt == second)
+        .expect("the second row is there");
+    assert!(!row.pending, "the news stopped the second spinner");
+    let reported = u128::from(
+        row.finality_ms
+            .expect("the second row says how long it spun"),
+    );
+    assert!(
+        reported + 5 >= 40 && reported <= spun + 5,
+        "finality {reported} ms is not the {spun} ms the second row spun — it is carrying the first transfer's wait"
+    );
+
+    assert_eq!(
+        c.state()
+            .activity
+            .iter()
+            .find(|event| event.lt == first)
+            .and_then(|event| event.finality_ms),
+        Some(first_reported),
+        "settling the second transfer must not touch the first one's figure"
+    );
+    cleanup(&dir);
+}
+
+#[test]
 fn a_drifted_endpoint_observation_does_not_match_or_poison_persistence() {
     let dir = temp_dir("m8-endpoint-drift");
     let (mut c, _fake) = ready_to_send(&dir);

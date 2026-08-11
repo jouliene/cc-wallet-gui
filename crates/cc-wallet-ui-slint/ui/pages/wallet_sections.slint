@@ -821,6 +821,13 @@ component ConversationComposer inherits Rectangle {
             // conversation needs.
             height_: Theme.chat_input_h;
             font_size: Fonts.body;
+            // The counter sits inside this field, so the text stops short of it
+            // instead of running underneath. Only while it is up: a field that
+            // is permanently narrower for a figure nobody is being shown pays
+            // for it on every short message.
+            pad_right: counter.visible
+                ? Space.s_10 + counter.width + Space.s_8
+                : Space.s_12;
             multiline: true;
             enter_accepts: true;
             edited(t) => { root.edited(t); }
@@ -842,7 +849,12 @@ component ConversationComposer inherits Rectangle {
     // Only near the ceiling, and inside the field it is about. Counting bytes
     // at someone who has typed four words is noise; saying nothing when the
     // field quietly stops accepting them is worse.
-    if root.draft_bytes * 5 >= root.draft_limit * 4: Text {
+    //
+    // It is built whether or not it is shown, rather than living inside an
+    // `if`: the field reads this width to know how much room to leave for it,
+    // and an element inside an `if` cannot be pointed at from outside one.
+    counter := Text {
+        visible: root.draft_bytes * 5 >= root.draft_limit * 4;
         x: root.width - root.inset - Theme.send_btn_w - root.gap - self.width - Space.s_10;
         y: root.height - root.gap - Space.s_6 - self.height;
         text: root.draft_bytes + " / " + root.draft_limit;
