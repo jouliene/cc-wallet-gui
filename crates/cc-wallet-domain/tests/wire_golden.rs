@@ -129,3 +129,27 @@ fn the_activity_wire_accepts_and_rejects_exactly_what_it_did_before() {
         "the activity wire's accept/reject matrix moved"
     );
 }
+
+#[test]
+fn a_sealed_blob_that_is_not_hex_is_refused_rather_than_fatal() {
+    let mut event = ActivityEvent::test_stub(6, 1_699_999_999);
+    event.message = Some(cc_wallet_domain::ActivityMessage::Sealed {
+        sender_key: cc_wallet_domain::PublicKey32::from_bytes([0x11; 32]),
+        blob: vec![0xde, 0xad],
+    });
+    let json = String::from_utf8(
+        ActivityEnvelope::new(vec![event])
+            .encode()
+            .expect("encodes"),
+    )
+    .expect("utf-8");
+    assert!(json.contains("\"blob\":\"dead\""));
+
+    for probe in ["a\u{e9}a", "\u{e9}a", "aa\u{e9}", "zz", "abc"] {
+        let damaged = json.replace("\"blob\":\"dead\"", &format!("\"blob\":\"{probe}\""));
+        assert!(
+            ActivityEnvelope::decode(damaged.as_bytes()).is_err(),
+            "a blob of {probe:?} is refused"
+        );
+    }
+}

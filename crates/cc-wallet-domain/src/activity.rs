@@ -49,11 +49,7 @@ mod hex_bytes {
     use serde::{Deserialize, Deserializer, Serializer};
 
     pub fn serialize<S: Serializer>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
-        let mut hex = String::with_capacity(bytes.len() * 2);
-        for byte in bytes {
-            hex.push_str(&format!("{byte:02x}"));
-        }
-        serializer.serialize_str(&hex)
+        serializer.serialize_str(&crate::ids::hex_lower_encode(bytes))
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<u8>, D::Error> {
@@ -61,18 +57,8 @@ mod hex_bytes {
         if !text.len().is_multiple_of(2) {
             return Err(D::Error::custom("a hex blob has an even number of digits"));
         }
-        (0..text.len() / 2)
-            .map(|i| {
-                let pair = &text[2 * i..2 * i + 2];
-                if pair
-                    .bytes()
-                    .any(|b| !b.is_ascii_digit() && !(b'a'..=b'f').contains(&b))
-                {
-                    return Err(D::Error::custom("a hex blob is lowercase ASCII hex"));
-                }
-                u8::from_str_radix(pair, 16).map_err(D::Error::custom)
-            })
-            .collect()
+        crate::ids::hex_lower_decode(&text)
+            .ok_or_else(|| D::Error::custom("a hex blob is lowercase ASCII hex"))
     }
 }
 

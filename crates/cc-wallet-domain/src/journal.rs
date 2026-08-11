@@ -117,30 +117,13 @@ fn parse_canonical_address(value: &str) -> Result<CanonicalAddress, JournalError
             "address workchain is not canonical 0 or -1",
         ));
     }
-    if account.len() != 64
-        || !account
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
-    {
-        return Err(JournalError::InvalidTicket(
+    let bytes: [u8; 32] = crate::ids::hex_lower_decode(account)
+        .filter(|decoded| decoded.len() == 32)
+        .and_then(|decoded| decoded.try_into().ok())
+        .ok_or(JournalError::InvalidTicket(
             "address hash is not 64 lowercase hex digits",
-        ));
-    }
-    let mut bytes = [0u8; 32];
-    for (index, byte) in bytes.iter_mut().enumerate() {
-        let hi = hex_value(account.as_bytes()[index * 2]);
-        let lo = hex_value(account.as_bytes()[index * 2 + 1]);
-        *byte = (hi << 4) | lo;
-    }
+        ))?;
     Ok(CanonicalAddress::new(workchain, bytes))
-}
-
-fn hex_value(byte: u8) -> u8 {
-    match byte {
-        b'0'..=b'9' => byte - b'0',
-        b'a'..=b'f' => byte - b'a' + 10,
-        _ => unreachable!("canonical address validation precedes hex conversion"),
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
