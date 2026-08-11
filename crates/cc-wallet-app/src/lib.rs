@@ -1,9 +1,9 @@
 pub mod clipboard;
-pub mod command;
-pub mod controller;
-pub mod event;
+mod command;
+mod controller;
+mod event;
 mod random_ids;
-pub mod state;
+mod state;
 
 pub use cc_wallet_chain::{
     AccountInspection, AccountTrace, AccountTx, AccountTxKind, AccountTxPage, CoinSupply,
@@ -24,7 +24,7 @@ pub use controller::AppController;
 pub use event::AppEvent;
 pub use state::{
     AppPhase, AppState, AppTab, AuthMode, AuthPurpose, ChatLine, ChatUi, LiveStatus,
-    RecipientCheck, StorageUi, SwapFigures, SwapReceipt,
+    RecipientCheck, StorageUi,
 };
 
 pub fn seed_phrase_is_valid(phrase: &str) -> bool {

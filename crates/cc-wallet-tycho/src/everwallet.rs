@@ -1,7 +1,8 @@
 use crate::contracts::{
     ContractAt, ContractSpec, DecodedContract, DecodedField, decode_contract_data,
 };
-use crate::{AccountState, KeyPair, ObservedAccountState, ObservedNetworkTime};
+use crate::crypto::KeyPair;
+use crate::transport::{AccountState, ObservedAccountState, ObservedNetworkTime};
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use ed25519_dalek::VerifyingKey;
 use std::collections::BTreeMap;
@@ -1083,7 +1084,7 @@ mod tests {
         let now = u32::try_from(now)?;
         wallet.apply_observed_account_state(ObservedAccountState {
             state: AccountState::NotExists {
-                timings: Some(crate::AccountTimings {
+                timings: Some(crate::transport::AccountTimings {
                     gen_lt: 1,
                     gen_utime: now,
                 }),
