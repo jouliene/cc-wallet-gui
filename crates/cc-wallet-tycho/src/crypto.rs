@@ -220,14 +220,6 @@ impl KeyPair {
         self.public_key().to_bytes()
     }
 
-    /// The key this wallet and one other arrive at independently. Both sides
-    /// compute it from their own scalar and the other's published key, which is
-    /// what lets the sender read back what they sent.
-    ///
-    /// It reuses the signing key, because a wallet publishes no other: the
-    /// recipient's account carries the key it signs with and nothing else.
-    /// The same agreement from a key as it appears on chain — raw bytes out of
-    /// an account — so callers need no signature types of their own.
     pub fn comment_secret_for(&self, their_key: &[u8; 32]) -> Result<Zeroizing<[u8; 32]>> {
         let their_key =
             VerifyingKey::from_bytes(their_key).map_err(CryptoError::InvalidPublicKey)?;

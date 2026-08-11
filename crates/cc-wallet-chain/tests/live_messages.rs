@@ -1,18 +1,3 @@
-//! Puts a plain and a sealed comment on a real chain and reads them back.
-//!
-//! The conversation view is only as good as what the history hands it, and the
-//! history only carries a message if the chain layer put one there. Everything
-//! between the two — the op, the snake, the key agreement, the pair the
-//! ciphertext is bound to — is invisible to a unit test that seals and opens in
-//! the same process. This spends real testnet coins to see it end to end.
-//!
-//! Run with:
-//! ```text
-//! CC_WALLET_ENDPOINT=https://rpc-testnet.tychoprotocol.com/ \
-//! CC_WALLET_TEST_SEED="…" \
-//! cargo test -p cc-wallet-chain --test live_messages -- --ignored --nocapture
-//! ```
-
 use std::time::{Duration, Instant};
 
 use cc_wallet_chain::{SealedComment, TychoWalletService, activity_from_chain_tx};
@@ -85,8 +70,6 @@ async fn a_plain_and_a_sealed_comment_survive_the_round_trip_through_a_real_chai
         .map(|tx| tx.lt)
         .unwrap_or(0);
 
-    // Our own key is what a message to ourselves is sealed to, and this wallet
-    // publishes it the same way any recipient does.
     let key = service
         .check_destination(&public, address.clone())
         .await
@@ -108,7 +91,6 @@ async fn a_plain_and_a_sealed_comment_survive_the_round_trip_through_a_real_chai
     .await;
     println!("[sent] plain");
 
-    // A second send has to wait for the first to land: one wallet, one seqno.
     let deadline = Instant::now() + Duration::from_secs(90);
     while Instant::now() < deadline {
         tokio::time::sleep(Duration::from_secs(3)).await;
@@ -170,10 +152,6 @@ async fn a_plain_and_a_sealed_comment_survive_the_round_trip_through_a_real_chai
                             )
                             .expect("opening runs");
                         println!("[read] sealed, {:?} -> {:?}", event.direction, opened[0]);
-                        // A wallet that has been tested before carries older
-                        // sealed comments, and those are not this run's. What
-                        // matters is that every one of them opens to something,
-                        // and that this run's words are among them.
                         assert!(
                             opened[0].is_some(),
                             "a sealed comment that came off the chain did not open at all, \

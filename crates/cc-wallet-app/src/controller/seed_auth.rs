@@ -272,12 +272,6 @@ impl AppController {
         self.authorize_transfer(request);
     }
 
-    /// Everything a transfer goes through once there is a transfer to make.
-    ///
-    /// Kept apart from the form that usually fills it in, because a reply
-    /// written in a conversation is the same operation from a different screen
-    /// — and routing it through the form meant the message appeared for an
-    /// instant in the note field of a card the writer was not looking at.
     pub(super) fn authorize_transfer(&mut self, request: SendRequest) {
         let inputs = match self.wallet_inputs() {
             Ok(inputs) => inputs,
@@ -907,7 +901,6 @@ impl AppController {
         self.state.derived_wallet_address.clear();
         self.state.wallet = None;
         self.state.activity.clear();
-        // A conversation belongs to the wallet that could read it.
         self.close_chat();
         self.session.pending_sends.clear();
         self.session.awaiting_send_lt = None;

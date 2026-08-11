@@ -184,9 +184,6 @@ pub enum AppEvent {
     Error(String),
 }
 
-/// An external message this wallet put on the wire, and when it went. Both the
-/// swap and the storage pages hand one back so the row it becomes in Activity
-/// can be told how long the chain took to accept it.
 #[derive(Debug)]
 pub struct BroadcastDispatch {
     pub outcome: CandidateBroadcastOutcome,

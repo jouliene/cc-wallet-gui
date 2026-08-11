@@ -433,11 +433,6 @@ impl AppController {
             int_msg_hash: None,
             finality_ms: None,
             pending: true,
-            // The words are ours and we have them in hand, so the row that
-            // stands in for the transfer carries them from the first frame.
-            // A sealed one is shown in the clear because it is ours to read;
-            // once the chain answers, this row is replaced by the real one and
-            // the ciphertext is what gets kept.
             message: (!request.comment().is_empty()).then(|| ActivityMessage::Plain {
                 text: request.comment().to_owned(),
             }),
@@ -477,9 +472,6 @@ impl AppController {
         }
     }
 
-    /// The wait this message ended up reporting, if the chain has already
-    /// spoken for it. A swap or a record has no row to stop spinning, so its
-    /// figure is frozen at that moment and kept here until the row lands.
     fn settled_wait_for(&self, hash: &cc_wallet_domain::Digest32) -> Option<u64> {
         self.session
             .pending_externals
@@ -488,12 +480,6 @@ impl AppController {
             .and_then(|pending| pending.settled_ms)
     }
 
-    /// Ends the wait for everything of ours that is on the wire.
-    ///
-    /// Called on the subscription frame, which is the same news that stops a
-    /// transfer's spinner. Whatever we sent, the chain has now spoken once
-    /// since we sent it, and that is the wait worth reporting — not how long
-    /// the endpoint's transaction index then took to carry the row.
     pub(super) fn end_external_waits(&mut self) {
         for pending in &mut self.session.pending_externals {
             if pending.settled_ms.is_none() {
@@ -502,9 +488,6 @@ impl AppController {
         }
     }
 
-    /// When this message went out — from whichever ledger holds it. A transfer
-    /// is timed through the optimistic row being replaced here; a swap or a
-    /// record is timed by its own external hash.
     fn broadcast_started_at(
         &self,
         hash: &cc_wallet_domain::Digest32,
@@ -526,31 +509,11 @@ impl AppController {
             .min()
     }
 
-    /// How long the row has been spinning, right now.
-    ///
-    /// This is the whole of the finality figure. The wallet shows one number
-    /// beside a spinner the person just watched, so the number is that wait and
-    /// nothing else: it stops at the instant the spinner does, and it is
-    /// stamped by whichever piece of news stopped it.
     fn spun_for(&self, started_at: Instant) -> Option<u64> {
         u64::try_from(started_at.elapsed().as_millis()).ok()
     }
 
-    /// Stops the spinner on the row standing in for a transfer the account
-    /// state has now confirmed.
-    ///
-    /// Only the spinner and the finality figure change. The fee, the hash and
-    /// the effects belong to the transaction and are still on their way, so the
-    /// row keeps its place at the top of the list until the chain's own row
-    /// arrives to replace it.
     pub(super) fn settle_optimistic_row(&mut self, ext_msg_hash: &cc_wallet_domain::Digest32) {
-        // The wait belongs to the transfer being settled and to no other. The
-        // replay guard confirms a transfer before its transaction is indexed,
-        // and a confirmed send keeps its place in `pending_sends` until that
-        // transaction lands — so by the time the next transfer is armed, the
-        // earliest start held here is the previous one's, and reading it would
-        // report that whole wait again on top of this one. The rows standing in
-        // for this message say which of the held starts is ours.
         let ours: Vec<u64> = self
             .state
             .activity
@@ -594,18 +557,11 @@ impl AppController {
 
     pub(super) fn sort_activity(&mut self) {
         self.state.activity.sort_by(|a, b| {
-            // A row we made ourselves stays on top until the chain's own
-            // row replaces it. What pins it there is having no transaction
-            // of its own — not the spinner, which stops as soon as the
-            // account state says the transfer ran.
             a.tx_hash
                 .is_some()
                 .cmp(&b.tx_hash.is_some())
                 .then(b.lt.cmp(&a.lt))
         });
-        // Every path that touches the activity ends here, so an open
-        // conversation follows the history instead of freezing at the moment it
-        // was opened.
         self.rebuild_chat();
     }
 
@@ -632,9 +588,6 @@ impl AppController {
                     .collect();
                 optimistic_confirmation_merged |= !removed.is_empty();
                 if event.finality_ms.is_none() {
-                    // A row that already stopped spinning keeps the figure it
-                    // stopped at. Recomputing here would move the number under
-                    // the reader for no reason: the wait they watched is over.
                     event.finality_ms = removed
                         .iter()
                         .filter_map(|(_, _, finality)| *finality)

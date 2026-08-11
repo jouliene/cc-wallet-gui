@@ -45,11 +45,6 @@ pub const COMMENT_ROOT_BYTES: usize = 123;
 
 pub const COMMENT_CELL_BYTES: usize = 127;
 
-/// What a comment may carry, matching what a stored record may. The chain
-/// permits far more — 65535 bytes for the whole signed message, a snake 500
-/// cells deep — so this is a spending decision, not a structural one: at 8000
-/// nano a byte in forward fees, a full kilobyte roughly doubles what a bare
-/// transfer costs. Raising it later leaves older messages readable.
 pub const MAX_COMMENT_BYTES: usize = 1024;
 
 pub fn comment_payload(text: &str) -> Result<Cell> {
@@ -87,12 +82,6 @@ pub fn comment_payload(text: &str) -> Result<Cell> {
     root.build().context("failed to build the comment payload")
 }
 
-/// Reads a plain comment back out of a message body, or says it is not one.
-///
-/// The convention is only an op of zero and then bytes, snaked across as many
-/// cells as it took. Anyone may write one, so nothing here trusts the sender:
-/// a body that is not valid UTF-8, or that runs past what a comment may hold,
-/// is not a comment as far as this wallet is concerned.
 pub fn read_comment(body: &Cell) -> Option<String> {
     let mut slice = body.as_slice().ok()?;
     if slice.size_bits() < 32 || slice.load_u32().ok()? != COMMENT_OP {
@@ -180,7 +169,6 @@ pub struct WalletState {
     pub balance: u128,
     pub extra_balance: BTreeMap<u32, String>,
     pub last_trans_lt: u64,
-    /// The wallet's own replay guard — see [`ever_wallet_replay_ms`].
     pub last_message_ms: Option<u64>,
     pub gen_lt: Option<u64>,
     pub gen_utime: Option<u32>,
@@ -255,23 +243,12 @@ pub fn ever_wallet_spec() -> ContractSpec {
     }
 }
 
-/// The moment this wallet last executed a message of ours, as the contract
-/// itself recorded it.
-///
-/// The wallet stores the timestamp of every external message it runs, and it
-/// stores it only if the transaction committed — an aborted one rolls the
-/// storage back. That makes this the earliest honest proof that one particular
-/// signed message went through, and the account state carries it as soon as the
-/// node applies the block, well before the transaction reaches the node's
-/// transaction index.
 pub fn ever_wallet_replay_ms(data: &Cell) -> Option<u64> {
     let mut slice = data.as_slice().ok()?;
     slice.load_u256().ok()?;
     slice.load_u64().ok()
 }
 
-/// The same guard, but only from an account that is actually running our
-/// wallet code — another contract's first 320 bits mean something else.
 fn account_replay_ms(account: &tycho_types::models::Account) -> Option<u64> {
     use tycho_types::models::account::AccountState as CoreAccountState;
     let CoreAccountState::Active(state_init) = &account.state else {
@@ -335,9 +312,6 @@ pub struct AccountInspection {
     pub data_boc: Option<String>,
     pub data_bytes: usize,
     pub decoded: Option<DecodedContract>,
-    /// The key this account signs with, when it is an Ever Wallet. It is the
-    /// only key an account publishes, so it is the only thing a comment can be
-    /// encrypted to; anything else leaves this empty.
     pub signing_key: Option<[u8; 32]>,
 }
 
@@ -527,7 +501,6 @@ impl EverTransfer {
         self
     }
 
-    /// The body as built, for a caller that needs to read back what it wrote.
     pub fn payload_cell(&self) -> Option<&Cell> {
         self.payload.as_ref()
     }
@@ -977,8 +950,6 @@ mod tests {
             "a wallet that has run nothing has run nothing at a time of zero"
         );
 
-        // What the contract stores is the millisecond stamp the message
-        // carried, which is exactly what a prepared send knows about itself.
         let wallet = EverWallet::new(keys)?;
         let transfer = EverTransfer::new(wallet.address())?.native(1)?;
         let prepared = wallet.prepare_send_currency_at(

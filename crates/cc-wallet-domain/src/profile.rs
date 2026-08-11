@@ -536,11 +536,6 @@ impl WalletSnapshot {
         })
     }
 
-    /// The timestamp the wallet contract stored for the last message it ran.
-    ///
-    /// Zero means the account state did not say — an account that is not our
-    /// wallet code, or a read that came back unchanged. Only a value that came
-    /// off a real account can confirm anything, so zero confirms nothing.
     #[must_use]
     pub fn with_last_message_ms(mut self, last_message_ms: u64) -> Self {
         self.last_message_ms = last_message_ms;

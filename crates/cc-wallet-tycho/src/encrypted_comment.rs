@@ -1,15 +1,3 @@
-//! A comment only the two ends can read.
-//!
-//! The wallet already has one cipher — XChaCha20-Poly1305, the same one that
-//! holds the seed on disk and the records in storage — and this adds no second
-//! one. What it adds is a third way to arrive at a key: neither the password
-//! nor our own seed can produce something the recipient could also compute, so
-//! the two sides agree on it instead, over their on-chain signing keys.
-//!
-//! The agreement is static on both sides, which is what lets the sender read
-//! back what they sent: the same two keys always yield the same secret, so a
-//! message is legible to its author for as long as both accounts exist.
-
 use anyhow::{Context, Result, bail, ensure};
 use curve25519_dalek::montgomery::MontgomeryPoint;
 use ed25519_dalek::VerifyingKey;
@@ -18,31 +6,21 @@ use zeroize::Zeroizing;
 use crate::everwallet::{COMMENT_CELL_BYTES, MAX_COMMENT_BYTES};
 use tycho_types::prelude::*;
 
-/// Reads in a raw op as `CCE1`, so an explorer that knows nothing about this
-/// format still says what kind of thing it is looking at.
 pub const ENCRYPTED_COMMENT_OP: u32 = 0x4343_4531;
 
 pub const ENCRYPTED_COMMENT_VERSION: u8 = 1;
 
-/// What stands in the body before the sealed blob: the version and the sender's
-/// key. The nonce and the tag are inside the blob, not in front of it — counting
-/// them here as well is how a comment that fits exactly came to be refused.
 pub const ENCRYPTED_PREFIX_BYTES: usize = 1 + 32;
 
-/// The nonce the sealer prepends and the tag it appends.
 pub const SEAL_OVERHEAD_BYTES: usize = 24 + 16;
 
-/// What the plaintext may run to once all of that is paid for.
 pub const MAX_ENCRYPTED_COMMENT_BYTES: usize =
     MAX_COMMENT_BYTES - ENCRYPTED_PREFIX_BYTES - SEAL_OVERHEAD_BYTES;
 
 const ROOT_BYTES: usize = 123 - ENCRYPTED_PREFIX_BYTES - 24;
 
-/// The context string binds a shared secret to this use. The same two keys
-/// meeting for some other purpose must not arrive at the same key.
 const KEY_CONTEXT: &str = "cc-wallet 2026 encrypted comment v1";
 
-/// The secret two wallets share, from one side's scalar and the other's point.
 pub fn shared_secret(
     my_scalar: &curve25519_dalek::Scalar,
     their_key: &VerifyingKey,
@@ -52,8 +30,6 @@ pub fn shared_secret(
     Zeroizing::new(blake3::derive_key(KEY_CONTEXT, shared.as_bytes()))
 }
 
-/// What the ciphertext is bound to: the pair it was written for, in the order
-/// the message travels. A blob lifted into another conversation stops opening.
 pub fn comment_aad(sender: &str, recipient: &str) -> Vec<u8> {
     let mut aad = Vec::with_capacity(sender.len() + 1 + recipient.len());
     aad.extend_from_slice(sender.as_bytes());
@@ -62,21 +38,17 @@ pub fn comment_aad(sender: &str, recipient: &str) -> Vec<u8> {
     aad
 }
 
-/// The body of the message: the header, then the sealed blob snaked across as
-/// many cells as it takes, exactly as a plain comment is.
 pub fn encrypted_comment_payload(sender_key: &[u8; 32], sealed: &[u8]) -> Result<Cell> {
     ensure!(
         sealed.len() >= 24 + 16,
         "a sealed comment carries at least its nonce and tag"
     );
-    // The nonce is inside `sealed`, so it is counted once and only once.
     let body_len = ENCRYPTED_PREFIX_BYTES + sealed.len();
     ensure!(
         body_len <= MAX_COMMENT_BYTES,
         "an encrypted comment of {body_len} bytes exceeds the {MAX_COMMENT_BYTES}-byte budget"
     );
 
-    // The nonce travels in the header, the ciphertext and tag in the snake.
     let (nonce, ciphertext) = sealed.split_at(24);
     let (head, mut rest) = ciphertext.split_at(ciphertext.len().min(ROOT_BYTES));
     let mut tail: Vec<&[u8]> = Vec::new();
@@ -109,14 +81,11 @@ pub fn encrypted_comment_payload(sender_key: &[u8; 32], sealed: &[u8]) -> Result
         .context("failed to build the encrypted comment payload")
 }
 
-/// What was found in a message body that carries one.
 pub struct EncryptedComment {
     pub sender_key: [u8; 32],
-    /// Nonce and ciphertext together, the shape the sealer speaks.
     pub sealed: Vec<u8>,
 }
 
-/// Reads one back out of a body, or says it is not one.
 pub fn parse_encrypted_comment(body: &Cell) -> Result<Option<EncryptedComment>> {
     let Ok(mut slice) = body.as_slice() else {
         return Ok(None);

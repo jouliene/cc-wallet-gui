@@ -38,18 +38,9 @@ pub struct ChainMessage {
     pub body_boc_base64: String,
 }
 
-/// What the bounce phase managed to do, when there was one.
-///
-/// A transaction that failed with too little value to work with still has a
-/// bounce phase — it just cannot afford to send anything home. Reading the mere
-/// presence of the phase as a return is how a transfer that went nowhere came
-/// to be reported as money coming back.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BounceOutcome {
-    /// The value went home.
     Returned,
-    /// Nothing was sent back: what remained could not pay the way. The value
-    /// stayed with the account that failed to process it.
     Unaffordable,
 }
 

@@ -3165,7 +3165,6 @@ fn the_finality_figure_is_how_long_the_row_spun_and_it_never_moves_afterwards() 
     c.arm_awaiting_send_finality();
     std::thread::sleep(Duration::from_millis(40));
 
-    // The chain says the account moved, which is what stops the spinner.
     c.settle_optimistic_row(&digest("exthash"));
     let spun = armed.elapsed().as_millis();
 
@@ -3180,9 +3179,6 @@ fn the_finality_figure_is_how_long_the_row_spun_and_it_never_moves_afterwards() 
         "finality {reported} ms is not the {spun} ms the row actually spun"
     );
 
-    // The transaction itself turns up much later with the fee and the hash. It
-    // brings no new answer to "how long did I wait", and must not rewrite the
-    // one already on screen.
     std::thread::sleep(Duration::from_millis(200));
     c.merge_activity(vec![ActivityEvent {
         tx_hash: optional_digest("realtx"),
@@ -3209,10 +3205,6 @@ fn a_second_transfer_is_timed_from_its_own_start_and_not_the_one_before_it() {
     let dir = temp_dir("finality-per-send");
     let mut c = unlocked(&dir, WalletProfile::default());
 
-    // The first transfer goes out and the wallet's own replay guard confirms
-    // it. That is what the guard is for: it answers before the endpoint's
-    // transaction index does, so this row settles here and the journal lets the
-    // next transfer go out.
     let first = c.push_pending_send(&native_request(SEND_DEST, 5_000));
     c.state
         .activity
@@ -3224,17 +3216,11 @@ fn a_second_transfer_is_timed_from_its_own_start_and_not_the_one_before_it() {
     c.arm_awaiting_send_finality();
     std::thread::sleep(Duration::from_millis(40));
     c.settle_optimistic_row(&digest("ext-one"));
-    // All that clearing the in-flight send does on that path: the transfer is
-    // no longer in flight, but its row and the start it was timed from stay
-    // until the transaction is indexed.
     c.session.awaiting_send_lt = None;
     let first_reported = c.state().activity[0]
         .finality_ms
         .expect("the first row says how long it spun");
 
-    // The index is still catching up on the first transfer when the second one
-    // is sent — the gap the guard exists to skip, and seconds wide on a slow
-    // endpoint.
     std::thread::sleep(Duration::from_millis(150));
     assert!(
         c.session.pending_sends.iter().any(|(lt, _)| *lt == first),
@@ -6314,8 +6300,6 @@ fn wallet_with_replay_guard(last_message_ms: u64, last_trans_lt: u64) -> WalletS
     snapshot.with_last_message_ms(last_message_ms)
 }
 
-/// A send that reached the node and is waiting to be heard about, with the
-/// timestamp its signed message carries known to the session.
 fn awaiting_replay_guard(c: &mut AppController, sent_ms: u64) -> (RecordId, String, Digest32) {
     let ext_hash = digest("REPLAY-GUARD");
     let (record_id, endpoint) = install_blocking_history_record(c, ext_hash.clone(), 0x61);
@@ -6344,8 +6328,6 @@ fn the_wallets_own_replay_guard_confirms_a_transfer_the_transaction_list_has_not
     awaiting_replay_guard(&mut c, SENT_MS);
     assert!(c.state().journal_blocking, "the send starts out unresolved");
 
-    // An account read from before our message ran carries the guard the
-    // previous send left behind, and that confirms nothing.
     let live = c.subscription_generation;
     apply_owned_auto_load(&mut c, live, wallet_with_replay_guard(SENT_MS - 1, 8_000));
     assert!(
@@ -6357,7 +6339,6 @@ fn the_wallets_own_replay_guard_confirms_a_transfer_the_transaction_list_has_not
         "the row keeps spinning until the wallet's own guard moves"
     );
 
-    // And now the wallet's own storage says it ran our message.
     let live = c.subscription_generation;
     apply_owned_auto_load(&mut c, live, wallet_with_replay_guard(SENT_MS, 9_000));
 
@@ -6392,8 +6373,6 @@ fn a_row_the_replay_guard_confirmed_still_takes_its_details_from_the_chain() {
     apply_owned_auto_load(&mut c, live, wallet_with_replay_guard(SENT_MS, 9_000));
     assert!(!c.state().journal_blocking);
 
-    // The listing turns up later, as it always does. It has nothing left to
-    // resolve, and saying so must not read as a conflict.
     let observation = endpoint_observation(
         ext_hash.clone(),
         &endpoint,
@@ -6444,8 +6423,6 @@ fn a_confirmed_row_without_its_transaction_yet_stays_at_the_top_of_the_list() {
     let live = c.subscription_generation;
     apply_owned_auto_load(&mut c, live, wallet_with_replay_guard(SENT_MS, 9_000));
 
-    // History arrives for everything except our own transfer, whose synthetic
-    // ordering number is tiny next to a real one.
     c.merge_activity(vec![ActivityEvent {
         tx_hash: optional_digest("older-tx"),
         counterparty: SEND_DEST.to_owned(),
@@ -6670,10 +6647,6 @@ impl ChainService for FakeChain {
         _peer_key: Option<&[u8; 32]>,
         sealed: &[cc_wallet_chain::SealedComment<'_>],
     ) -> Result<Vec<Option<String>>, ChainError> {
-        // The fake speaks the format rather than the cipher: a blob that is
-        // valid UTF-8 opens to itself, anything else stays shut. That keeps the
-        // conversation's own logic — which line is locked, which is legible —
-        // testable without a seed.
         Ok(sealed
             .iter()
             .map(|comment| String::from_utf8(comment.blob.to_vec()).ok())
@@ -6939,10 +6912,6 @@ fn activating_a_new_seed_clears_the_chain_key_cache() {
     cleanup(&dir);
 }
 
-/// The cached network parameters never expire on their own, so an endpoint that
-/// serves a different chain has to evict them. This is the whole of what keeps
-/// the cache honest, which is why it is pinned here rather than left to
-/// whichever code path happens to call the clear.
 #[test]
 fn changing_the_endpoint_evicts_the_network_parameters() {
     let dir = temp_dir("endpoint-clears-config");
@@ -12049,8 +12018,6 @@ fn a_comment_is_cut_to_the_budget_that_is_actually_in_force() {
         "pasting more than fits leaves what fits, not a transfer that cannot be built"
     );
 
-    // Sealing spends part of the budget, so turning it on shortens what is
-    // already there rather than leaving it over the line.
     c.state_mut().recipient_encrypt_key = Some([4u8; 32]);
     c.state_mut().send_form.destination = SEND_DEST.to_owned();
     c.handle_command(AppCommand::SetEncryptComment(true));
@@ -12081,8 +12048,6 @@ fn a_row_no_send_of_ours_was_waiting_on_reports_no_finality() {
     let chain = FakeChain::default();
     let (mut c, _mem) = storage_controller(&dir, chain, vec![stored(1, "one", "a")]);
 
-    // Nothing of ours is on the wire — this row is history the wallet went and
-    // read, or somebody else's transfer arriving.
     assert!(c.session.pending_externals.is_empty());
     c.merge_activity(vec![ActivityEvent {
         direction: ActivityDirection::Out,
@@ -12127,12 +12092,9 @@ fn a_record_reports_the_wait_the_chain_ended_not_how_late_the_index_was() {
         }),
     });
 
-    // The chain speaks, which is where the wait ends. A record has no row on
-    // screen to stop spinning, so the figure is frozen here instead.
     std::thread::sleep(Duration::from_millis(40));
     c.end_external_waits();
 
-    // The endpoint's transaction index takes its time, as it does.
     std::thread::sleep(Duration::from_millis(250));
     c.merge_activity(vec![ActivityEvent {
         direction: ActivityDirection::Out,
@@ -12455,8 +12417,6 @@ fn a_save_in_flight_does_not_add_or_remove_anything_on_the_page() {
     let chain = FakeChain::default();
     let (mut c, _mem) = storage_controller(&dir, chain, vec![stored(1, "one", "a")]);
 
-    // The row that reports progress is always present, so a notice appearing or
-    // clearing can never change the page's layout under the user's cursor.
     let rows_before = c.state().storage.records.len();
     c.handle_command(AppCommand::SetStorageTitle("two".to_owned()));
     c.handle_command(AppCommand::SetStorageData("b".to_owned()));
@@ -12477,8 +12437,6 @@ fn a_result_this_session_cannot_use_still_unlocks_the_form() {
     let (mut c, _mem) = storage_controller(&dir, chain, vec![stored(1, "one", "a")]);
 
     c.state_mut().storage.busy = true;
-    // A generation this session will never match: the result is discarded, but
-    // the page must not stay locked because of it.
     c.apply_event(AppEvent::StorageFinished {
         generation: u64::MAX,
         op: StorageOp::Delete { id: 1 },
@@ -12543,8 +12501,6 @@ fn plain(text: &str) -> ActivityMessage {
     }
 }
 
-/// The fake opens a blob that is valid UTF-8 and shuts on anything else, so
-/// this is a message that will read and one that will not.
 fn sealed(text: &[u8]) -> ActivityMessage {
     ActivityMessage::Sealed {
         sender_key: cc_wallet_domain::PublicKey32::from_bytes([4u8; 32]),
@@ -12562,7 +12518,6 @@ fn a_conversation_is_one_counterpartys_messages_oldest_first() {
         spoken(3, true, SEND_DEST, plain("third")),
         spoken(1, false, SEND_DEST, plain("first")),
         spoken(2, true, other, plain("someone else")),
-        // A transfer with no message at all is not part of any conversation.
         history_event(4, HISTORY_NOW, AssetId::Native),
         spoken(5, false, SEND_DEST, plain("second")),
     ];
@@ -12597,7 +12552,6 @@ fn a_message_just_sent_sits_at_the_end_of_the_thread_not_the_start() {
     let mut c = unlocked_with_fake(&dir, &fake);
     c.state_mut().wallet = Some(timed_wallet("0:me"));
 
-    // What the chain has handed back, with a real ordering number.
     c.state_mut().activity.push(ActivityEvent {
         counterparty: SEND_DEST.to_owned(),
         message: Some(ActivityMessage::Plain {
@@ -12605,8 +12559,6 @@ fn a_message_just_sent_sits_at_the_end_of_the_thread_not_the_start() {
         }),
         ..ActivityEvent::test_stub(9_000_000, 1_700_000_000)
     });
-    // And what we have only just said: no transaction of its own yet, and an
-    // ordering number we invented, which is tiny beside a real one.
     c.state_mut().activity.push(ActivityEvent {
         counterparty: SEND_DEST.to_owned(),
         tx_hash: None,
@@ -12705,11 +12657,6 @@ fn switching_wallets_closes_whatever_was_being_read() {
     cleanup(&dir);
 }
 
-/// Measured on a masterchain wallet on 2026-08-10: MAX with a 32-byte sealed
-/// comment produced an amount the wallet then refused as unaffordable. The
-/// probe priced a bare transfer, but the transfer that goes out carries the
-/// message — and at 80 000 nano a byte in the masterchain, a sealed comment
-/// costs far more than the drift headroom MAX leaves behind.
 #[test]
 fn max_is_priced_against_the_message_it_will_actually_send() {
     let dir = temp_dir("max-with-comment");
@@ -12730,8 +12677,6 @@ fn max_is_priced_against_the_message_it_will_actually_send() {
     c.handle_command(AppCommand::SetMaxAmount);
     assert!(c.state().max_refining, "MAX went out to be priced");
 
-    // The estimate runs on the real runtime, so wait for it to land rather than
-    // racing it.
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     while fake.fee_requests().is_empty() && std::time::Instant::now() < deadline {
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -12824,10 +12769,6 @@ fn a_draft_is_cut_to_what_sealing_leaves_room_for() {
     cleanup(&dir);
 }
 
-/// A conversation is private or it is nothing. An account that publishes no key
-/// cannot be written to privately, and the failure that must never happen is
-/// the quiet one: the message going out in the clear. The plain path is still
-/// there, on the Send form.
 #[test]
 fn a_conversation_will_not_send_to_someone_it_cannot_seal_to() {
     let dir = temp_dir("chat-no-key");
@@ -12876,9 +12817,6 @@ fn a_conversation_will_not_send_to_an_account_that_is_not_there() {
     cleanup(&dir);
 }
 
-/// The peer's key is asked for once when a conversation opens, and the wallet
-/// resubscribing while the question is in flight used to throw the answer away
-/// — leaving the header reading "opening…" for as long as the thread was open.
 #[test]
 fn the_peer_key_answer_survives_the_wallet_resubscribing_under_it() {
     let dir = temp_dir("chat-key-race");
@@ -12938,10 +12876,6 @@ fn an_answer_about_another_conversation_is_ignored() {
     cleanup(&dir);
 }
 
-/// The signing dialog describes the transfer being signed. It used to read the
-/// send form instead, which for a reply written in a conversation held nothing
-/// at all — an empty amount, an unknown recipient, and a confirm button the
-/// gate would not let anyone press.
 #[test]
 fn the_signing_dialog_describes_a_reply_and_not_the_empty_form_behind_it() {
     let dir = temp_dir("chat-dialog");

@@ -1,24 +1,3 @@
-//! Takes the wallet's own finality number apart on a real chain.
-//!
-//! The status line quotes one figure — broadcast to the moment the account
-//! subscription says the account reached that transaction — and one figure
-//! cannot say whether the wait belongs to the network, to the node's index, or
-//! to the stream that carries the news. This sends real transfers and stamps
-//! every stage of each one:
-//!
-//! * how long the signed message took to prepare (before the clock starts),
-//! * how long the `sendMessage` call itself took,
-//! * when the block carrying the transaction was generated,
-//! * when a poll of the transaction list could first see it,
-//! * when the subscription announced it — the number the wallet shows.
-//!
-//! Run with:
-//! ```text
-//! CC_WALLET_ENDPOINT=https://rpc-testnet.tychoprotocol.com/ \
-//! CC_WALLET_TEST_SEED="…" \
-//! cargo test -p cc-wallet-chain --test live_finality -- --ignored --nocapture
-//! ```
-
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -35,8 +14,6 @@ fn inputs() -> WalletInputs {
         endpoint: std::env::var("CC_WALLET_ENDPOINT")
             .expect("CC_WALLET_ENDPOINT names the network to spend on"),
         network_id: 2000,
-        // Blocks are collated per shard, so which chain the wallet lives on is
-        // part of the answer rather than a detail of the setup.
         workchain: std::env::var("CC_WALLET_TEST_WORKCHAIN")
             .map(|value| value.parse().expect("workchain is a number"))
             .unwrap_or(0),
@@ -59,7 +36,6 @@ fn median(values: &mut [f64]) -> f64 {
     values[values.len() / 2]
 }
 
-/// One transaction as the transaction list showed it, and when we saw it.
 #[derive(Clone, Copy)]
 struct Sighting {
     lt: u64,
@@ -80,8 +56,6 @@ async fn finality_comes_apart_into_network_index_and_stream() {
     println!("[wallet]   {address}");
     println!("[endpoint] {}", base.endpoint);
 
-    // Everything the subscription says, stamped on arrival. This is the exact
-    // source the wallet's own finality number is read from.
     let announcements: Arc<Mutex<Vec<(u64, Instant)>>> = Arc::new(Mutex::new(Vec::new()));
     let sink = announcements.clone();
     let stream_endpoint = base.endpoint.clone();
@@ -97,9 +71,6 @@ async fn finality_comes_apart_into_network_index_and_stream() {
         .await;
     });
 
-    // And everything a fast poll of the transaction list could have known,
-    // stamped the same way, so the stream can be compared against the index it
-    // is supposed to be announcing.
     let sightings: Arc<Mutex<Vec<Sighting>>> = Arc::new(Mutex::new(Vec::new()));
     let sink = sightings.clone();
     let poller_service = service.clone();
@@ -126,8 +97,6 @@ async fn finality_comes_apart_into_network_index_and_stream() {
         }
     });
 
-    // The subscription needs to be up before the first send, or the first round
-    // measures the handshake instead of the chain.
     tokio::time::sleep(Duration::from_secs(3)).await;
 
     let mut prepare_ms = Vec::new();
@@ -165,7 +134,6 @@ async fn finality_comes_apart_into_network_index_and_stream() {
             .expect("prepare failed");
         let prepared_in = prepare_started.elapsed();
 
-        // The wallet starts its finality clock here: signed, about to go out.
         let sent_at = Instant::now();
         let sent_unix = unix_now();
         service

@@ -278,23 +278,12 @@ fn message_op(message: &ChainMessage, src: ContractAt, dst: ContractAt) -> Strin
             .to_owned(),
         MsgKind::Int => match body_op(message) {
             None | Some(0) => "transfer".to_owned(),
-            // Named here rather than in a contract's table, because no contract
-            // implements it: like op 0, it is a convention about what the body
-            // holds, and the receiving wallet accepts the transfer either way.
             Some(op) if op == ENCRYPTED_COMMENT_OP => "encrypted comment".to_owned(),
             Some(op) => internal_op_name(src, dst, op).unwrap_or_else(|| format!("op 0x{op:08x}")),
         },
     }
 }
 
-/// Names an internal message by the operation it carries, asking whichever end
-/// of the message knows that op.
-///
-/// The name is the method the op IS, never a gloss on what the message is doing
-/// with it — so METHOD always says the same thing as RAW OP, for every contract
-/// alike, including ones added later that this code has never heard of. A
-/// contract that answers by echoing the op it was called with therefore shows
-/// that same name on the way back; the arrow already says which way it went.
 fn internal_op_name(src: ContractAt, dst: ContractAt, op: u32) -> Option<String> {
     internal_method(dst, op)
         .or_else(|| internal_method(src, op))
@@ -558,11 +547,6 @@ mod tests {
         assert_eq!(child.failure, "");
     }
 
-    /// Measured on Tycho testnet on 2026-08-10: a 0.0001 COIN transfer carrying
-    /// an encrypted comment to a masterchain wallet, where the flat gas price is
-    /// 0.01 COIN. The compute phase was skipped as `NoGas`, the bounce phase
-    /// could not afford the way home, and the wallet reported it as value coming
-    /// back — which is the one thing that did not happen.
     #[test]
     fn a_message_that_bought_no_gas_did_not_send_the_value_home() {
         let mut nodes = two_hop();
@@ -836,9 +820,6 @@ mod op_naming_tests {
         }
     }
 
-    /// The method shown must be the op that is actually in the message, whoever
-    /// sent it — otherwise METHOD and RAW OP would tell different stories about
-    /// the same arrow, and every new contract would need its own special case.
     #[test]
     fn method_says_the_same_thing_as_raw_op_in_either_direction() {
         let code = storage_code_hash();

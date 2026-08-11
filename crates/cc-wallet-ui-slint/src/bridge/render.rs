@@ -638,8 +638,6 @@ fn activity_row(
     contacts: &[AddressBookEntry],
 ) -> ActivityRow {
     let movements = movement_rows(&event.movements);
-    // A row we are still standing in for has no transaction of its own, so
-    // nobody has paid a fee yet. The zero it was born with is not a fee.
     let fee = token_amount(
         AssetId::Native,
         &if event.tx_hash.is_some() {
@@ -692,12 +690,6 @@ fn activity_row(
     }
 }
 
-/// A conversation, ready to draw, with each day named once.
-///
-/// A bubble carries a time and nothing else, which reads fine until the thread
-/// spans more than one day and yesterday's answer looks like this morning's.
-/// The activity list already names its days; a conversation is the same history
-/// and names them the same way.
 pub(super) fn chat_line_rows(lines: &[cc_wallet_app::ChatLine], now: u64) -> Vec<ChatLineRow> {
     let today_bucket = day_bucket(now);
     let mut last_bucket: Option<i64> = None;
@@ -2255,10 +2247,6 @@ mod seed_exposure_tests {
     }
 }
 
-/// A fraction cut to whole groups. The caller says how many three-digit groups
-/// it has room for; anything dropped is owed an ellipsis, so a reader can tell
-/// a rounded figure from a complete one. Cutting mid-group would read as a
-/// different number.
 pub(super) fn fit_fraction(frac: &str, groups: i32) -> String {
     let Some(digits) = frac.strip_prefix('.') else {
         return frac.to_owned();

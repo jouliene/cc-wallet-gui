@@ -100,27 +100,12 @@ impl SwapDrive {
     }
 }
 
-/// The conversation's development hooks, in one place.
-///
-/// A conversation is reached by clicking one icon in one activity row, and
-/// written to by typing into a field — neither of which a screenshot harness
-/// can do, because pointer events do not reach Slint. Kept together rather than
-/// as four separate values behind four separate `cfg` attributes: it was one of
-/// those attributes going missing that broke the release build, where none of
-/// this exists at all.
 #[cfg(debug_assertions)]
 #[derive(Default)]
 struct ChatHooks {
-    /// The address whose conversation to open once there is history to open it
-    /// over.
     open: Option<String>,
-    /// "Name=address", so the contact-named side of a header can be
-    /// photographed too.
     contact: Option<String>,
-    /// What to write in the composer, and send.
     say: Option<String>,
-    /// Whether it has been written, so the signing dialog it raises is the one
-    /// this signs.
     said: bool,
 }
 
@@ -141,11 +126,6 @@ impl ChatHooks {
     }
 }
 
-/// Drives the send form as far as the confirmation dialog and stops there.
-///
-/// The dialog is three interactions deep — an address, MAX, then Send — and
-/// mouse events from a screenshot harness do not reach Slint at all. It never
-/// submits: what it exists to show is the dialog itself.
 #[cfg(debug_assertions)]
 #[derive(Default)]
 struct SendDrive {
@@ -177,8 +157,6 @@ impl SendDrive {
         let Some(destination) = self.destination.clone() else {
             return;
         };
-        // The balance is what MAX is a fraction of, so there is nothing to ask
-        // until the wallet has answered.
         if controller.state().wallet.is_none() {
             return;
         }
@@ -191,8 +169,6 @@ impl SendDrive {
             self.asked = true;
             return;
         }
-        // MAX is refined against a live emulation, and asking to send before it
-        // lands would be asking about an amount that is about to change.
         if controller.state().max_refining || controller.state().send_form.amount.is_empty() {
             return;
         }
@@ -596,8 +572,6 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
                             None => c.handle_command(AppCommand::InspectAccount(address)),
                         }
                     }
-                    // "Name=address", so the contact-named side of a
-                    // conversation header can be photographed too.
                     if c.state().phase == cc_wallet_app::AppPhase::Unlocked
                         && let Some(entry) = chat_hooks.borrow_mut().contact.take()
                         && let Some((name, address)) = entry.split_once('=')
@@ -615,10 +589,6 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
                     {
                         c.handle_command(AppCommand::OpenChat(peer));
                     }
-                    // These hooks all live in one cell now, so each one reads
-                    // what it needs out of it and lets go before doing anything
-                    // — a borrow held across the body panicked the moment the
-                    // body wanted the cell again.
                     if c.state().chat.open && c.state().wallet.is_some() && !c.state().chat.sending
                     {
                         let say = chat_hooks.borrow_mut().say.take();
@@ -628,8 +598,6 @@ pub fn run(startup_cwd: StartupCwd) -> Result<(), slint::PlatformError> {
                             c.handle_command(AppCommand::SendChatMessage);
                         }
                     }
-                    // The reply stops at the signing dialog like any transfer,
-                    // so the harness has to sign it the way a person would.
                     let said = chat_hooks.borrow().said;
                     if said
                         && c.state().auth.open

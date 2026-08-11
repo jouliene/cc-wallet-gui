@@ -199,66 +199,37 @@ impl Default for SwapUi {
     }
 }
 
-/// One line of a conversation, as it will be read.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChatLine {
     pub outgoing: bool,
     pub time_unix: u64,
     pub lt: u64,
-    /// The words, once they are legible. A sealed message that has not been
-    /// opened — or cannot be — keeps this empty and says so through `locked`.
     pub text: String,
     pub sealed: bool,
     pub locked: bool,
     pub pending: bool,
 }
 
-/// The conversation with one counterparty, laid over the activity list.
-///
-/// It owns no messages of its own: everything here is the activity the wallet
-/// already holds, narrowed to one address and turned the right way round. What
-/// it does own is the reading of sealed ones, which needs a key and therefore
-/// a moment when the wallet was open.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ChatUi {
     pub open: bool,
     pub peer: String,
     pub lines: Vec<ChatLine>,
     pub error: String,
-    /// Set once the peer's account has answered with the key that opens what we
-    /// sent them. Until then our own sealed messages stay locked.
     pub peer_key_known: bool,
-    /// Whether that same answer said the account is active. A conversation asks
-    /// about its own peer, so it does not have to borrow the send form's
-    /// opinion about a different address.
     pub peer_active: bool,
     pub loading: bool,
-    /// What is being written but not yet sent. It lives here rather than in the
-    /// send form because a half-typed message is not a transfer yet.
     pub draft: String,
-    /// A reply that has been asked for and is waiting on the recipient's
-    /// account to answer before it can be authorized.
     pub sending: bool,
 }
 
-/// What a message carries when it is sent as a message. The chain will not
-/// deliver a body without a transfer to carry it, and the smallest transfer
-/// there is costs the sender only its fees.
 pub const CHAT_ATTACH_NANOS: u128 = 1;
 
 impl ChatUi {
-    /// What a reply may run to. A conversation is always sealed, so the budget
-    /// is always the sealed one — no toggle changes it under the writer.
     pub fn draft_limit(&self) -> usize {
         cc_wallet_domain::MAX_ENCRYPTED_COMMENT_BYTES
     }
 
-    /// Whether a reply can go out at all.
-    ///
-    /// Sealing is not optional here. An account that publishes no key cannot be
-    /// written to privately, and quietly sending in the clear instead would be
-    /// the one failure this feature must never have — so the conversation
-    /// refuses, and the plain path stays where it always was, on the Send form.
     pub fn can_send(&self) -> bool {
         self.open
             && self.peer_key_known
@@ -364,9 +335,6 @@ pub struct AppState {
     pub fee_estimate_stale: bool,
     pub max_refining: bool,
     pub recipient_check: RecipientCheck,
-    /// The key this recipient signs with, when their account publishes one. It
-    /// is the whole of what makes an encrypted comment possible, so it is also
-    /// the whole of what the toggle beside the comment waits for.
     pub recipient_encrypt_key: Option<[u8; 32]>,
     pub allow_unbounced: bool,
     pub journal_blocking: bool,
@@ -419,9 +387,6 @@ pub struct AppState {
     pub swap: SwapUi,
     pub storage: StorageUi,
     pub chat: ChatUi,
-    /// The transfer a signing dialog is currently about. The dialog describes
-    /// what is being signed, which is not always what the send form holds — a
-    /// reply written in a conversation never goes near that form.
     pub pending_transfer: Option<cc_wallet_domain::SendRequest>,
     pub records_reveal_deadline: Option<Deadline>,
 }
@@ -914,13 +879,6 @@ impl AppState {
         self.recipient_valid() && self.recipient_known_inactive()
     }
 
-    /// The conversation's own verified peer, when it has one.
-    ///
-    /// A reply is checked against this rather than against the send form: they
-    /// are two screens with two recipients, and the one being sent to is the
-    /// one that has to be permitted.
-    /// Whether the transfer now being signed is one the conversation vouched
-    /// for. The send form's opinion is about a different address.
     pub fn pending_transfer_is_verified_chat_reply(&self) -> bool {
         match (self.pending_transfer.as_ref(), self.verified_chat_peer()) {
             (Some(request), Some(peer)) => request.destination() == peer,
@@ -928,12 +886,6 @@ impl AppState {
         }
     }
 
-    /// Whether the recipient of the transfer now being signed may be sent to.
-    ///
-    /// Two screens can raise a signing dialog and each has its own recipient in
-    /// it, so the question has to be asked of the transfer rather than of the
-    /// form. Asked of the form, a reply the conversation had already verified
-    /// was refused at the last step by a screen that knew nothing about it.
     pub fn signing_recipient_permitted(&self, risk_override: bool) -> bool {
         self.pending_transfer_is_verified_chat_reply()
             || self.recipient_send_permitted(risk_override)
@@ -955,16 +907,10 @@ impl AppState {
     pub fn reset_recipient_status(&mut self) {
         self.recipient_check = RecipientCheck::Unchecked;
         self.allow_unbounced = false;
-        // A key belongs to one recipient. Editing the address invalidates both
-        // the key and the intention to use it, or the next transfer would be
-        // sealed to whoever was in the field before.
         self.recipient_encrypt_key = None;
         self.send_form.encrypt = false;
     }
 
-    /// The request this form stands for, sealed to the recipient when that is
-    /// both possible and asked for. The form knows the intention and the state
-    /// knows the key, and only here do the two meet.
     pub fn send_request(&self) -> cc_wallet_domain::WalletResult<cc_wallet_domain::SendRequest> {
         Ok(self
             .send_form
@@ -972,15 +918,6 @@ impl AppState {
             .sealed_to(self.sealing_key_for_comment()))
     }
 
-    /// The transfer this form would make if it spent exactly `units`.
-    ///
-    /// This is what MAX has to be measured against. A comment is paid for by
-    /// the byte in forward fees and a sealed one costs seventy-three bytes more
-    /// than it says, so pricing a bare transfer and then subtracting that from
-    /// the balance leaves an amount the wallet cannot actually afford. Only the
-    /// size of the message matters to the price, so the probe may carry the
-    /// form's seal even when it is aimed at our own address for want of a
-    /// recipient.
     pub fn native_request_of(
         &self,
         destination: String,
@@ -998,8 +935,6 @@ impl AppState {
         self.recipient_encrypt_key
     }
 
-    /// What a comment may run to right now. Sealing spends part of the budget,
-    /// so the answer changes with the toggle and the field has to follow it.
     pub fn comment_limit(&self) -> usize {
         if self.send_form.encrypt {
             cc_wallet_domain::MAX_ENCRYPTED_COMMENT_BYTES
@@ -1008,15 +943,10 @@ impl AppState {
         }
     }
 
-    /// Whether this comment could be encrypted at all: the recipient's account
-    /// has to be there, and it has to publish the key to encrypt to.
     pub fn encrypt_available(&self) -> bool {
         self.recipient_valid() && self.recipient_encrypt_key.is_some()
     }
 
-    /// Why not, when it is worth saying. Before an address is entered there is
-    /// nothing to explain, and while the answer is still coming, saying so
-    /// would only flicker.
     pub fn encrypt_hint(&self) -> &'static str {
         if self.encrypt_available() || !self.recipient_valid() {
             return "";
@@ -1123,9 +1053,6 @@ impl AppState {
             && self.can_afford_send()
     }
 
-    /// The field is cut to the budget as it is typed, so this should never be
-    /// false. It is here because the alternative to catching it is a transfer
-    /// the builder refuses after the user has already pressed Send.
     pub fn comment_fits(&self) -> bool {
         self.send_form.comment.len() <= self.comment_limit()
     }

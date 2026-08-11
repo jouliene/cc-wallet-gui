@@ -27,13 +27,6 @@ pub struct AssetMovement {
     pub amount: AssetAmount,
 }
 
-/// What a transfer carried besides money.
-///
-/// A plain comment is legible to anyone with a block explorer; a sealed one is
-/// legible only to the two ends, and is kept here exactly as it travelled. The
-/// ciphertext is what gets written to disk — opening it needs the wallet's key,
-/// and that is asked for at the moment of reading, not held open in the
-/// history file.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ActivityMessage {
@@ -41,9 +34,6 @@ pub enum ActivityMessage {
         text: String,
     },
     Sealed {
-        /// The key the sender published in the message itself. For a message we
-        /// received it is the other end's; for one we sent it is our own, and
-        /// reading our own words back needs the recipient's key instead.
         sender_key: PublicKey32,
         #[serde(with = "hex_bytes")]
         blob: Vec<u8>,

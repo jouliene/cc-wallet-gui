@@ -3,11 +3,7 @@ use cc_wallet_domain::{
     ActivityDirection, ActivityMessage, canonicalize_recipient, truncate_comment_to,
 };
 
-/// One message in the open conversation, with what decides where it sits.
 struct Said {
-    /// A message of ours the chain has not handed back yet. It is the newest
-    /// thing in the thread by definition, and it carries an ordering number we
-    /// invented, so it sorts by this first and by that number second.
     awaiting_chain: bool,
     lt: u64,
     time_unix: u64,
@@ -20,12 +16,6 @@ use super::AppController;
 use crate::state::{ChatLine, ChatUi};
 
 impl AppController {
-    /// Opens the conversation with one address over the activity list.
-    ///
-    /// The messages are already in hand — this only narrows them to one
-    /// counterparty and puts them in the order they were said. What is not in
-    /// hand is the key that opens the sealed ones, so that is asked for
-    /// separately and the lines are rebuilt when it arrives.
     pub(super) fn open_chat(&mut self, peer: String) {
         let Ok(peer) = canonicalize_recipient(&peer) else {
             return;
@@ -44,10 +34,6 @@ impl AppController {
         self.chat_key_seq = self.chat_key_seq.wrapping_add(1);
     }
 
-    /// Rebuilds the open conversation from the activity as it now stands.
-    ///
-    /// Called again whenever the history moves, because a conversation that
-    /// froze at the moment it was opened would quietly stop being one.
     pub(super) fn rebuild_chat(&mut self) {
         if !self.state.chat.open {
             return;
@@ -71,10 +57,6 @@ impl AppController {
                 message: message.clone(),
             });
         }
-        // Ours-not-yet-on-chain last: their ordering numbers are ones we made
-        // up, tiny beside a real one, and sorting on those alone put a message
-        // just sent at the top of the thread until the chain handed it back and
-        // it jumped to the bottom.
         carried.sort_by_key(|said| (said.awaiting_chain, said.lt));
 
         let sealed: Vec<SealedComment<'_>> = carried
@@ -120,11 +102,6 @@ impl AppController {
             .collect();
     }
 
-    /// The plaintext of each sealed message, in the order given.
-    ///
-    /// Everything comes back locked rather than erroring when the wallet has no
-    /// keys to hand: a conversation is readable exactly when the wallet is
-    /// open, and saying so with a padlock beats saying so with a failure.
     fn open_sealed(&mut self, peer: &str, sealed: &[SealedComment<'_>]) -> Vec<Option<String>> {
         if sealed.is_empty() {
             return Vec::new();
@@ -145,10 +122,6 @@ impl AppController {
         }
     }
 
-    /// Asks the peer's account for the key that opens what we sent them.
-    ///
-    /// Their own messages carry the key they used, but ours name us, so without
-    /// this one read every message this wallet wrote stays shut to its author.
     fn fetch_chat_peer_key(&mut self) {
         self.session.chat_peer_key = None;
         self.chat_key_seq = self.chat_key_seq.wrapping_add(1);
@@ -172,13 +145,6 @@ impl AppController {
         });
     }
 
-    /// Takes the answer, or the absence of one.
-    ///
-    /// Deliberately not gated on the subscription generation: which peer was
-    /// asked about is settled by the sequence and the address, and the wallet
-    /// resubscribing in the meantime says nothing about whether this answer is
-    /// still the right one. Gating on it left the conversation reading
-    /// "opening…" forever whenever the two raced.
     pub(super) fn apply_chat_peer_key(
         &mut self,
         seq: u64,
@@ -203,12 +169,6 @@ impl AppController {
         self.state.chat.draft = truncate_comment_to(&text, limit).to_owned();
     }
 
-    /// Sends the draft as a transfer carrying it.
-    ///
-    /// It builds its own transfer and hands it to the same authorization every
-    /// other one goes through. What it does not do is borrow the send form to
-    /// carry the words there: that made the message flash through the note
-    /// field of a card nobody was looking at, and a form is not a scratchpad.
     pub(super) fn send_chat_message(&mut self) {
         if !self.state.chat.can_send() {
             return;
@@ -231,17 +191,11 @@ impl AppController {
         };
         self.state.chat.error.clear();
         self.state.chat.sending = true;
-        // The dialog quotes whatever the last estimate was, and the last
-        // estimate was about the send form. A reply is a different transfer —
-        // one nano and a sealed comment — so it is priced before it is shown.
         self.spawn_fee_estimate(request.clone(), false);
         self.authorize_transfer(request);
-        // The dialog is up or it never opened; either way the waiting is over.
         self.state.chat.sending = self.pending_authorization.is_some();
     }
 
-    /// The draft belongs to the message that carried it, exactly as the send
-    /// form's own note does.
     pub(super) fn clear_chat_draft_after_send(&mut self) {
         self.state.chat.draft.clear();
         self.state.chat.sending = false;

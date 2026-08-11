@@ -92,14 +92,6 @@ pub fn activity_from_chain_tx(tx: &ChainTransaction) -> ChainResult<Vec<Activity
     }
 }
 
-/// What this message carried besides money, if anything legible.
-///
-/// A bounced message carries back the head of what it was sent with, which is
-/// not a message anyone wrote to anyone — reading one as a comment would put
-/// our own words in the other end's mouth. Anything else undecodable is simply
-/// not a message: the body belongs to whoever built it, and a wallet that
-/// refused to list a transfer because a stranger's payload confused it would be
-/// hostage to strangers.
 fn message_carried(message: &ChainMessage) -> Option<ActivityMessage> {
     if message.bounced {
         return None;
