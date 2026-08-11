@@ -1144,6 +1144,13 @@ fn command_freeze_classifiers_match_the_documented_denylists() {
             false,
         ),
         ("SetSendAmount", SetSendAmount("1".to_owned()), true, false),
+        (
+            "SetSendComment",
+            SetSendComment("hi".to_owned()),
+            true,
+            false,
+        ),
+        ("SetEncryptComment", SetEncryptComment(true), true, false),
         ("SetMaxAmount", SetMaxAmount, true, false),
         ("SetAllowUnbounced", SetAllowUnbounced(true), true, false),
         ("RequestSend", RequestSend, false, false),
@@ -1172,6 +1179,26 @@ fn command_freeze_classifiers_match_the_documented_denylists() {
         ("FlipSwap", FlipSwap, true, false),
         ("RequestSwap", RequestSwap, false, false),
         ("DismissSwapReceipt", DismissSwapReceipt, true, false),
+        ("RefreshStorage", RefreshStorage, false, false),
+        ("CreateStorage", CreateStorage, true, false),
+        (
+            "SetStorageTitle",
+            SetStorageTitle("t".to_owned()),
+            true,
+            false,
+        ),
+        (
+            "SetStorageData",
+            SetStorageData("d".to_owned()),
+            true,
+            false,
+        ),
+        ("AddStorageRecord", AddStorageRecord, true, false),
+        ("ClearStorageForm", ClearStorageForm, true, false),
+        ("RevealStorageRecords", RevealStorageRecords, true, false),
+        ("HideStorageRecords", HideStorageRecords, false, false),
+        ("DeleteStorageRecord", DeleteStorageRecord(1), true, false),
+        ("CopyStorageRecord", CopyStorageRecord(1), false, false),
         ("RequestRiskOverride", RequestRiskOverride, true, false),
         (
             "SetRiskOverlap",
@@ -1229,6 +1256,10 @@ fn command_freeze_classifiers_match_the_documented_denylists() {
             false,
         ),
         ("CloseTrace", CloseTrace, false, false),
+        ("OpenChat", OpenChat("0:1".to_owned()), false, false),
+        ("CloseChat", CloseChat, false, false),
+        ("SetChatDraft", SetChatDraft("d".to_owned()), false, false),
+        ("SendChatMessage", SendChatMessage, true, false),
         ("AddEndpoint", AddEndpoint("e".to_owned()), true, false),
         ("SelectEndpoint", SelectEndpoint(0), true, true),
         ("RemoveEndpoint", RemoveEndpoint("e".to_owned()), true, true),
@@ -1238,13 +1269,13 @@ fn command_freeze_classifiers_match_the_documented_denylists() {
 
     assert_eq!(
         cases.len(),
-        63,
-        "every AppCommand variant is classified exactly once"
+        79,
+        "all 79 AppCommand variants are classified here; add the row when the enum grows"
     );
     assert_eq!(
         cases.iter().filter(|(_, _, f, _)| *f).count(),
-        28,
-        "the authorization-snapshot freeze list has exactly 28 commands"
+        38,
+        "the authorization-snapshot freeze list has exactly 38 commands"
     );
     assert_eq!(
         cases.iter().filter(|(_, _, _, i)| *i).count(),
