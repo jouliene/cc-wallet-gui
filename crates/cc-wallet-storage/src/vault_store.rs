@@ -459,6 +459,7 @@ pub struct PreparedVaultWrite {
     counter: u64,
     target: PathBuf,
     sealed: Zeroizing<Vec<u8>>,
+    sealed_sha256: [u8; 32],
     fresh: bool,
 }
 
@@ -489,7 +490,7 @@ impl PreparedVaultWrite {
         Ok(WriteReceipt {
             counter: self.counter,
             exact_path: self.target,
-            file_sha256: hash_bytes(&installed),
+            file_sha256: self.sealed_sha256,
         })
     }
 }
@@ -665,15 +666,17 @@ impl VaultWriter {
             .seal_container(counter, &sections)
             .map_err(VaultStoreError::from_vault)?;
         let target = self.store.main_path();
+        let sealed_sha256 = hash_bytes(&sealed);
         self.pending = Some(PendingWrite {
             counter,
             exact_path: target.clone(),
-            file_sha256: hash_bytes(&sealed),
+            file_sha256: sealed_sha256,
         });
         Ok(PreparedVaultWrite {
             counter,
             target,
             sealed: Zeroizing::new(sealed),
+            sealed_sha256,
             fresh,
         })
     }

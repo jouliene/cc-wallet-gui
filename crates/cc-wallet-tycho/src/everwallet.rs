@@ -4,6 +4,8 @@ use crate::contracts::{
 use crate::crypto::KeyPair;
 use crate::transport::{AccountState, ObservedAccountState, ObservedNetworkTime};
 use anyhow::{Context, Result, anyhow, bail, ensure};
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use ed25519_dalek::VerifyingKey;
 use std::collections::BTreeMap;
 use std::str::FromStr;
@@ -347,11 +349,15 @@ impl AccountInspection {
         };
 
         let cell_parts = |cell: &Option<Cell>| match cell {
-            Some(cell) => (
-                Some(format!("{:x}", cell.repr_hash())),
-                Some(Boc::encode_base64(cell)),
-                Boc::encode(cell).len(),
-            ),
+            Some(cell) => {
+                let boc = Boc::encode(cell);
+                let len = boc.len();
+                (
+                    Some(format!("{:x}", cell.repr_hash())),
+                    Some(BASE64.encode(boc)),
+                    len,
+                )
+            }
             None => (None, None, 0),
         };
 
