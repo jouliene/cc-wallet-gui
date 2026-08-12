@@ -211,6 +211,16 @@ impl SendTicket {
     }
 }
 
+impl SendTicket {
+    pub fn scope(&self) -> (&str, &str, i32) {
+        (
+            &self.sender_wallet_id,
+            &self.sender_address,
+            self.network_global_id,
+        )
+    }
+}
+
 accessors!(SendTicket {
     record_id: ref RecordId,
     sender_wallet_id: ref str,
@@ -832,9 +842,7 @@ impl SendRecord {
     }
 
     pub fn has_duplicate_fingerprint(&self, ticket: &SendTicket) -> bool {
-        self.ticket.sender_wallet_id == ticket.sender_wallet_id
-            && self.ticket.sender_address == ticket.sender_address
-            && self.ticket.network_global_id == ticket.network_global_id
+        self.ticket.scope() == ticket.scope()
             && self.ticket.request.destination() == ticket.request.destination()
             && self.ticket.request.asset_id() == ticket.request.asset_id()
     }
@@ -1048,20 +1056,10 @@ pub(crate) fn validate_replay(
     risk_events: &[RiskEvent],
 ) -> Result<(), JournalError> {
     let mut record_ids = BTreeSet::new();
-    let identity = records.first().map(|record| {
-        (
-            record.ticket.sender_wallet_id.as_str(),
-            record.ticket.sender_address.as_str(),
-            record.ticket.network_global_id,
-        )
-    });
+    let identity = records.first().map(|record| record.ticket.scope());
     for record in records {
         record.validate_static()?;
-        if identity.is_some_and(|(wallet_id, sender, network)| {
-            record.ticket.sender_wallet_id != wallet_id
-                || record.ticket.sender_address != sender
-                || record.ticket.network_global_id != network
-        }) {
+        if identity.is_some_and(|scope| record.ticket.scope() != scope) {
             return Err(JournalError::InvalidDelivery(
                 "one encrypted Journal cannot mix wallet, sender, or network identities",
             ));
@@ -1279,9 +1277,7 @@ fn validate_grant_state(
 }
 
 fn same_signing_scope(left: &SendRecord, right: &SendRecord) -> bool {
-    left.ticket.sender_wallet_id == right.ticket.sender_wallet_id
-        && left.ticket.sender_address == right.ticket.sender_address
-        && left.ticket.network_global_id == right.ticket.network_global_id
+    left.ticket.scope() == right.ticket.scope()
 }
 
 pub(crate) fn prepared_record(

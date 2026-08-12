@@ -114,9 +114,8 @@ impl JournalEnvelope {
             .iter()
             .filter(|record| {
                 record.is_blocking()
-                    && record.ticket().sender_wallet_id() == sender_wallet_id
-                    && record.ticket().sender_address() == sender_address
-                    && record.ticket().network_global_id() == network_global_id
+                    && record.ticket().scope()
+                        == (sender_wallet_id, sender_address, network_global_id)
             })
             .collect()
     }
@@ -687,6 +686,28 @@ mod tests {
                 )
                 .is_err()
         );
+    }
+
+    #[test]
+    fn replay_validation_reads_all_three_fields_of_the_signing_scope() {
+        let base = prepared_record(native_prepared(1, 0x41, Vec::new()), 1).unwrap();
+        for different in [
+            native_prepared_for_identity(2, 0x42, Vec::new(), "wallet-2", 0x11, 42),
+            native_prepared_for_identity(2, 0x42, Vec::new(), "wallet-1", 0x12, 42),
+            native_prepared_for_identity(2, 0x42, Vec::new(), "wallet-1", 0x11, 43),
+        ] {
+            let other = prepared_record(different, 2).unwrap();
+            let outcome = validate_replay(&[base.clone(), other], &[]);
+            assert!(
+                matches!(
+                    outcome,
+                    Err(JournalError::InvalidDelivery(
+                        "one encrypted Journal cannot mix wallet, sender, or network identities"
+                    ))
+                ),
+                "a record from another signing scope is refused, got {outcome:?}"
+            );
+        }
     }
 
     #[test]
