@@ -596,9 +596,15 @@ pub(super) fn sync_ui(ui: &AppWindow, state: &AppState, form_locked: bool, cache
         ui.set_clock_active_green(false);
     }
 
-    render_explorer_account(ui, state, cache, now);
-    sync_swap(ui, state, cache);
-    sync_storage(ui, state, cache);
+    if state.selected_tab == AppTab::Explorer {
+        render_explorer_account(ui, state, cache, now);
+    }
+    if state.selected_tab == AppTab::Swap {
+        sync_swap(ui, state, cache);
+    }
+    if state.selected_tab == AppTab::Storage {
+        sync_storage(ui, state, cache);
+    }
 
     if state.risk_review_open != cache.risk_was_open {
         ui.set_risk_typed_confirmation(SharedString::new());
@@ -698,15 +704,17 @@ pub(super) fn sync_ui(ui: &AppWindow, state: &AppState, form_locked: bool, cache
             .unwrap_or_default()
             .into(),
     );
+    let peer_row = peer_contact
+        .map(|entry| crate::bridge::render::contact_row(&entry.name, &entry.address, ""));
     ui.set_chat_peer_mark(
-        peer_contact
-            .map(|entry| crate::bridge::render::contact_row(&entry.name, &entry.address, ""))
-            .map(|row| row.initial)
+        peer_row
+            .as_ref()
+            .map(|row| row.initial.clone())
             .unwrap_or_default(),
     );
     ui.set_chat_peer_tone(
-        peer_contact
-            .map(|entry| crate::bridge::render::contact_row(&entry.name, &entry.address, ""))
+        peer_row
+            .as_ref()
             .map(|row| row.color)
             .unwrap_or(slint::Color::from_argb_u8(0, 0, 0, 0)),
     );
@@ -808,6 +816,9 @@ fn sync_auth(ui: &AppWindow, state: &AppState, cache: &mut UiCache) {
     };
     ui.set_auth_purpose(purpose.into());
     ui.set_auth_danger(state.auth.purpose == AuthPurpose::Storage && state.storage.pending_danger);
+    if !state.auth.open {
+        return;
+    }
     let confirm = state.swap.confirm.as_ref();
     ui.set_swap_confirm_in(match confirm {
         Some(figures) => token_amount(
