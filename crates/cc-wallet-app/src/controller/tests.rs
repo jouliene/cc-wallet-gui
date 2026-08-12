@@ -56,6 +56,17 @@ macro_rules! key_ok {
     };
 }
 
+fn elapse_risk_cooling(c: &mut AppController) {
+    c.session.risk_cooling_started_at = Some(
+        Instant::now()
+            .checked_sub(Duration::from_secs(
+                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
+            ))
+            .expect("the cooling window is shorter than the process uptime"),
+    );
+    c.refresh_journal_policy();
+}
+
 fn fresh_sample_transaction() -> ChainTransaction {
     let mut transaction = parse_transaction_for_test(SAMPLE_OUTGOING_TX_BOC).unwrap();
     transaction.now = u32::try_from(
@@ -7958,14 +7969,7 @@ fn wall_time_and_suspend_never_accelerate_cooling_or_change_delivery_evidence() 
         .unwrap();
     assert!(c.persist_journal_barrier());
     c.refresh_journal_policy();
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     assert!(c.state().risk_override_eligible);
 
     c.last_tick = Some((Instant::now(), SystemTime::now() - Duration::from_secs(300)));
@@ -8269,14 +8273,7 @@ fn risk_review_reconciles_fresh_history_before_opening_the_override() {
     )
     .unwrap();
     let (record_id, endpoint) = install_blocking_history_record(&mut c, ext_msg_hash, 0xa1);
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     fake.push_page(Ok(TransactionPage {
         transactions: vec![matching],
         skipped: 0,
@@ -8313,14 +8310,7 @@ fn cancelling_the_preflight_history_check_ignores_its_late_completion() {
     let dir = temp_dir("risk-cancel-preflight");
     let (mut c, fake) = ready_to_send(&dir);
     install_blocking_history_record(&mut c, digest("RISK-CANCEL-BLOCKER"), 0xa2);
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     fake.push_page(Ok(TransactionPage {
         transactions: Vec::new(),
         skipped: 0,
@@ -8350,14 +8340,7 @@ fn a_reconnect_during_the_risk_preflight_aborts_the_stranded_reconciliation() {
     let dir = temp_dir("risk-preflight-reconnect");
     let (mut c, fake) = ready_to_send(&dir);
     install_blocking_history_record(&mut c, digest("RISK-RECONNECT-BLOCKER"), 0xa4);
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     fake.push_page(Ok(TransactionPage {
         transactions: Vec::new(),
         skipped: 0,
@@ -8396,14 +8379,7 @@ fn a_stale_completion_with_a_queued_refire_does_not_abort_the_preflight() {
     let dir = temp_dir("risk-preflight-refire-gate");
     let (mut c, fake) = ready_to_send(&dir);
     install_blocking_history_record(&mut c, digest("RISK-REFIRE-BLOCKER"), 0xa5);
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     fake.push_page(Ok(TransactionPage {
         transactions: Vec::new(),
         skipped: 0,
@@ -8839,14 +8815,7 @@ fn duplicate_risk_request_with_an_empty_new_form_is_friendly_and_edit_scoped() {
     }));
     c.dispatch_test_authorization();
     c.pump_events();
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     assert!(c.state().risk_override_eligible);
 
     c.state_mut().send_form.destination = SEND_DEST.to_owned();
@@ -8918,14 +8887,7 @@ fn ambiguous_transfer_can_use_one_durable_exact_duplicate_risk_grant() {
     let mut fresh = timed_wallet("0:me");
     set_native_balance(&mut fresh, 5_000_000_000);
     fake.set_load_wallet(Ok(fresh));
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     assert!(c.state().risk_override_eligible);
 
     c.handle_command(AppCommand::RequestRiskOverride);
@@ -9048,14 +9010,7 @@ fn endpoint_observation_cancels_a_stale_risk_grant_and_releases_the_blocker() {
     let mut fresh = timed_wallet("0:me");
     set_native_balance(&mut fresh, 5_000_000_000);
     fake.set_load_wallet(Ok(fresh));
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     c.handle_command(AppCommand::RequestRiskOverride);
     c.pump_events();
     c.handle_command(AppCommand::SetRiskOverlap {
@@ -9159,14 +9114,7 @@ fn endpoint_observation_silently_cancels_a_queued_stale_risk_context_failure() {
     fake.set_load_wallet(Err(ChainError::Wallet(
         "late risk-context failure".to_owned(),
     )));
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     c.handle_command(AppCommand::RequestRiskOverride);
     assert!(c.pending_risk_context.is_some());
     assert!(c.state().busy);
@@ -9227,14 +9175,7 @@ fn risk_context_rpc_keeps_the_exact_authorization_busy_gate_installed() {
     let mut fresh = timed_wallet("0:me");
     set_native_balance(&mut fresh, 5_000_000_000);
     fake.set_load_wallet(Ok(fresh));
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     let original_form = c.state().send_form.clone();
 
     c.handle_command(AppCommand::RequestRiskOverride);
@@ -9290,14 +9231,7 @@ fn risk_review_rejects_balances_with_network_time_from_another_endpoint() {
     .unwrap();
     set_native_balance(&mut wrong_source, 5_000_000_000);
     fake.set_load_wallet(Ok(wrong_source));
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
 
     c.handle_command(AppCommand::RequestRiskOverride);
     c.pump_events();
@@ -9380,14 +9314,7 @@ fn risk_grant_save_failure_never_reaches_authentication_or_signing() {
     let mut fresh = timed_wallet("0:me");
     set_native_balance(&mut fresh, 5_000_000_000);
     fake.set_load_wallet(Ok(fresh));
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     c.handle_command(AppCommand::RequestRiskOverride);
     c.pump_events();
     assert!(c.state().risk_review_open);
