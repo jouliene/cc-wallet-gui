@@ -236,37 +236,6 @@ fn read_owner_only_orphan(path: &Path) -> io::Result<Vec<u8>> {
     Ok(bytes)
 }
 
-#[cfg(test)]
-pub(crate) fn list_orphans(target: &Path) -> Vec<PathBuf> {
-    list_residue(target, ".orphan")
-}
-
-#[cfg(test)]
-pub(crate) fn list_temps(target: &Path) -> Vec<PathBuf> {
-    list_residue(target, ".tmp")
-}
-
-#[cfg(test)]
-fn list_residue(target: &Path, suffix: &str) -> Vec<PathBuf> {
-    let Some(dir) = target.parent() else {
-        return Vec::new();
-    };
-    let Some(prefix) = temp_prefix(target) else {
-        return Vec::new();
-    };
-    fs::read_dir(dir)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter(|e| {
-            e.file_name()
-                .to_str()
-                .is_some_and(|n| n.starts_with(&prefix) && n.ends_with(suffix))
-        })
-        .map(|e| e.path())
-        .collect()
-}
-
 pub(crate) fn try_list_temps(target: &Path) -> io::Result<Vec<PathBuf>> {
     try_list_residue(target, ".tmp")
 }
@@ -390,11 +359,11 @@ mod tests {
         fs::write(dir.path().join("bob.ccwallet.cc.tmp"), b"b").unwrap();
         fs::write(dir.path().join("bob.ccwallet.dd.orphan"), b"b").unwrap();
 
-        let temps = list_temps(&alice);
+        let temps = try_list_temps(&alice).unwrap();
         assert_eq!(temps.len(), 1, "only alice's temp is listed");
         assert!(temps[0].to_string_lossy().contains("alice.ccwallet.aa.tmp"));
 
-        let orphans = list_orphans(&alice);
+        let orphans = try_list_orphans(&alice).unwrap();
         assert_eq!(orphans.len(), 1, "only alice's orphan is listed");
         assert!(
             orphans[0]
