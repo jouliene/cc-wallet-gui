@@ -11,6 +11,13 @@ use crate::event::AppEvent;
 use crate::state::{AppTab, LiveStatus};
 
 impl AppController {
+    fn lower_history_floor(&mut self, floor: u64) {
+        self.session.history_synced_floor = Some(
+            self.session
+                .history_synced_floor
+                .map_or(floor, |old| old.min(floor)),
+        );
+    }
     fn apply_wallet_snapshot(&mut self, snapshot: WalletSnapshot, manual: bool) {
         self.state.snapshot_refresh_error = None;
         self.state.error = None;
@@ -521,11 +528,7 @@ impl AppController {
                         .chain(deepest_lt)
                         .min();
                     if let Some(floor) = completed_floor {
-                        self.session.history_synced_floor = Some(
-                            self.session
-                                .history_synced_floor
-                                .map_or(floor, |old| old.min(floor)),
-                        );
+                        self.lower_history_floor(floor);
                     }
                     let mut complete_observations =
                         completed_scan.map_or_else(Vec::new, |scan| scan.observations);
@@ -589,11 +592,7 @@ impl AppController {
                     self.state.history_corrupt = false;
                     self.session.history_has_gap = false;
                     if let Some(floor) = deepest_lt {
-                        self.session.history_synced_floor = Some(
-                            self.session
-                                .history_synced_floor
-                                .map_or(floor, |old| old.min(floor)),
-                        );
+                        self.lower_history_floor(floor);
                     }
                 }
                 let scan_pending = self.load.history_reconciliation_scan.is_some();

@@ -373,8 +373,6 @@ impl AppController {
         if generation != self.session_generation {
             return;
         }
-        self.state.storage.pending_label.clear();
-        self.state.busy = false;
         match result {
             Ok(dispatch) if broadcast_reached_node(&dispatch.outcome) => {
                 self.session.pending_externals.push(super::PendingExternal {

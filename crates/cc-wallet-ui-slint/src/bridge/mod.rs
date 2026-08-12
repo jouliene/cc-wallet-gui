@@ -29,18 +29,20 @@ struct SwapDrive {
 }
 
 #[cfg(debug_assertions)]
+fn env_value(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+}
+
+#[cfg(debug_assertions)]
 impl SwapDrive {
     fn from_env() -> Self {
-        let var = |name: &str| {
-            std::env::var(name)
-                .ok()
-                .filter(|value| !value.trim().is_empty())
-        };
         Self {
-            pair: var("CC_WALLET_TEST_SWAP_PAIR"),
-            amount: var("CC_WALLET_TEST_SWAP_AMOUNT"),
-            slippage: var("CC_WALLET_TEST_SWAP_SLIPPAGE"),
-            go: var("CC_WALLET_TEST_SWAP_GO").map(|value| value.trim() != "ask"),
+            pair: env_value("CC_WALLET_TEST_SWAP_PAIR"),
+            amount: env_value("CC_WALLET_TEST_SWAP_AMOUNT"),
+            slippage: env_value("CC_WALLET_TEST_SWAP_SLIPPAGE"),
+            go: env_value("CC_WALLET_TEST_SWAP_GO").map(|value| value.trim() != "ask"),
         }
     }
 
@@ -112,15 +114,10 @@ struct ChatHooks {
 #[cfg(debug_assertions)]
 impl ChatHooks {
     fn from_env() -> Self {
-        let var = |name: &str| {
-            std::env::var(name)
-                .ok()
-                .filter(|value| !value.trim().is_empty())
-        };
         Self {
-            open: var("CC_WALLET_TEST_CHAT"),
-            contact: var("CC_WALLET_TEST_CONTACT"),
-            say: var("CC_WALLET_TEST_CHAT_SAY"),
+            open: env_value("CC_WALLET_TEST_CHAT"),
+            contact: env_value("CC_WALLET_TEST_CONTACT"),
+            say: env_value("CC_WALLET_TEST_CHAT_SAY"),
             said: false,
         }
     }
@@ -137,14 +134,9 @@ struct SendDrive {
 #[cfg(debug_assertions)]
 impl SendDrive {
     fn from_env() -> Self {
-        let var = |name: &str| {
-            std::env::var(name)
-                .ok()
-                .filter(|value| !value.trim().is_empty())
-        };
         Self {
-            destination: var("CC_WALLET_TEST_SEND_MAX"),
-            comment: var("CC_WALLET_TEST_SEND_COMMENT"),
+            destination: env_value("CC_WALLET_TEST_SEND_MAX"),
+            comment: env_value("CC_WALLET_TEST_SEND_COMMENT"),
             asked: false,
         }
     }
@@ -191,14 +183,9 @@ struct StorageDrive {
 #[cfg(debug_assertions)]
 impl StorageDrive {
     fn from_env() -> Self {
-        let var = |name: &str| {
-            std::env::var(name)
-                .ok()
-                .filter(|value| !value.trim().is_empty())
-        };
         Self {
-            create: var("CC_WALLET_TEST_STORAGE_CREATE").is_some(),
-            add: var("CC_WALLET_TEST_STORAGE_ADD")
+            create: env_value("CC_WALLET_TEST_STORAGE_CREATE").is_some(),
+            add: env_value("CC_WALLET_TEST_STORAGE_ADD")
                 .map(|raw| {
                     raw.split(';')
                         .filter_map(|entry| entry.split_once('='))
@@ -206,15 +193,15 @@ impl StorageDrive {
                         .collect()
                 })
                 .unwrap_or_default(),
-            delete: var("CC_WALLET_TEST_STORAGE_DELETE")
+            delete: env_value("CC_WALLET_TEST_STORAGE_DELETE")
                 .map(|raw| {
                     raw.split(',')
                         .filter_map(|id| id.trim().parse().ok())
                         .collect()
                 })
                 .unwrap_or_default(),
-            ask: var("CC_WALLET_TEST_STORAGE_ASK").is_some(),
-            reveal: var("CC_WALLET_TEST_STORAGE_REVEAL").is_some(),
+            ask: env_value("CC_WALLET_TEST_STORAGE_ASK").is_some(),
+            reveal: env_value("CC_WALLET_TEST_STORAGE_REVEAL").is_some(),
             settled_at: None,
         }
     }
