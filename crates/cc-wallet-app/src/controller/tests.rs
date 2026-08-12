@@ -56,6 +56,17 @@ macro_rules! key_ok {
     };
 }
 
+macro_rules! txs_loaded {
+    ($($field:ident : $value:expr),* $(,)?) => {
+        AppEvent::TransactionsLoaded {
+            head_refresh_only: false,
+            events: Vec::new(),
+            integrity_error: None,
+            $($field: $value),*
+        }
+    };
+}
+
 fn elapse_risk_cooling(c: &mut AppController) {
     c.session.risk_cooling_started_at = Some(
         Instant::now()
@@ -5213,12 +5224,9 @@ fn the_history_incomplete_banner_clears_on_a_later_clean_fetch() {
     let mut c = unlocked(&dir, WalletProfile::default());
     let generation = c.subscription_generation;
 
-    c.apply_event(AppEvent::TransactionsLoaded {
-        generation,
+    c.apply_event(txs_loaded! {
+        generation: generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: vec![],
-        integrity_error: None,
         incomplete: true,
         gap: true,
         deepest_lt: None,
@@ -5228,12 +5236,9 @@ fn the_history_incomplete_banner_clears_on_a_later_clean_fetch() {
         "an incomplete fetch raises the banner"
     );
 
-    c.apply_event(AppEvent::TransactionsLoaded {
-        generation,
+    c.apply_event(txs_loaded! {
+        generation: generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: vec![],
-        integrity_error: None,
         incomplete: false,
         gap: false,
         deepest_lt: Some(100),
@@ -5276,24 +5281,18 @@ fn malformed_full_width_history_blocks_signing_until_a_complete_valid_refresh() 
             .is_some_and(|error| error.contains("extra-currency 77"))
     );
 
-    c.apply_event(AppEvent::TransactionsLoaded {
-        generation,
+    c.apply_event(txs_loaded! {
+        generation: generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: true,
         gap: false,
         deepest_lt: Some(100),
     });
     assert!(!c.state().send_enabled());
 
-    c.apply_event(AppEvent::TransactionsLoaded {
-        generation,
+    c.apply_event(txs_loaded! {
+        generation: generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: false,
         gap: false,
         deepest_lt: Some(100),
@@ -5360,12 +5359,9 @@ fn a_stale_transactions_result_still_clears_the_fetch_guard() {
     c.load.fetch_in_flight = true;
     c.load.fetch_in_flight_id = Some(77);
 
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: c.subscription_generation.wrapping_add(9),
         fetch_id: 77,
-        head_refresh_only: false,
-        events: vec![],
-        integrity_error: None,
         incomplete: false,
         gap: false,
         deepest_lt: None,
@@ -5384,12 +5380,9 @@ fn an_old_fetch_completion_cannot_release_a_new_session_fetch_guard() {
     c.load.fetch_in_flight = true;
     c.load.fetch_in_flight_id = Some(102);
 
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: c.subscription_generation.wrapping_sub(1),
         fetch_id: 101,
-        head_refresh_only: false,
-        events: vec![],
-        integrity_error: None,
         incomplete: true,
         gap: true,
         deepest_lt: None,
@@ -5455,12 +5448,9 @@ fn a_scan_that_ran_out_of_continuations_still_refreshes_the_head() {
     c.load.fetch_again = false;
     c.load.fetch_head_after_history_scan = false;
 
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: c.subscription_generation,
         fetch_id: 401,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: true,
         gap: false,
         deepest_lt: Some(500),
@@ -5497,12 +5487,9 @@ fn a_stale_owned_completion_redrives_the_current_generations_scan() {
     c.load.fetch_in_flight_id = Some(301);
     c.load.fetch_again = true;
 
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: c.subscription_generation.wrapping_sub(1),
         fetch_id: 301,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: true,
         gap: false,
         deepest_lt: Some(500),
@@ -5522,12 +5509,9 @@ fn an_interrupted_fetch_forces_the_next_fetch_to_close_the_gap() {
     let mut c = unlocked(&dir, WalletProfile::default());
     let generation = c.subscription_generation;
 
-    c.apply_event(AppEvent::TransactionsLoaded {
-        generation,
+    c.apply_event(txs_loaded! {
+        generation: generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: vec![],
-        integrity_error: None,
         incomplete: false,
         gap: false,
         deepest_lt: Some(500),
@@ -5535,12 +5519,9 @@ fn an_interrupted_fetch_forces_the_next_fetch_to_close_the_gap() {
     assert_eq!(c.session.history_synced_floor, Some(500));
     assert!(!c.session.history_has_gap);
 
-    c.apply_event(AppEvent::TransactionsLoaded {
-        generation,
+    c.apply_event(txs_loaded! {
+        generation: generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: vec![],
-        integrity_error: None,
         incomplete: true,
         gap: true,
         deepest_lt: Some(450),
@@ -5555,12 +5536,9 @@ fn an_interrupted_fetch_forces_the_next_fetch_to_close_the_gap() {
         "an RPC error flags a gap so the next fetch re-walks to close it"
     );
 
-    c.apply_event(AppEvent::TransactionsLoaded {
-        generation,
+    c.apply_event(txs_loaded! {
+        generation: generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: vec![],
-        integrity_error: None,
         incomplete: false,
         gap: false,
         deepest_lt: Some(300),
@@ -5575,12 +5553,9 @@ fn an_interrupted_fetch_forces_the_next_fetch_to_close_the_gap() {
         "the gap is closed by a clean fetch"
     );
 
-    c.apply_event(AppEvent::TransactionsLoaded {
-        generation,
+    c.apply_event(txs_loaded! {
+        generation: generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: vec![],
-        integrity_error: None,
         incomplete: false,
         gap: false,
         deepest_lt: Some(900),
@@ -5599,12 +5574,9 @@ fn an_empty_account_fetch_does_not_poison_the_no_gap_floor() {
     let mut c = unlocked(&dir, WalletProfile::default());
     let generation = c.subscription_generation;
 
-    c.apply_event(AppEvent::TransactionsLoaded {
-        generation,
+    c.apply_event(txs_loaded! {
+        generation: generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: vec![],
-        integrity_error: None,
         incomplete: false,
         gap: false,
         deepest_lt: None,
@@ -5623,12 +5595,9 @@ fn an_incomplete_batch_without_scan_progress_never_advances_the_trusted_floor() 
     let mut c = unlocked(&dir, WalletProfile::default());
     let generation = c.subscription_generation;
 
-    c.apply_event(AppEvent::TransactionsLoaded {
-        generation,
+    c.apply_event(txs_loaded! {
+        generation: generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: vec![],
-        integrity_error: None,
         incomplete: true,
         gap: false,
         deepest_lt: Some(700),
@@ -8038,12 +8007,9 @@ fn endpoint_reconciliation_requires_exact_hash_account_and_is_idempotent() {
         "wrong hash and wrong sender observations change no evidence"
     );
 
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: c.subscription_generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: true,
         gap: true,
         deepest_lt: None,
@@ -8240,12 +8206,9 @@ fn a_pruned_rpc_does_not_erase_local_history_or_poll_an_old_record_forever() {
         "an expired unresolved record remains blocked without perpetual background archive walks"
     );
 
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: c.subscription_generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: false,
         gap: false,
         deepest_lt: None,
@@ -8393,12 +8356,9 @@ fn a_stale_completion_with_a_queued_refire_does_not_abort_the_preflight() {
 
     c.subscription_generation = c.subscription_generation.wrapping_add(1);
     c.load.fetch_again = true;
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: stale_gen,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: false,
         gap: false,
         deepest_lt: None,
@@ -9921,12 +9881,9 @@ fn an_update_queued_during_continuation_advances_then_refreshes_the_head() {
     c.load.fetch_in_flight_id = Some(41);
     c.load.fetch_again = true;
 
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: c.subscription_generation,
         fetch_id: 41,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: true,
         gap: false,
         deepest_lt: Some(500),
@@ -9997,12 +9954,9 @@ fn a_queued_head_refresh_runs_even_when_the_driven_continuation_hits_its_budget(
         request_id: "promised-head-refresh".to_owned(),
     }));
 
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: c.subscription_generation,
         fetch_id: 41,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: true,
         gap: false,
         deepest_lt: Some(CONTINUATION_START_LT),
@@ -10508,12 +10462,9 @@ fn a_clean_resync_does_not_clear_the_durable_quarantine_obligation() {
     c.save_profile();
     assert!(c.dirty, "the change is pending");
 
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: c.subscription_generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: false,
         gap: false,
         deepest_lt: None,
@@ -10543,12 +10494,9 @@ fn a_gapped_resync_does_not_clear_the_corruption_flag() {
     let mut c = unlocked(&dir, WalletProfile::default());
     c.state_mut().history_corrupt = true;
 
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: c.subscription_generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: true,
         gap: true,
         deepest_lt: None,
