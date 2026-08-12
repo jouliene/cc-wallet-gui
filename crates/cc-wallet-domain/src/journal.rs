@@ -1094,6 +1094,7 @@ pub(crate) fn validate_replay(
     }
 
     let mut active: BTreeMap<RecordId, (&SendRecord, EvidenceTag)> = BTreeMap::new();
+    let mut blocking: BTreeMap<RecordId, (&SendRecord, EvidenceTag)> = BTreeMap::new();
     let mut grants: BTreeMap<crate::RiskNonce, &RiskGrant> = BTreeMap::new();
     let mut consumed = BTreeSet::new();
     let mut pending_consumption: Option<(&RiskGrant, &RiskGrantConsumption)> = None;
@@ -1119,7 +1120,7 @@ pub(crate) fn validate_replay(
                     if grant.warning_version() != crate::RISK_WARNING_VERSION {
                         return Err(JournalError::UnsupportedWarningVersion);
                     }
-                    validate_grant_old_state(grant, &active)?;
+                    validate_grant_old_state(grant, &blocking)?;
                     if grants
                         .insert(grant.one_use_nonce().clone(), grant)
                         .is_some()
@@ -1153,20 +1154,20 @@ pub(crate) fn validate_replay(
                             {
                                 return Err(JournalError::ConsumptionMismatch);
                             }
-                            validate_grant_state(grant, record, &active)?;
+                            validate_grant_state(grant, record, &blocking)?;
                         }
                         None => {
                             if !record.prepare_provenance.authorized_overlap.is_empty() {
                                 return Err(JournalError::OrphanConsumption);
                             }
-                            if active.values().any(|(prior_record, evidence)| {
+                            if blocking.values().any(|(prior_record, evidence)| {
                                 same_signing_scope(prior_record, record) && evidence.is_blocking()
                             }) {
                                 return Err(JournalError::OrdinarySigningBlocked);
                             }
                         }
                     }
-                    let active_reservations: Vec<_> = active
+                    let active_reservations: Vec<_> = blocking
                         .values()
                         .filter(|(prior_record, evidence)| {
                             same_signing_scope(prior_record, record) && evidence.is_blocking()
@@ -1198,11 +1199,21 @@ pub(crate) fn validate_replay(
                         record.ticket.record_id.clone(),
                         (record, EvidenceTag::Prepared),
                     );
+                    blocking.insert(
+                        record.ticket.record_id.clone(),
+                        (record, EvidenceTag::Prepared),
+                    );
                 } else {
                     let state = active
                         .get_mut(record.ticket.record_id())
                         .ok_or(JournalError::InvalidDelivery("event precedes Prepared"))?;
-                    state.1 = event.evidence.tag();
+                    let tag = event.evidence.tag();
+                    state.1 = tag;
+                    if tag.is_blocking() {
+                        blocking.insert(record.ticket.record_id.clone(), (record, tag));
+                    } else {
+                        blocking.remove(record.ticket.record_id());
+                    }
                 }
             }
         }
