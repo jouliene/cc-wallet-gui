@@ -725,6 +725,25 @@ pub struct PreparedRecord {
     reservations: Vec<Reservation>,
 }
 
+fn check_prepared_shape(
+    ticket: &SendTicket,
+    prepare_provenance: &PrepareProvenance,
+    reservations: &[Reservation],
+) -> Result<(), JournalError> {
+    if prepare_provenance.source_endpoint != ticket.endpoint_identity
+        || prepare_provenance.signature_global_id != ticket.network_global_id
+    {
+        return Err(JournalError::InvalidProvenance(
+            "prepare source/global id does not match the immutable ticket",
+        ));
+    }
+    validate_reservations(
+        ticket,
+        prepare_provenance.local_fee_ceiling_native,
+        reservations,
+    )
+}
+
 impl PreparedRecord {
     pub fn new(
         ticket: SendTicket,
@@ -733,18 +752,7 @@ impl PreparedRecord {
         expire_at: u32,
         reservations: Vec<Reservation>,
     ) -> Result<Self, JournalError> {
-        if prepare_provenance.source_endpoint != ticket.endpoint_identity
-            || prepare_provenance.signature_global_id != ticket.network_global_id
-        {
-            return Err(JournalError::InvalidProvenance(
-                "prepare source/global id does not match the immutable ticket",
-            ));
-        }
-        validate_reservations(
-            &ticket,
-            prepare_provenance.local_fee_ceiling_native,
-            &reservations,
-        )?;
+        check_prepared_shape(&ticket, &prepare_provenance, &reservations)?;
         Ok(Self {
             ticket,
             prepare_provenance,
@@ -860,14 +868,7 @@ impl SendRecord {
                 "each record requires exactly one first Prepared event",
             ));
         }
-        let prepared = PreparedRecord::new(
-            self.ticket.clone(),
-            self.prepare_provenance.clone(),
-            self.ext_msg_hash.clone(),
-            self.expire_at,
-            self.reservations.clone(),
-        )?;
-        let _ = prepared;
+        check_prepared_shape(&self.ticket, &self.prepare_provenance, &self.reservations)?;
         let mut prior = 0u64;
         let mut terminal = false;
         let mut previous_evidence: Option<&DeliveryEvidence> = None;
