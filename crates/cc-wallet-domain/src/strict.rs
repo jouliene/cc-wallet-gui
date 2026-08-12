@@ -1,3 +1,5 @@
+use serde::Deserialize;
+
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::fmt;
@@ -279,6 +281,14 @@ impl Classified {
             ))
         }
     }
+}
+
+pub(crate) fn required_nullable<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer)
 }
 
 #[cfg(test)]

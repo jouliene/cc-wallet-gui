@@ -28,8 +28,8 @@ impl fmt::Display for IdError {
 
 impl std::error::Error for IdError {}
 
-fn to_hex(bytes: &[u8; ID_BYTES]) -> String {
-    let mut out = String::with_capacity(ID_HEX_LEN);
+pub(crate) fn hex_lower_encode(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
     for &b in bytes {
         out.push(HEX_DIGITS[(b >> 4) as usize] as char);
         out.push(HEX_DIGITS[(b & 0x0f) as usize] as char);
@@ -37,18 +37,30 @@ fn to_hex(bytes: &[u8; ID_BYTES]) -> String {
     out
 }
 
+pub(crate) fn hex_lower_decode(text: &str) -> Option<Vec<u8>> {
+    let src = text.as_bytes();
+    if !src.len().is_multiple_of(2) {
+        return None;
+    }
+    let mut out = Vec::with_capacity(src.len() / 2);
+    for pair in src.chunks_exact(2) {
+        let hi = lower_hex_value(pair[0]).ok()?;
+        let lo = lower_hex_value(pair[1]).ok()?;
+        out.push((hi << 4) | lo);
+    }
+    Some(out)
+}
+
+fn to_hex(bytes: &[u8; ID_BYTES]) -> String {
+    hex_lower_encode(bytes)
+}
+
 fn from_hex(text: &str) -> Result<[u8; ID_BYTES], IdError> {
     if text.len() != ID_HEX_LEN {
         return Err(IdError::WrongLength);
     }
-    let src = text.as_bytes();
-    let mut out = [0u8; ID_BYTES];
-    for (i, dst) in out.iter_mut().enumerate() {
-        let hi = lower_hex_value(src[2 * i])?;
-        let lo = lower_hex_value(src[2 * i + 1])?;
-        *dst = (hi << 4) | lo;
-    }
-    Ok(out)
+    let bytes = hex_lower_decode(text).ok_or(IdError::NonCanonicalHex)?;
+    bytes.try_into().map_err(|_| IdError::WrongLength)
 }
 
 fn lower_hex_value(b: u8) -> Result<u8, IdError> {
@@ -129,16 +141,43 @@ hex32_newtype!(RiskNonce, "a 64-lowercase-hex risk nonce");
 
 hex32_newtype!(Digest32, "a 64-lowercase-hex 32-byte digest");
 
-hex32_newtype!(
-    /// An account's signing key, as it travels in a sealed comment. Not a
-    /// secret and not a digest, but the same shape and the same canonical
-    /// hex, so it is stored the same way.
-    PublicKey32,
-    "a 64-lowercase-hex public key"
-);
+hex32_newtype!(PublicKey32, "a 64-lowercase-hex public key");
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn the_shared_codec_round_trips_every_byte_and_refuses_everything_else() {
+        let all: Vec<u8> = (0..=255u8).collect();
+        let hex = hex_lower_encode(&all);
+        assert_eq!(hex.len(), 512);
+        assert!(
+            hex.bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        );
+        assert_eq!(hex_lower_decode(&hex).as_deref(), Some(all.as_slice()));
+
+        assert_eq!(hex_lower_encode(&[]), "");
+        assert_eq!(hex_lower_decode(""), Some(Vec::new()));
+
+        for refused in [
+            "0",
+            "abc",
+            "AB",
+            "0G",
+            "ff ",
+            " ff",
+            "0x",
+            "\u{e9}\u{e9}",
+            "a\u{e9}a",
+        ] {
+            assert_eq!(
+                hex_lower_decode(refused),
+                None,
+                "{refused:?} is not lowercase hex"
+            );
+        }
+    }
     use super::*;
 
     fn ramp() -> [u8; ID_BYTES] {

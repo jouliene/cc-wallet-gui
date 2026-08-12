@@ -1,8 +1,11 @@
 use crate::contracts::{
     ContractAt, ContractSpec, DecodedContract, DecodedField, decode_contract_data,
 };
-use crate::{AccountState, KeyPair, ObservedAccountState, ObservedNetworkTime};
+use crate::crypto::KeyPair;
+use crate::transport::{AccountState, ObservedAccountState, ObservedNetworkTime};
 use anyhow::{Context, Result, anyhow, bail, ensure};
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use ed25519_dalek::VerifyingKey;
 use std::collections::BTreeMap;
 use std::str::FromStr;
@@ -44,15 +47,7 @@ pub const COMMENT_ROOT_BYTES: usize = 123;
 
 pub const COMMENT_CELL_BYTES: usize = 127;
 
-/// What a comment may carry, matching what a stored record may. The chain
-/// permits far more — 65535 bytes for the whole signed message, a snake 500
-/// cells deep — so this is a spending decision, not a structural one: at 8000
-/// nano a byte in forward fees, a full kilobyte roughly doubles what a bare
-/// transfer costs. Raising it later leaves older messages readable.
 pub const MAX_COMMENT_BYTES: usize = 1024;
-
-pub const COMMENT_CELLS: usize =
-    (MAX_COMMENT_BYTES - COMMENT_ROOT_BYTES).div_ceil(COMMENT_CELL_BYTES);
 
 pub fn comment_payload(text: &str) -> Result<Cell> {
     let bytes = text.as_bytes();
@@ -89,12 +84,6 @@ pub fn comment_payload(text: &str) -> Result<Cell> {
     root.build().context("failed to build the comment payload")
 }
 
-/// Reads a plain comment back out of a message body, or says it is not one.
-///
-/// The convention is only an op of zero and then bytes, snaked across as many
-/// cells as it took. Anyone may write one, so nothing here trusts the sender:
-/// a body that is not valid UTF-8, or that runs past what a comment may hold,
-/// is not a comment as far as this wallet is concerned.
 pub fn read_comment(body: &Cell) -> Option<String> {
     let mut slice = body.as_slice().ok()?;
     if slice.size_bits() < 32 || slice.load_u32().ok()? != COMMENT_OP {
@@ -182,7 +171,6 @@ pub struct WalletState {
     pub balance: u128,
     pub extra_balance: BTreeMap<u32, String>,
     pub last_trans_lt: u64,
-    /// The wallet's own replay guard — see [`ever_wallet_replay_ms`].
     pub last_message_ms: Option<u64>,
     pub gen_lt: Option<u64>,
     pub gen_utime: Option<u32>,
@@ -257,23 +245,12 @@ pub fn ever_wallet_spec() -> ContractSpec {
     }
 }
 
-/// The moment this wallet last executed a message of ours, as the contract
-/// itself recorded it.
-///
-/// The wallet stores the timestamp of every external message it runs, and it
-/// stores it only if the transaction committed — an aborted one rolls the
-/// storage back. That makes this the earliest honest proof that one particular
-/// signed message went through, and the account state carries it as soon as the
-/// node applies the block, well before the transaction reaches the node's
-/// transaction index.
 pub fn ever_wallet_replay_ms(data: &Cell) -> Option<u64> {
     let mut slice = data.as_slice().ok()?;
     slice.load_u256().ok()?;
     slice.load_u64().ok()
 }
 
-/// The same guard, but only from an account that is actually running our
-/// wallet code — another contract's first 320 bits mean something else.
 fn account_replay_ms(account: &tycho_types::models::Account) -> Option<u64> {
     use tycho_types::models::account::AccountState as CoreAccountState;
     let CoreAccountState::Active(state_init) = &account.state else {
@@ -337,9 +314,6 @@ pub struct AccountInspection {
     pub data_boc: Option<String>,
     pub data_bytes: usize,
     pub decoded: Option<DecodedContract>,
-    /// The key this account signs with, when it is an Ever Wallet. It is the
-    /// only key an account publishes, so it is the only thing a comment can be
-    /// encrypted to; anything else leaves this empty.
     pub signing_key: Option<[u8; 32]>,
 }
 
@@ -375,11 +349,15 @@ impl AccountInspection {
         };
 
         let cell_parts = |cell: &Option<Cell>| match cell {
-            Some(cell) => (
-                Some(format!("{:x}", cell.repr_hash())),
-                Some(Boc::encode_base64(cell)),
-                Boc::encode(cell).len(),
-            ),
+            Some(cell) => {
+                let boc = Boc::encode(cell);
+                let len = boc.len();
+                (
+                    Some(format!("{:x}", cell.repr_hash())),
+                    Some(BASE64.encode(boc)),
+                    len,
+                )
+            }
             None => (None, None, 0),
         };
 
@@ -529,7 +507,6 @@ impl EverTransfer {
         self
     }
 
-    /// The body as built, for a caller that needs to read back what it wrote.
     pub fn payload_cell(&self) -> Option<&Cell> {
         self.payload.as_ref()
     }
@@ -849,6 +826,8 @@ impl IntoTupleResult for tycho_types::abi::AbiValue {
 
 #[cfg(test)]
 mod tests {
+    const COMMENT_CELLS: usize =
+        (MAX_COMMENT_BYTES - COMMENT_ROOT_BYTES).div_ceil(COMMENT_CELL_BYTES);
 
     #[test]
     fn a_comment_fills_the_root_cell_then_chains_as_many_as_the_budget_needs() {
@@ -977,8 +956,6 @@ mod tests {
             "a wallet that has run nothing has run nothing at a time of zero"
         );
 
-        // What the contract stores is the millisecond stamp the message
-        // carried, which is exactly what a prepared send knows about itself.
         let wallet = EverWallet::new(keys)?;
         let transfer = EverTransfer::new(wallet.address())?.native(1)?;
         let prepared = wallet.prepare_send_currency_at(
@@ -1083,7 +1060,7 @@ mod tests {
         let now = u32::try_from(now)?;
         wallet.apply_observed_account_state(ObservedAccountState {
             state: AccountState::NotExists {
-                timings: Some(crate::AccountTimings {
+                timings: Some(crate::transport::AccountTimings {
                     gen_lt: 1,
                     gen_utime: now,
                 }),

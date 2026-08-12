@@ -459,6 +459,7 @@ pub struct PreparedVaultWrite {
     counter: u64,
     target: PathBuf,
     sealed: Zeroizing<Vec<u8>>,
+    sealed_sha256: [u8; 32],
     fresh: bool,
 }
 
@@ -489,7 +490,7 @@ impl PreparedVaultWrite {
         Ok(WriteReceipt {
             counter: self.counter,
             exact_path: self.target,
-            file_sha256: hash_bytes(&installed),
+            file_sha256: self.sealed_sha256,
         })
     }
 }
@@ -665,15 +666,17 @@ impl VaultWriter {
             .seal_container(counter, &sections)
             .map_err(VaultStoreError::from_vault)?;
         let target = self.store.main_path();
+        let sealed_sha256 = hash_bytes(&sealed);
         self.pending = Some(PendingWrite {
             counter,
             exact_path: target.clone(),
-            file_sha256: hash_bytes(&sealed),
+            file_sha256: sealed_sha256,
         });
         Ok(PreparedVaultWrite {
             counter,
             target,
             sealed: Zeroizing::new(sealed),
+            sealed_sha256,
             fresh,
         })
     }
@@ -1569,6 +1572,12 @@ mod tests {
     const HISTORY: &[u8] = b"[{\"lt\":7}]";
     const EMPTY_HISTORY: &[u8] = b"[]";
 
+    fn alice_store() -> (tempfile::TempDir, VaultStore) {
+        let dir = tempfile::tempdir().unwrap();
+        let store = VaultStore::new(dir.path(), "alice");
+        (dir, store)
+    }
+
     fn store() -> (tempfile::TempDir, VaultStore) {
         let dir = tempfile::tempdir().unwrap();
         let store = VaultStore::new(dir.path(), DEFAULT_WALLET_NAME);
@@ -1921,8 +1930,7 @@ mod tests {
 
     #[test]
     fn unlock_skips_oversized_and_high_kdf_planted_candidates() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = VaultStore::new(dir.path(), "alice");
+        let (dir, store) = alice_store();
         let vault = Vault::create_with(PW, CHEAP).unwrap();
         save_new(&store, &vault, PROFILE, JOURNAL, Some(HISTORY));
 
@@ -2115,8 +2123,7 @@ mod tests {
 
     #[test]
     fn a_promoted_crash_temp_is_removed_and_quarantine_captures_the_winner() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = VaultStore::new(dir.path(), "alice");
+        let (dir, store) = alice_store();
         let vault = Vault::create_with(PW, CHEAP).unwrap();
         let mut writer = save_new(&store, &vault, PROFILE, JOURNAL, Some(HISTORY));
         let mut newer = sealed_next(
@@ -2319,8 +2326,7 @@ mod tests {
 
     #[test]
     fn destroy_reports_but_retains_the_directory_level_active_lock() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = VaultStore::new(dir.path(), "alice");
+        let (dir, store) = alice_store();
         let vault = Vault::create_with(PW, CHEAP).unwrap();
         save_new(&store, &vault, PROFILE, JOURNAL, Some(HISTORY));
         let lock = match crate::paths::acquire_single_instance_lock(dir.path()).unwrap() {
@@ -2339,8 +2345,7 @@ mod tests {
 
     #[test]
     fn destroy_also_shreds_leftover_temps() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = VaultStore::new(dir.path(), "alice");
+        let (dir, store) = alice_store();
         let vault = Vault::create_with(PW, CHEAP).unwrap();
         let mut writer = save_new(&store, &vault, PROFILE, JOURNAL, Some(HISTORY));
         let sealed = sealed_next(&mut writer, &vault, PROFILE, JOURNAL, Some(HISTORY));
@@ -2365,8 +2370,7 @@ mod tests {
     #[test]
     fn destroy_reports_residue_it_could_not_remove() {
         use std::os::unix::fs::PermissionsExt;
-        let dir = tempfile::tempdir().unwrap();
-        let store = VaultStore::new(dir.path(), "alice");
+        let (dir, store) = alice_store();
         save_new(
             &store,
             &Vault::create_with(PW, CHEAP).unwrap(),
@@ -2410,8 +2414,7 @@ mod tests {
 
     #[test]
     fn a_fresh_writer_refuses_to_overwrite_a_container_that_appeared_before_the_first_save() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = VaultStore::new(dir.path(), "alice");
+        let (_dir, store) = alice_store();
         let vault = Vault::create_with(PW, CHEAP).unwrap();
         let mut writer = store.writer_for_new().unwrap();
         let prepared = writer
@@ -2434,8 +2437,7 @@ mod tests {
 
     #[test]
     fn a_fresh_prepare_rechecks_main_absence() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = VaultStore::new(dir.path(), "alice");
+        let (_dir, store) = alice_store();
         let vault = Vault::create_with(PW, CHEAP).unwrap();
         let mut writer = store.writer_for_new().unwrap();
         fs::write(store.main_path(), b"appeared").unwrap();
@@ -2451,8 +2453,7 @@ mod tests {
     #[test]
     fn an_overwrite_crash_recovers_the_newer_save_by_counter() {
         const NEWER: &[u8] = b"{\"seed\":\"the newer save\"}";
-        let dir = tempfile::tempdir().unwrap();
-        let store = VaultStore::new(dir.path(), "alice");
+        let (dir, store) = alice_store();
         let vault = Vault::create_with(PW, CHEAP).unwrap();
         let mut writer = save_new(&store, &vault, PROFILE, JOURNAL, Some(HISTORY));
         let newer = sealed_next(&mut writer, &vault, NEWER, JOURNAL, Some(HISTORY));
@@ -2474,8 +2475,7 @@ mod tests {
     #[cfg(debug_assertions)]
     #[test]
     fn unlock_with_survivors_derives_one_kek() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = VaultStore::new(dir.path(), "alice");
+        let (dir, store) = alice_store();
         let vault = Vault::create_with(PW, CHEAP).unwrap();
         save_new(&store, &vault, PROFILE, JOURNAL, Some(HISTORY));
         let main_bytes = fs::read(store.main_path()).unwrap();
@@ -2494,8 +2494,7 @@ mod tests {
 
     #[test]
     fn a_planted_foreign_temp_is_ignored_when_main_authenticates() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = VaultStore::new(dir.path(), "alice");
+        let (dir, store) = alice_store();
         let mut writer = save_new(
             &store,
             &Vault::create_with(PW, CHEAP).unwrap(),
@@ -2535,8 +2534,7 @@ mod tests {
     fn a_clean_rekey_opens_with_the_new_password_and_rejects_the_old() {
         const PW_A: &[u8] = b"the-original-password";
         const PW_B: &[u8] = b"the-rekeyed-password!";
-        let dir = tempfile::tempdir().unwrap();
-        let store = VaultStore::new(dir.path(), "alice");
+        let (_dir, store) = alice_store();
         let mut writer = save_new(
             &store,
             &Vault::create_with(PW_A, CHEAP).unwrap(),
@@ -2566,8 +2564,7 @@ mod tests {
     fn a_pre_rekey_orphan_does_not_lock_out_a_rekeyed_main() {
         const PW_A: &[u8] = b"the-original-password";
         const PW_B: &[u8] = b"the-rekeyed-password!";
-        let dir = tempfile::tempdir().unwrap();
-        let store = VaultStore::new(dir.path(), "alice");
+        let (dir, store) = alice_store();
         let mut writer = save_new(
             &store,
             &Vault::create_with(PW_A, CHEAP).unwrap(),
@@ -2612,8 +2609,7 @@ mod tests {
 
     #[test]
     fn a_same_password_old_generation_orphan_is_excluded_not_adopted() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = VaultStore::new(dir.path(), "alice");
+        let (dir, store) = alice_store();
         let mut writer = save_new(
             &store,
             &Vault::create_with(PW, CHEAP).unwrap(),
@@ -2651,8 +2647,7 @@ mod tests {
     fn mixed_generation_survivors_with_no_main_still_fail_closed() {
         use cc_wallet_vault::Purpose;
 
-        let dir = tempfile::tempdir().unwrap();
-        let store = VaultStore::new(dir.path(), "alice");
+        let (dir, store) = alice_store();
         let sections: &[(Purpose, &[u8])] =
             &[(Purpose::Wallet, PROFILE), (Purpose::Journal, JOURNAL)];
         let a = Vault::create_with(PW, CHEAP)
@@ -2676,8 +2671,7 @@ mod tests {
 
     #[test]
     fn a_future_format_main_is_not_overwritten_by_an_older_survivor() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = VaultStore::new(dir.path(), "alice");
+        let (dir, store) = alice_store();
         let vault = Vault::create_with(PW, CHEAP).unwrap();
         let mut writer = save_new(&store, &vault, PROFILE, JOURNAL, Some(HISTORY));
         let survivor = sealed_next(&mut writer, &vault, PROFILE, JOURNAL, Some(HISTORY));
@@ -2701,8 +2695,7 @@ mod tests {
     #[test]
     fn an_unreadable_candidate_is_fatal_not_skipped() {
         use std::os::unix::fs::PermissionsExt;
-        let dir = tempfile::tempdir().unwrap();
-        let store = VaultStore::new(dir.path(), "alice");
+        let (dir, store) = alice_store();
         let vault = Vault::create_with(PW, CHEAP).unwrap();
         save_new(&store, &vault, PROFILE, JOURNAL, Some(HISTORY));
         let orphan = dir.path().join("alice.ccwallet.v1.9.orphan");
@@ -2772,8 +2765,7 @@ mod tests {
 
     #[test]
     fn list_wallets_surfaces_a_wallet_recoverable_only_from_a_temp() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = VaultStore::new(dir.path(), "alice");
+        let (dir, store) = alice_store();
         let sealed = sealed_next(
             &mut store.writer_for_new().unwrap(),
             &Vault::create_with(PW, CHEAP).unwrap(),
@@ -2800,8 +2792,7 @@ mod tests {
 
     #[test]
     fn a_torn_temp_is_never_promoted_and_raises_no_phantom_wallet() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = VaultStore::new(dir.path(), "alice");
+        let (dir, store) = alice_store();
         let sealed = sealed_next(
             &mut store.writer_for_new().unwrap(),
             &Vault::create_with(PW, CHEAP).unwrap(),

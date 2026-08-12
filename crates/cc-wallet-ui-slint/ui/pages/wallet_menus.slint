@@ -155,12 +155,13 @@ export component ContactPickerMenu inherits MenuSurface {
             viewport-height: max(0px, root.shown * 48px - 2px);
             VerticalLayout {
                 spacing: Space.s_2;
-                for c in root.address_book: Rectangle {
-                    height: (root.filter == "" || root.contact_matches_search(c.name, c.address, c.tag, root.filter)) ? 46px : 0px;
+                for c in root.address_book: row := Rectangle {
+                    property <bool> vis: root.filter == "" || root.contact_matches_search(c.name, c.address, c.tag, root.filter);
+                    height: row.vis ? 46px : 0px;
                     clip: true;
                     border-radius: Radii.sm;
                     background: bta.has-hover ? Palette.hover_strong : transparent;
-                    if root.filter == "" || root.contact_matches_search(c.name, c.address, c.tag, root.filter): HorizontalLayout {
+                    if row.vis: HorizontalLayout {
                         padding-left: Space.s_8; padding-right: Space.s_8; spacing: Space.s_10;
                         VerticalLayout { alignment: center; Avatar { initial: c.initial; tint: c.color; size: 28px; } }
                         VerticalLayout {
@@ -229,7 +230,6 @@ export component ActivityPartyMenu inherits MenuSurface {
     in property <int> shown;
     in property <int> extra;
     pure callback contact_matches_search(string, string, string, string) -> bool;
-    pure callback matching_contact_count(string) -> int;
     callback pick(string);
     VerticalLayout {
         padding: Space.s_8;
@@ -287,7 +287,7 @@ export component ActivityPartyMenu inherits MenuSurface {
                     }
                     cta := TouchArea { mouse-cursor: pointer; enabled: row.vis; clicked => { root.pick(c.address); } }
                 }
-                if root.search != "" && root.matching_contact_count(root.search) == 0: Rectangle {
+                if root.search != "" && root.shown == 0: Rectangle {
                     height: 40px;
                     border-radius: Radii.sm;
                     background: use_ta.has-hover ? Palette.hover_strong : transparent;

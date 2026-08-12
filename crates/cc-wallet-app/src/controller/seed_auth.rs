@@ -24,6 +24,33 @@ pub(super) const GATE_MSG_PENDING: &str =
     "Still verifying the recipient account — try again in a moment";
 
 impl AppController {
+    pub(super) fn open_auth(&mut self, purpose: AuthPurpose) {
+        self.state.auth = AuthModal {
+            open: true,
+            mode: AuthMode::Enter,
+            purpose,
+            send_options_editable: false,
+            error: String::new(),
+        };
+    }
+
+    pub(super) fn open_signing_auth(&mut self, purpose: AuthPurpose, send_options_editable: bool) {
+        let mode = if self.state.within_autosign() {
+            AuthMode::Confirm
+        } else {
+            AuthMode::Enter
+        };
+        self.state.auth = AuthModal {
+            open: true,
+            mode,
+            purpose,
+            send_options_editable,
+            error: String::new(),
+        };
+    }
+}
+
+impl AppController {
     pub(super) fn create_password(&mut self, pw: Password, pw2: Password) {
         if pw.char_count() < 8 {
             self.state.lock_error = "Use at least 8 characters".to_owned();
@@ -272,12 +299,6 @@ impl AppController {
         self.authorize_transfer(request);
     }
 
-    /// Everything a transfer goes through once there is a transfer to make.
-    ///
-    /// Kept apart from the form that usually fills it in, because a reply
-    /// written in a conversation is the same operation from a different screen
-    /// — and routing it through the form meant the message appeared for an
-    /// instant in the note field of a card the writer was not looking at.
     pub(super) fn authorize_transfer(&mut self, request: SendRequest) {
         let inputs = match self.wallet_inputs() {
             Ok(inputs) => inputs,
@@ -337,18 +358,7 @@ impl AppController {
             }
         };
         self.pending_authorization = Some(authorization);
-        let mode = if self.state.within_autosign() {
-            AuthMode::Confirm
-        } else {
-            AuthMode::Enter
-        };
-        self.state.auth = AuthModal {
-            open: true,
-            mode,
-            purpose: AuthPurpose::Send,
-            send_options_editable: true,
-            error: String::new(),
-        };
+        self.open_signing_auth(AuthPurpose::Send, true);
         self.session.fee_reestimate_at = None;
         self.check_destination();
     }
@@ -394,13 +404,7 @@ impl AppController {
     }
 
     pub(super) fn change_password_request(&mut self) {
-        self.state.auth = AuthModal {
-            open: true,
-            mode: AuthMode::Enter,
-            purpose: AuthPurpose::ChangePassword,
-            send_options_editable: false,
-            error: String::new(),
-        };
+        self.open_auth(AuthPurpose::ChangePassword);
     }
 
     pub(super) fn request_security_setting(&mut self, setting: SecuritySetting) {
@@ -412,13 +416,7 @@ impl AppController {
             return;
         }
         self.pending_security_setting = Some(setting);
-        self.state.auth = AuthModal {
-            open: true,
-            mode: AuthMode::Enter,
-            purpose: AuthPurpose::ChangeSecuritySetting,
-            send_options_editable: false,
-            error: String::new(),
-        };
+        self.open_auth(AuthPurpose::ChangeSecuritySetting);
     }
 
     pub(super) fn apply_security_setting(&mut self, setting: SecuritySetting) {
@@ -594,13 +592,7 @@ impl AppController {
     }
 
     pub(super) fn reveal_seed(&mut self) {
-        self.state.auth = AuthModal {
-            open: true,
-            mode: AuthMode::Enter,
-            purpose: AuthPurpose::RevealSeed,
-            send_options_editable: false,
-            error: String::new(),
-        };
+        self.open_auth(AuthPurpose::RevealSeed);
     }
 
     pub(super) fn show_seed_for_one_minute(&mut self) {
@@ -907,7 +899,6 @@ impl AppController {
         self.state.derived_wallet_address.clear();
         self.state.wallet = None;
         self.state.activity.clear();
-        // A conversation belongs to the wallet that could read it.
         self.close_chat();
         self.session.pending_sends.clear();
         self.session.awaiting_send_lt = None;

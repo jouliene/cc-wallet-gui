@@ -113,7 +113,7 @@ export component WalletPage inherits VerticalLayout {
 
     property <string> af_party_search: "";
     property <int> af_party_shown: root.af_party_search == "" ? root.address_book_count : root.matching_contact_count(root.af_party_search);
-    property <int> af_party_extra: (root.af_party_search != "" && root.matching_contact_count(root.af_party_search) == 0) ? 1 : 0;
+    property <int> af_party_extra: (root.af_party_search != "" && root.af_party_shown == 0) ? 1 : 0;
     property <length> af_party_list_h: min((root.af_party_shown + root.af_party_extra) * 40px, 160px);
     property <length> af_party_popup_h: 101px + root.af_party_list_h;
 
@@ -357,7 +357,6 @@ export component WalletPage inherits VerticalLayout {
                 shown: root.af_party_shown;
                 extra: root.af_party_extra;
                 contact_matches_search(n, a, t, q) => { root.contact_matches_search(n, a, t, q) }
-                matching_contact_count(q) => { root.matching_contact_count(q) }
                 pick(a) => { root.activity_set_party(a); af_party_popup.close(); }
             }
         }

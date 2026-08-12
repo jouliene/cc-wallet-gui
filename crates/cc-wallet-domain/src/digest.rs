@@ -1,6 +1,6 @@
 use std::fmt;
 
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 
 use crate::amount::AssetAmount;
@@ -249,12 +249,11 @@ struct ReservationWire {
     kind: ReservationKind,
 }
 
-impl<'de> Deserialize<'de> for Reservation {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let wire = ReservationWire::deserialize(deserializer)?;
-        Self::new(wire.record_id, wire.amount, wire.kind).map_err(serde::de::Error::custom)
-    }
-}
+wire_deserialize!(Reservation via ReservationWire {
+    record_id,
+    amount,
+    kind
+});
 
 impl Reservation {
     pub fn new(
@@ -271,19 +270,13 @@ impl Reservation {
             kind,
         })
     }
-
-    pub fn record_id(&self) -> &RecordId {
-        &self.record_id
-    }
-
-    pub fn amount(&self) -> &AssetAmount {
-        &self.amount
-    }
-
-    pub fn kind(&self) -> ReservationKind {
-        self.kind
-    }
 }
+
+accessors!(Reservation {
+    record_id: ref RecordId,
+    amount: ref AssetAmount,
+    kind: copy ReservationKind
+});
 
 fn assemble_set_blob(rows: &[Vec<u8>]) -> Result<Vec<u8>, DigestError> {
     let count = checked_row_count(rows.len())?;
@@ -375,6 +368,7 @@ impl CanonicalAddress {
     }
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct TicketDigestInput<'a> {
     pub(crate) record_id: &'a RecordId,
     pub(crate) sender_wallet_id: &'a [u8],
@@ -814,206 +808,51 @@ mod tests {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn ticket_hex(
-        record_id: &RecordId,
-        sender_wallet_id: &[u8],
-        sender_address: CanonicalAddress,
-        network_global_id: i32,
-        endpoint_identity: &[u8],
-        destination: CanonicalAddress,
-        value: &AssetAmount,
-        bounce: bool,
-        auth_generation: u64,
-        auth_nonce: u64,
-    ) -> String {
-        ticket_digest(&TicketDigestInput {
-            record_id,
-            sender_wallet_id,
-            sender_address,
-            network_global_id,
-            endpoint_identity,
-            destination,
-            value,
-            bounce,
-            auth_generation,
-            auth_nonce,
-        })
-        .unwrap()
-        .to_hex()
-    }
-
     #[test]
     fn ticket_digest_separates_every_field() {
         let rid0 = rid(0);
         let rid1 = rid(1);
         let v5 = native(5);
         let v6 = native(6);
-        let base = ticket_hex(
-            &rid0,
-            b"w1",
-            addr(0, 0x11),
-            2000,
-            b"ep",
-            addr(-1, 0x22),
-            &v5,
-            true,
-            7,
-            9,
-        );
-        let mutations = [
-            ticket_hex(
-                &rid1,
-                b"w1",
-                addr(0, 0x11),
-                2000,
-                b"ep",
-                addr(-1, 0x22),
-                &v5,
-                true,
-                7,
-                9,
-            ),
-            ticket_hex(
-                &rid0,
-                b"w2",
-                addr(0, 0x11),
-                2000,
-                b"ep",
-                addr(-1, 0x22),
-                &v5,
-                true,
-                7,
-                9,
-            ),
-            ticket_hex(
-                &rid0,
-                b"w1",
-                addr(1, 0x11),
-                2000,
-                b"ep",
-                addr(-1, 0x22),
-                &v5,
-                true,
-                7,
-                9,
-            ),
-            ticket_hex(
-                &rid0,
-                b"w1",
-                addr(0, 0x12),
-                2000,
-                b"ep",
-                addr(-1, 0x22),
-                &v5,
-                true,
-                7,
-                9,
-            ),
-            ticket_hex(
-                &rid0,
-                b"w1",
-                addr(0, 0x11),
-                2001,
-                b"ep",
-                addr(-1, 0x22),
-                &v5,
-                true,
-                7,
-                9,
-            ),
-            ticket_hex(
-                &rid0,
-                b"w1",
-                addr(0, 0x11),
-                2000,
-                b"e2",
-                addr(-1, 0x22),
-                &v5,
-                true,
-                7,
-                9,
-            ),
-            ticket_hex(
-                &rid0,
-                b"w1",
-                addr(0, 0x11),
-                2000,
-                b"ep",
-                addr(-1, 0x23),
-                &v5,
-                true,
-                7,
-                9,
-            ),
-            ticket_hex(
-                &rid0,
-                b"w1",
-                addr(0, 0x11),
-                2000,
-                b"ep",
-                addr(-1, 0x22),
-                &v6,
-                true,
-                7,
-                9,
-            ),
-            ticket_hex(
-                &rid0,
-                b"w1",
-                addr(0, 0x11),
-                2000,
-                b"ep",
-                addr(-1, 0x22),
-                &v5,
-                false,
-                7,
-                9,
-            ),
-            ticket_hex(
-                &rid0,
-                b"w1",
-                addr(0, 0x11),
-                2000,
-                b"ep",
-                addr(-1, 0x22),
-                &v5,
-                true,
-                8,
-                9,
-            ),
-            ticket_hex(
-                &rid0,
-                b"w1",
-                addr(0, 0x11),
-                2000,
-                b"ep",
-                addr(-1, 0x22),
-                &v5,
-                true,
-                7,
-                8,
-            ),
-            ticket_hex(
-                &rid0,
-                b"w1",
-                addr(0, 0x11),
-                2000,
-                b"ep",
-                addr(-1, 0x22),
-                &v5,
-                true,
-                9,
-                7,
-            ),
+        let base_input = TicketDigestInput {
+            record_id: &rid0,
+            sender_wallet_id: b"w1",
+            sender_address: addr(0, 0x11),
+            network_global_id: 2000,
+            endpoint_identity: b"ep",
+            destination: addr(-1, 0x22),
+            value: &v5,
+            bounce: true,
+            auth_generation: 7,
+            auth_nonce: 9,
+        };
+        let hex = |input: &TicketDigestInput| ticket_digest(input).unwrap().to_hex();
+        let base = hex(&base_input);
+
+        type Mutate<'a> = &'a dyn Fn(&mut TicketDigestInput<'a>);
+        let mutations: [(&str, Mutate); 12] = [
+            ("record_id", &|t| t.record_id = &rid1),
+            ("sender_wallet_id", &|t| t.sender_wallet_id = b"w2"),
+            ("sender_address", &|t| t.sender_address = addr(0, 0x12)),
+            ("sender_workchain", &|t| t.sender_address = addr(-1, 0x11)),
+            ("network_global_id", &|t| t.network_global_id = 2001),
+            ("endpoint_identity", &|t| t.endpoint_identity = b"eq"),
+            ("destination", &|t| t.destination = addr(-1, 0x23)),
+            ("destination_workchain", &|t| t.destination = addr(0, 0x22)),
+            ("value", &|t| t.value = &v6),
+            ("bounce", &|t| t.bounce = false),
+            ("auth_generation", &|t| t.auth_generation = 8),
+            ("auth_nonce", &|t| t.auth_nonce = 10),
         ];
-        for m in &mutations {
-            assert_ne!(
-                &base, m,
-                "a single-field change must change the ticket digest"
-            );
+
+        let mut all = vec![base.clone()];
+        for (field, mutate) in mutations {
+            let mut input = base_input;
+            mutate(&mut input);
+            let mutated = hex(&input);
+            assert_ne!(base, mutated, "changing {field} must change the digest");
+            all.push(mutated);
         }
-        let mut all = mutations.to_vec();
-        all.push(base);
         all.sort();
         all.dedup();
         assert_eq!(all.len(), 13, "base plus 12 mutations are all distinct");

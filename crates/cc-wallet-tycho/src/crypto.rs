@@ -220,14 +220,6 @@ impl KeyPair {
         self.public_key().to_bytes()
     }
 
-    /// The key this wallet and one other arrive at independently. Both sides
-    /// compute it from their own scalar and the other's published key, which is
-    /// what lets the sender read back what they sent.
-    ///
-    /// It reuses the signing key, because a wallet publishes no other: the
-    /// recipient's account carries the key it signs with and nothing else.
-    /// The same agreement from a key as it appears on chain — raw bytes out of
-    /// an account — so callers need no signature types of their own.
     pub fn comment_secret_for(&self, their_key: &[u8; 32]) -> Result<Zeroizing<[u8; 32]>> {
         let their_key =
             VerifyingKey::from_bytes(their_key).map_err(CryptoError::InvalidPublicKey)?;
@@ -288,29 +280,6 @@ pub fn derivation_path(index: u32) -> String {
     )
 }
 
-#[inline]
-pub fn public_key_from_bytes(bytes: PublicKeyBytes) -> Result<VerifyingKey> {
-    VerifyingKey::from_bytes(&bytes).map_err(CryptoError::InvalidPublicKey)
-}
-
-pub fn public_key_from_hex(public_hex: &str) -> Result<VerifyingKey> {
-    let mut bytes = [0u8; 32];
-    hex::decode_to_slice(public_hex.trim(), &mut bytes).map_err(CryptoError::InvalidPublicHex)?;
-    public_key_from_bytes(bytes)
-}
-
-#[inline]
-pub fn signature_from_bytes(bytes: SignatureBytes) -> Signature {
-    Signature::from_bytes(&bytes)
-}
-
-pub fn signature_from_hex(signature_hex: &str) -> Result<Signature> {
-    let mut bytes = [0u8; 64];
-    hex::decode_to_slice(signature_hex.trim(), &mut bytes)
-        .map_err(CryptoError::InvalidSignatureHex)?;
-    Ok(signature_from_bytes(bytes))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -347,8 +316,11 @@ mod tests {
 
         assert_eq!(keys.secret_key_hex(), TEST_SECRET_HEX);
         assert_eq!(keys.public_key_bytes().len(), 32);
+        let mut parsed = [0u8; 32];
+        hex::decode_to_slice(keys.public_key_hex(), &mut parsed)
+            .expect("the public key prints as 32 bytes of hex");
         assert_eq!(
-            public_key_from_hex(&keys.public_key_hex())?,
+            VerifyingKey::from_bytes(&parsed).expect("the printed key parses back"),
             *keys.public_key()
         );
         Ok(())
@@ -374,8 +346,6 @@ mod tests {
             Err(CryptoError::InvalidSecretLength { actual: 3 })
         ));
         assert!(KeyPair::from_secret_hex("abc").is_err());
-        assert!(public_key_from_hex("abc").is_err());
-        assert!(signature_from_hex("abc").is_err());
     }
 
     #[test]

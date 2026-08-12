@@ -13,6 +13,16 @@ use super::{
     ActivityFilters, AmountFormat, AppWindow, ClipboardBridge, EditFmt, UiCache, UserActivity,
 };
 
+fn resync(ui: &AppWindow, controller: &RefCell<AppController>, cache: &RefCell<UiCache>) {
+    let form_locked = controller.borrow().send_form_locked();
+    sync_ui(
+        ui,
+        controller.borrow().state(),
+        form_locked,
+        &mut cache.borrow_mut(),
+    );
+}
+
 pub(super) fn connect_callbacks(
     ui: &AppWindow,
     controller: Rc<RefCell<AppController>>,
@@ -23,13 +33,7 @@ pub(super) fn connect_callbacks(
         let cache = cache.clone();
         move |ui: &AppWindow, cmd: AppCommand| {
             controller.borrow_mut().handle_command(cmd);
-            let form_locked = controller.borrow().send_form_locked();
-            sync_ui(
-                ui,
-                controller.borrow().state(),
-                form_locked,
-                &mut cache.borrow_mut(),
-            );
+            resync(ui, &controller, &cache);
         }
     };
 
@@ -540,13 +544,7 @@ pub(super) fn connect_callbacks(
                     .borrow_mut()
                     .surface_error(format!("failed to generate seed: {error}"));
                 if let Some(ui) = weak.upgrade() {
-                    let form_locked = controller.borrow().send_form_locked();
-                    sync_ui(
-                        &ui,
-                        controller.borrow().state(),
-                        form_locked,
-                        &mut cache.borrow_mut(),
-                    );
+                    resync(&ui, &controller, &cache);
                 }
                 ModelRc::from(Rc::new(VecModel::from(distribute_words(""))))
             }
@@ -605,13 +603,7 @@ pub(super) fn connect_callbacks(
         let controller = controller.clone();
         let cache = cache.clone();
         move |ui: &AppWindow| {
-            let form_locked = controller.borrow().send_form_locked();
-            sync_ui(
-                ui,
-                controller.borrow().state(),
-                form_locked,
-                &mut cache.borrow_mut(),
-            );
+            resync(ui, &controller, &cache);
         }
     };
     {

@@ -121,8 +121,6 @@ fn emulation_balance_floor(transfer_native: u128) -> ChainResult<u128> {
 
 static MONOTONIC_ORIGIN: LazyLock<Instant> = LazyLock::new(Instant::now);
 
-/// What a recipient's account says about itself: whether it can be sent to at
-/// all, and whether it publishes a key a comment could be encrypted to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct DestinationReport {
     pub status: DestinationAccountStatus,
@@ -330,12 +328,6 @@ impl PreparedChainSend {
         self.prepared_record.expire_at()
     }
 
-    /// The timestamp the signed message carries.
-    ///
-    /// The wallet contract stores this value when it executes the message, so
-    /// the account state can be asked whether this exact message ran without
-    /// waiting for the node to index the transaction. Zero on a test-only
-    /// prepared send, which no account can ever match.
     pub fn created_at_ms(&self) -> u64 {
         self.created_at_ms
     }
@@ -837,8 +829,6 @@ impl TychoWalletService {
                 AccountStatus::NotExists => DestinationAccountStatus::NonExist,
             },
         };
-        // The same read already in flight answers both questions, so asking
-        // whether a comment can be encrypted costs no second round trip.
         let encrypt_key = AccountInspection::from_account_state(&state, Some(&address))
             .ok()
             .flatten()
@@ -849,19 +839,6 @@ impl TychoWalletService {
         })
     }
 
-    /// Opens the sealed comments of one conversation.
-    ///
-    /// Nothing here touches the network — the ciphertext already came off the
-    /// chain with the history, and the keys are the wallet's own. What differs
-    /// between the two directions is which key to agree with and which way the
-    /// pair is written down: a message we received names its sender in itself,
-    /// while one we sent names us, and reading our own words back needs the
-    /// other end's key instead.
-    ///
-    /// A comment that will not open is not an error. Anyone can send this
-    /// wallet an `op 0x43434531` body full of noise, and a conversation that
-    /// refused to render because a stranger did is a conversation a stranger
-    /// controls.
     pub fn open_conversation(
         &self,
         inputs: &WalletInputs,
@@ -876,16 +853,27 @@ impl TychoWalletService {
             .to_string();
         let peer = canonicalize_recipient(peer).map_err(ChainError::invalid_input)?;
 
+        let outgoing_aad = comment_aad(&me, &peer);
+        let incoming_aad = comment_aad(&peer, &me);
+        let mut secrets: Vec<([u8; 32], Zeroizing<[u8; 32]>)> = Vec::new();
+
         Ok(sealed
             .iter()
             .map(|comment| {
                 let (their_key, aad) = if comment.outgoing {
-                    (peer_key?, comment_aad(&me, &peer))
+                    (peer_key?, &outgoing_aad)
                 } else {
-                    (comment.sender_key, comment_aad(&peer, &me))
+                    (comment.sender_key, &incoming_aad)
                 };
-                let secret = keys.comment_secret_for(their_key).ok()?;
-                let plain = open_record(&secret, &aad, comment.blob).ok()?;
+                let secret = match secrets.iter().find(|(key, _)| key == their_key) {
+                    Some((_, secret)) => secret.clone(),
+                    None => {
+                        let secret = keys.comment_secret_for(their_key).ok()?;
+                        secrets.push((*their_key, secret.clone()));
+                        secret
+                    }
+                };
+                let plain = open_record(&secret, aad, comment.blob).ok()?;
                 String::from_utf8(plain.to_vec()).ok()
             })
             .collect())
@@ -1732,13 +1720,6 @@ impl TychoWalletService {
         Ok(classify_broadcast(outcome, "storage request"))
     }
 
-    /// The network's own parameters, read once per endpoint and kept.
-    ///
-    /// They change at a key block and effectively never otherwise, so there is
-    /// no expiry here: the cache lives until something makes it wrong, and the
-    /// things that make it wrong are all events we already see — selecting or
-    /// removing an endpoint, switching wallets, locking. Each of those clears
-    /// it outright.
     async fn blockchain_config(&self, transport: &Transport) -> ChainResult<CachedConfig> {
         let endpoint = transport.endpoint();
         if let Some(config) = self
@@ -1797,14 +1778,16 @@ pub struct NetworkStats {
     pub supply: Option<CoinSupply>,
 }
 
+fn unsupported<'a, T: 'a>(what: &'static str) -> ChainFuture<'a, T> {
+    Box::pin(async move { Err(ChainError::Wallet(what.to_owned())) })
+}
+
 pub trait ChainService: Send + Sync {
     fn generate_seed(&self) -> ChainResult<SeedPhrase>;
     fn clear_config_cache(&self);
-    fn seal_key_ops(&self) {}
-    fn unseal_key_ops(&self) {}
-    fn drain_emulation_jobs(&self, _timeout: Duration) -> bool {
-        true
-    }
+    fn seal_key_ops(&self);
+    fn unseal_key_ops(&self);
+    fn drain_emulation_jobs(&self, _timeout: Duration) -> bool;
     fn derive_wallet_address(&self, inputs: &WalletInputs) -> ChainResult<String>;
     fn load_wallet<'a>(
         &'a self,
@@ -1816,24 +1799,12 @@ pub trait ChainService: Send + Sync {
         _ticket: SendTicket,
         _active_reservations: Vec<Reservation>,
         _authorized_overlap: Vec<Reservation>,
-    ) -> ChainFuture<'_, PreparedChainSend> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not implement the durable prepare pipeline".to_owned(),
-            ))
-        })
-    }
+    ) -> ChainFuture<'_, PreparedChainSend>;
     fn broadcast_prepared_candidate<'a>(
         &'a self,
         _prepared: &'a PreparedChainSend,
         _candidate_index: usize,
-    ) -> ChainFuture<'a, CandidateBroadcastOutcome> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not implement candidate broadcasting".to_owned(),
-            ))
-        })
-    }
+    ) -> ChainFuture<'a, CandidateBroadcastOutcome>;
     fn estimate_fee(
         &self,
         inputs: WalletInputs,
@@ -1845,11 +1816,7 @@ pub trait ChainService: Send + Sync {
         _endpoint: &'a str,
         _pool: &'a str,
     ) -> ChainFuture<'a, PoolSnapshot> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not read DEX pool state".to_owned(),
-            ))
-        })
+        unsupported("this chain service does not read DEX pool state")
     }
     fn prepare_swap(
         &self,
@@ -1857,64 +1824,34 @@ pub trait ChainService: Send + Sync {
         _pool: String,
         _request: SwapRequest,
     ) -> ChainFuture<'_, PreparedSwap> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not implement swap preparation".to_owned(),
-            ))
-        })
+        unsupported("this chain service does not implement swap preparation")
     }
     fn broadcast_swap<'a>(
         &'a self,
         _prepared: &'a PreparedSwap,
         _candidate_index: usize,
     ) -> ChainFuture<'a, CandidateBroadcastOutcome> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not implement swap broadcasting".to_owned(),
-            ))
-        })
+        unsupported("this chain service does not implement swap broadcasting")
     }
-    fn storage_address_for(&self, _inputs: &WalletInputs) -> ChainResult<String> {
-        Err(ChainError::Wallet(
-            "this chain service does not derive storage addresses".to_owned(),
-        ))
-    }
-    fn load_storage(&self, _inputs: WalletInputs) -> ChainFuture<'_, StorageSnapshot> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not read storage state".to_owned(),
-            ))
-        })
-    }
+    fn storage_address_for(&self, _inputs: &WalletInputs) -> ChainResult<String>;
+    fn load_storage(&self, _inputs: WalletInputs) -> ChainFuture<'_, StorageSnapshot>;
     fn prepare_storage_op(
         &self,
         _inputs: WalletInputs,
         _op: StorageOp,
-    ) -> ChainFuture<'_, PreparedStorageOp> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not implement storage preparation".to_owned(),
-            ))
-        })
-    }
+    ) -> ChainFuture<'_, PreparedStorageOp>;
     fn broadcast_storage_op<'a>(
         &'a self,
         _prepared: &'a PreparedStorageOp,
         _candidate_index: usize,
     ) -> ChainFuture<'a, CandidateBroadcastOutcome> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not implement storage broadcasting".to_owned(),
-            ))
-        })
+        unsupported("this chain service does not implement storage broadcasting")
     }
     fn check_destination<'a>(
         &'a self,
         inputs: &'a EndpointAddressInputs,
         address: String,
     ) -> ChainFuture<'a, DestinationReport>;
-    /// Opens sealed comments. Nothing here goes to the network, so unlike its
-    /// neighbours it answers at once.
     fn open_conversation(
         &self,
         inputs: &WalletInputs,
@@ -1930,29 +1867,17 @@ pub trait ChainService: Send + Sync {
     ) -> ChainFuture<'a, TransactionPage>;
     fn probe_endpoint(&self, endpoint: String) -> ChainFuture<'_, i32>;
     fn network_stats(&self, _endpoint: String) -> ChainFuture<'_, NetworkStats> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not provide network stats".to_owned(),
-            ))
-        })
+        unsupported("this chain service does not provide network stats")
     }
     fn validator_clock(&self, _endpoint: String) -> ChainFuture<'_, ValidatorCycle> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not provide validator-clock data".to_owned(),
-            ))
-        })
+        unsupported("this chain service does not provide validator-clock data")
     }
     fn inspect_account(
         &self,
         _endpoint: String,
         _address: String,
     ) -> ChainFuture<'_, AccountInspection> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not support account inspection".to_owned(),
-            ))
-        })
+        unsupported("this chain service does not support account inspection")
     }
     fn account_transactions(
         &self,
@@ -1960,22 +1885,14 @@ pub trait ChainService: Send + Sync {
         _address: String,
         _limit: u32,
     ) -> ChainFuture<'_, AccountTxPage> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not serve account history".to_owned(),
-            ))
-        })
+        unsupported("this chain service does not serve account history")
     }
     fn trace_transaction(
         &self,
         _endpoint: String,
         _transaction_hash: String,
     ) -> ChainFuture<'_, AccountTrace> {
-        Box::pin(async {
-            Err(ChainError::Wallet(
-                "this chain service does not walk message trees".to_owned(),
-            ))
-        })
+        unsupported("this chain service does not walk message trees")
     }
     fn subscribe(
         &self,
@@ -1984,207 +1901,56 @@ pub trait ChainService: Send + Sync {
     ) -> ChainFuture<'_, ()>;
 }
 
+macro_rules! forward_to_inherent {
+    (unit $name:ident ( $( $arg:ident : $ty:ty ),* $(,)? )) => {
+        fn $name(&self $(, $arg: $ty)*) {
+            TychoWalletService::$name(self $(, $arg)*);
+        }
+    };
+    (sync $name:ident ( $( $arg:ident : $ty:ty ),* $(,)? ) -> $ret:ty) => {
+        fn $name(&self $(, $arg: $ty)*) -> $ret {
+            TychoWalletService::$name(self $(, $arg)*)
+        }
+    };
+    (fut $name:ident ( $( $arg:ident : $ty:ty ),* $(,)? ) -> $ret:ty) => {
+        fn $name(&self $(, $arg: $ty)*) -> $ret {
+            Box::pin(TychoWalletService::$name(self $(, $arg)*))
+        }
+    };
+    (fut_lt <$lt:lifetime> $name:ident ( $( $arg:ident : $ty:ty ),* $(,)? ) -> $ret:ty) => {
+        fn $name<$lt>(&$lt self $(, $arg: $ty)*) -> $ret {
+            Box::pin(TychoWalletService::$name(self $(, $arg)*))
+        }
+    };
+}
+
 impl ChainService for TychoWalletService {
-    fn generate_seed(&self) -> ChainResult<SeedPhrase> {
-        TychoWalletService::generate_seed(self)
-    }
-
-    fn clear_config_cache(&self) {
-        TychoWalletService::clear_config_cache(self);
-    }
-
-    fn seal_key_ops(&self) {
-        TychoWalletService::seal_key_ops(self);
-    }
-
-    fn unseal_key_ops(&self) {
-        TychoWalletService::unseal_key_ops(self);
-    }
-
-    fn derive_wallet_address(&self, inputs: &WalletInputs) -> ChainResult<String> {
-        TychoWalletService::derive_wallet_address(self, inputs)
-    }
-
-    fn drain_emulation_jobs(&self, timeout: Duration) -> bool {
-        TychoWalletService::drain_emulation_jobs(self, timeout)
-    }
-
-    fn load_wallet<'a>(
-        &'a self,
-        inputs: &'a EndpointAddressInputs,
-    ) -> ChainFuture<'a, WalletSnapshot> {
-        Box::pin(TychoWalletService::load_wallet(self, inputs))
-    }
-
-    fn prepare_transaction(
-        &self,
-        inputs: WalletInputs,
-        ticket: SendTicket,
-        active_reservations: Vec<Reservation>,
-        authorized_overlap: Vec<Reservation>,
-    ) -> ChainFuture<'_, PreparedChainSend> {
-        Box::pin(TychoWalletService::prepare_transaction(
-            self,
-            inputs,
-            ticket,
-            active_reservations,
-            authorized_overlap,
-        ))
-    }
-
-    fn broadcast_prepared_candidate<'a>(
-        &'a self,
-        prepared: &'a PreparedChainSend,
-        candidate_index: usize,
-    ) -> ChainFuture<'a, CandidateBroadcastOutcome> {
-        Box::pin(TychoWalletService::broadcast_prepared_candidate(
-            self,
-            prepared,
-            candidate_index,
-        ))
-    }
-
-    fn estimate_fee(
-        &self,
-        inputs: WalletInputs,
-        request: SendRequest,
-        bounce: bool,
-    ) -> ChainFuture<'_, FeeEstimate> {
-        Box::pin(TychoWalletService::estimate_fee(
-            self, inputs, request, bounce,
-        ))
-    }
-
-    fn load_pool_state<'a>(
-        &'a self,
-        endpoint: &'a str,
-        pool: &'a str,
-    ) -> ChainFuture<'a, PoolSnapshot> {
-        Box::pin(TychoWalletService::load_pool_state(self, endpoint, pool))
-    }
-
-    fn prepare_swap(
-        &self,
-        inputs: WalletInputs,
-        pool: String,
-        request: SwapRequest,
-    ) -> ChainFuture<'_, PreparedSwap> {
-        Box::pin(TychoWalletService::prepare_swap(
-            self, inputs, pool, request,
-        ))
-    }
-
-    fn broadcast_swap<'a>(
-        &'a self,
-        prepared: &'a PreparedSwap,
-        candidate_index: usize,
-    ) -> ChainFuture<'a, CandidateBroadcastOutcome> {
-        Box::pin(TychoWalletService::broadcast_swap(
-            self,
-            prepared,
-            candidate_index,
-        ))
-    }
-
-    fn storage_address_for(&self, inputs: &WalletInputs) -> ChainResult<String> {
-        TychoWalletService::storage_address_for(self, inputs)
-    }
-
-    fn load_storage(&self, inputs: WalletInputs) -> ChainFuture<'_, StorageSnapshot> {
-        Box::pin(TychoWalletService::load_storage(self, inputs))
-    }
-
-    fn prepare_storage_op(
-        &self,
-        inputs: WalletInputs,
-        op: StorageOp,
-    ) -> ChainFuture<'_, PreparedStorageOp> {
-        Box::pin(TychoWalletService::prepare_storage_op(self, inputs, op))
-    }
-
-    fn broadcast_storage_op<'a>(
-        &'a self,
-        prepared: &'a PreparedStorageOp,
-        candidate_index: usize,
-    ) -> ChainFuture<'a, CandidateBroadcastOutcome> {
-        Box::pin(TychoWalletService::broadcast_storage_op(
-            self,
-            prepared,
-            candidate_index,
-        ))
-    }
-
-    fn check_destination<'a>(
-        &'a self,
-        inputs: &'a EndpointAddressInputs,
-        address: String,
-    ) -> ChainFuture<'a, DestinationReport> {
-        Box::pin(TychoWalletService::check_destination(self, inputs, address))
-    }
-
-    fn open_conversation(
-        &self,
-        inputs: &WalletInputs,
-        peer: &str,
-        peer_key: Option<&[u8; 32]>,
-        sealed: &[SealedComment<'_>],
-    ) -> ChainResult<Vec<Option<String>>> {
-        TychoWalletService::open_conversation(self, inputs, peer, peer_key, sealed)
-    }
-
-    fn load_transactions<'a>(
-        &'a self,
-        inputs: &'a EndpointAddressInputs,
-        limit: u32,
-        before_lt: Option<u64>,
-    ) -> ChainFuture<'a, TransactionPage> {
-        Box::pin(TychoWalletService::load_transactions(
-            self, inputs, limit, before_lt,
-        ))
-    }
-
-    fn probe_endpoint(&self, endpoint: String) -> ChainFuture<'_, i32> {
-        Box::pin(TychoWalletService::probe_endpoint(self, endpoint))
-    }
-
-    fn validator_clock(&self, endpoint: String) -> ChainFuture<'_, ValidatorCycle> {
-        Box::pin(TychoWalletService::validator_clock(self, endpoint))
-    }
-
-    fn network_stats(&self, endpoint: String) -> ChainFuture<'_, NetworkStats> {
-        Box::pin(TychoWalletService::network_stats(self, endpoint))
-    }
-
-    fn inspect_account(
-        &self,
-        endpoint: String,
-        address: String,
-    ) -> ChainFuture<'_, AccountInspection> {
-        Box::pin(TychoWalletService::inspect_account(self, endpoint, address))
-    }
-
-    fn account_transactions(
-        &self,
-        endpoint: String,
-        address: String,
-        limit: u32,
-    ) -> ChainFuture<'_, AccountTxPage> {
-        Box::pin(TychoWalletService::account_transactions(
-            self, endpoint, address, limit,
-        ))
-    }
-
-    fn trace_transaction(
-        &self,
-        endpoint: String,
-        transaction_hash: String,
-    ) -> ChainFuture<'_, AccountTrace> {
-        Box::pin(TychoWalletService::trace_transaction(
-            self,
-            endpoint,
-            transaction_hash,
-        ))
-    }
+    forward_to_inherent!(sync generate_seed() -> ChainResult<SeedPhrase>);
+    forward_to_inherent!(unit clear_config_cache());
+    forward_to_inherent!(unit seal_key_ops());
+    forward_to_inherent!(unit unseal_key_ops());
+    forward_to_inherent!(sync derive_wallet_address(inputs: &WalletInputs) -> ChainResult<String>);
+    forward_to_inherent!(sync drain_emulation_jobs(timeout: Duration) -> bool);
+    forward_to_inherent!(fut_lt <'a> load_wallet(inputs: &'a EndpointAddressInputs) -> ChainFuture<'a, WalletSnapshot>);
+    forward_to_inherent!(fut prepare_transaction(inputs: WalletInputs, ticket: SendTicket, active_reservations: Vec<Reservation>, authorized_overlap: Vec<Reservation>) -> ChainFuture<'_, PreparedChainSend>);
+    forward_to_inherent!(fut_lt <'a> broadcast_prepared_candidate(prepared: &'a PreparedChainSend, candidate_index: usize) -> ChainFuture<'a, CandidateBroadcastOutcome>);
+    forward_to_inherent!(fut estimate_fee(inputs: WalletInputs, request: SendRequest, bounce: bool) -> ChainFuture<'_, FeeEstimate>);
+    forward_to_inherent!(fut_lt <'a> load_pool_state(endpoint: &'a str, pool: &'a str) -> ChainFuture<'a, PoolSnapshot>);
+    forward_to_inherent!(fut prepare_swap(inputs: WalletInputs, pool: String, request: SwapRequest) -> ChainFuture<'_, PreparedSwap>);
+    forward_to_inherent!(fut_lt <'a> broadcast_swap(prepared: &'a PreparedSwap, candidate_index: usize) -> ChainFuture<'a, CandidateBroadcastOutcome>);
+    forward_to_inherent!(sync storage_address_for(inputs: &WalletInputs) -> ChainResult<String>);
+    forward_to_inherent!(fut load_storage(inputs: WalletInputs) -> ChainFuture<'_, StorageSnapshot>);
+    forward_to_inherent!(fut prepare_storage_op(inputs: WalletInputs, op: StorageOp) -> ChainFuture<'_, PreparedStorageOp>);
+    forward_to_inherent!(fut_lt <'a> broadcast_storage_op(prepared: &'a PreparedStorageOp, candidate_index: usize) -> ChainFuture<'a, CandidateBroadcastOutcome>);
+    forward_to_inherent!(fut_lt <'a> check_destination(inputs: &'a EndpointAddressInputs, address: String) -> ChainFuture<'a, DestinationReport>);
+    forward_to_inherent!(sync open_conversation(inputs: &WalletInputs, peer: &str, peer_key: Option<&[u8; 32]>, sealed: &[SealedComment<'_>]) -> ChainResult<Vec<Option<String>>>);
+    forward_to_inherent!(fut_lt <'a> load_transactions(inputs: &'a EndpointAddressInputs, limit: u32, before_lt: Option<u64>) -> ChainFuture<'a, TransactionPage>);
+    forward_to_inherent!(fut probe_endpoint(endpoint: String) -> ChainFuture<'_, i32>);
+    forward_to_inherent!(fut validator_clock(endpoint: String) -> ChainFuture<'_, ValidatorCycle>);
+    forward_to_inherent!(fut network_stats(endpoint: String) -> ChainFuture<'_, NetworkStats>);
+    forward_to_inherent!(fut inspect_account(endpoint: String, address: String) -> ChainFuture<'_, AccountInspection>);
+    forward_to_inherent!(fut account_transactions(endpoint: String, address: String, limit: u32) -> ChainFuture<'_, AccountTxPage>);
+    forward_to_inherent!(fut trace_transaction(endpoint: String, transaction_hash: String) -> ChainFuture<'_, AccountTrace>);
 
     fn subscribe(
         &self,
@@ -2479,19 +2245,13 @@ fn fee_within_bounds(fee: u128) -> bool {
     (FEE_ESTIMATE_FLOOR_NANOS..=maximum).contains(&fee)
 }
 
-/// One sealed comment to be opened, as the history kept it.
 #[derive(Debug, Clone, Copy)]
 pub struct SealedComment<'a> {
-    /// Whether this wallet wrote it. That decides which key opens it and which
-    /// way round the pair was written when it was sealed.
     pub outgoing: bool,
-    /// The key named in the message. Ours on the way out, theirs on the way in.
     pub sender_key: &'a [u8; 32],
     pub blob: &'a [u8],
 }
 
-/// Our own side of a sealed comment: the keys to agree with, and the address
-/// the ciphertext is bound to. The other side travels with the request.
 struct CommentSeal<'a> {
     keys: &'a KeyPair,
     sender: &'a str,
@@ -2509,8 +2269,6 @@ fn build_transfer(
     if !request.comment().is_empty() {
         let payload = match (request.encrypt_to(), seal) {
             (Some(recipient), Some(seal)) => seal_comment(&seal, recipient, request)?,
-            // Asking to seal with no way to seal would send in the clear what
-            // was meant to be private, so it does not send at all.
             (Some(_), None) => {
                 return Err(ChainError::wallet(
                     "this transfer asks for a sealed comment but carries no key to seal with"
@@ -2825,12 +2583,6 @@ mod tests {
         }
     }
 
-    /// Both halves of a conversation, opened from this wallet's side.
-    ///
-    /// The two directions do not use the same key and do not bind the same
-    /// pair, so a mistake in either one shows up as exactly one half of every
-    /// conversation being unreadable — which looks like a network problem and
-    /// is not.
     #[test]
     fn a_conversation_opens_in_both_directions_from_one_seed() {
         let service = TychoWalletService::default();
@@ -2844,8 +2596,6 @@ mod tests {
             .unwrap()
             .to_string();
 
-        // What we send them: sealed by the transfer builder, exactly as a real
-        // one is, then read back off the body the way history reads it.
         let sent = "what I said";
         let request = SendRequest::native(&their_address, 1_000)
             .unwrap()
@@ -2864,7 +2614,6 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        // What they send us, sealed from their side.
         let replied = "what they said";
         let their_secret = theirs.comment_secret_for(&mine.public_key_bytes()).unwrap();
         let inbound = seal_record(
@@ -2913,9 +2662,6 @@ mod tests {
             .open_conversation(
                 &inputs,
                 &their_address,
-                // Our own sent messages cannot be read without their key, and
-                // a stranger's noise cannot be read at all. Neither may take
-                // the conversation down with it.
                 None,
                 &[
                     SealedComment {
@@ -3198,10 +2944,6 @@ mod tests {
 
     #[test]
     fn the_budget_the_form_enforces_is_the_budget_the_builder_accepts() {
-        // Two crates hold this figure — the domain, which cuts the field, and
-        // the message builder, which refuses what will not fit. This is the one
-        // place that sees both, and a disagreement here is a comment the user
-        // is allowed to type and the wallet then cannot send.
         assert_eq!(
             cc_wallet_domain::MAX_COMMENT_BYTES,
             cc_wallet_tycho::MAX_COMMENT_BYTES,
@@ -3270,7 +3012,6 @@ mod tests {
             "the recipient learns whose key to agree with from the message itself"
         );
 
-        // The recipient reaches the same key from their own side and reads it.
         let key = recipient
             .comment_secret_for(&sender.public_key_bytes())
             .unwrap();

@@ -3,7 +3,6 @@ use std::sync::LazyLock;
 
 use anyhow::{Context, Result, bail, ensure};
 use tycho_types::models::{StateInit, StdAddr};
-use tycho_types::num::Tokens;
 use tycho_types::prelude::*;
 
 use crate::contracts::{ContractSpec, DecodedContract, DecodedField};
@@ -45,8 +44,6 @@ pub const MAX_RECORDS: u16 = 512;
 pub const STORAGE_WORKCHAIN: i8 = 0;
 
 pub const TARGET_BALANCE: u128 = 1_000_000_000;
-
-pub const MIN_OP_ATTACH: u128 = 20_000_000;
 
 pub const MAX_RECORD_CELLS: usize = 16;
 
@@ -197,12 +194,6 @@ pub fn delete_body(query_id: u64, id: u32) -> Result<Cell> {
     let mut builder = body_header(OP_DELETE, query_id)?;
     builder.store_u32(id)?;
     builder.build().context("failed to build a delete body")
-}
-
-pub fn withdraw_body(query_id: u64, amount: u128) -> Result<Cell> {
-    let mut builder = body_header(OP_WITHDRAW, query_id)?;
-    Tokens::new(amount).store_into(&mut builder, Cell::empty_context())?;
-    builder.build().context("failed to build a withdraw body")
 }
 
 pub fn storage_spec() -> ContractSpec {
@@ -398,15 +389,6 @@ mod tests {
         assert_eq!(slice.load_u64().unwrap(), 7);
         assert_eq!(slice.load_u32().unwrap(), 42);
         assert_eq!(slice.size_bits(), 0);
-
-        let withdraw = withdraw_body(9, 1_500_000_000).unwrap();
-        let mut slice = withdraw.as_slice().unwrap();
-        assert_eq!(slice.load_u32().unwrap(), OP_WITHDRAW);
-        assert_eq!(slice.load_u64().unwrap(), 9);
-        assert_eq!(
-            Tokens::load_from(&mut slice).unwrap().into_inner(),
-            1_500_000_000
-        );
     }
 
     #[test]
@@ -417,11 +399,7 @@ mod tests {
 
     #[test]
     fn every_op_body_clears_the_contracts_minimum_header() {
-        for body in [
-            put_body(1, 1, b"x").unwrap(),
-            delete_body(1, 1).unwrap(),
-            withdraw_body(1, 1).unwrap(),
-        ] {
+        for body in [put_body(1, 1, b"x").unwrap(), delete_body(1, 1).unwrap()] {
             assert!(body.as_slice().unwrap().size_bits() >= 96);
         }
     }

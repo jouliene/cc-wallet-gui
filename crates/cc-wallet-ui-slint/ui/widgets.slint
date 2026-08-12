@@ -37,9 +37,6 @@ export component Checkbox inherits Rectangle {
     height: 18px;
     border-radius: 5px;
     border-width: fs.has-focus ? 2px : 1px;
-    // A box you cannot tick is still a box: it keeps the outline it has when
-    // live, because a slot nobody can see is a slot nobody knows about. What it
-    // cannot do is said by the label beside it, not by vanishing.
     border-color: fs.has-focus
         ? Palette.focus_ring
         : (root.enabled && root.checked ? root.active_color : Palette.border_strong);
@@ -385,10 +382,6 @@ export component PrimaryButton inherits Rectangle {
         mouse-cursor: root.enabled ? pointer : default;
         clicked => { root.clicked(); }
     }
-    // A press has to be visible even when the work behind it is instant. The
-    // signing dialog closes in the same frame it is confirmed in, and without
-    // this the click and a miss look alike — so the press lands at once and
-    // only the release eases back.
     states [
         pressed when ta.pressed && root.enabled: { hover_a: 0.2; }
         hovered when ta.has-hover && root.enabled: { hover_a: 0.07; }
@@ -603,10 +596,6 @@ export component Amount inherits HorizontalLayout {
         font-size: root.font_size;
         vertical-alignment: center;
     }
-    // The integer is never cut; the fraction gives way instead, and only at a
-    // group boundary. How many groups fit is a question about the room the row
-    // has, which this widget cannot ask without its answer changing the room —
-    // so whoever owns that width counts the groups and says.
     in property <int> frac_groups: -1;
     Text {
         text: root.frac_groups < 0 ? root.amount.amount_frac : AmountFormat.fit_fraction(root.amount.amount_frac, root.frac_groups);
@@ -640,9 +629,6 @@ export component Amount inherits HorizontalLayout {
     }
 }
 
-// Work the chain has taken but not yet finished, in the one shape the app uses
-// for it: a comet ring in the waiting colour. The software renderer cannot spin
-// an image, so the ring is eight dots whose brightness chases a global angle.
 export component PendingRing inherits Rectangle {
     in property <length> size_: Sizes.icon_sm;
     in property <color> tint: Palette.warning;
@@ -837,9 +823,6 @@ export component Field inherits Rectangle {
     in property <bool> show_focus_border: true;
     callback edited(string);
     callback accepted();
-    /// Whether a bare Return means "done" even in a multiline field. A chat
-    /// composer wants Return to send and Shift+Return to break the line; a note
-    /// field wants Return to break the line and nothing else.
     in property <bool> enter_accepts: false;
     callback paste_requested();
     callback escape_pressed();
@@ -849,9 +832,6 @@ export component Field inherits Rectangle {
     property <length> caret_margin: 6px;
     property <length> line_height: root.font_size * 1.6;
     property <length> inner_w: max(1px, root.width - root.pad_left - root.pad_right);
-    // A multiline field shows whole lines only. Half a line of text at the
-    // bottom edge is not more content, it is a sliced letter, and it is what
-    // makes a one-line note in a short field look broken.
     property <int> visible_lines: max(1, floor((root.height - Space.s_12) / root.line_height));
     property <length> inner_h: root.multiline
         ? root.visible_lines * root.line_height
@@ -898,10 +878,6 @@ export component Field inherits Rectangle {
         }
     }
 
-    // The area the text is actually allowed to occupy — inside the padding, and
-    // for a multiline field a whole number of lines. Without it the text is
-    // clipped by the box instead: a scrolled line runs under the left border,
-    // and a second line appears in a one-line field with its top sliced off.
     band := Rectangle {
         x: root.pad_left;
         y: root.pad_v;
@@ -962,8 +938,6 @@ export component Field inherits Rectangle {
         }
         accepted => { root.accepted(); }
         key-pressed(event) => {
-            // Ahead of the built-in behaviour, which is the only place a
-            // newline can be stopped before it is inserted.
             if (root.enter_accepts && event.text == Key.Return && !event.modifiers.shift) {
                 root.accepted();
                 return accept;
@@ -996,9 +970,6 @@ export component Field inherits Rectangle {
         }
     }
 
-    // The heavier integer part is drawn over the same glyphs, so it has to
-    // travel with them: inside the band, at the input's own offset. Left
-    // outside it, it stayed put while the text scrolled and printed twice.
     if root.money_int != "": Text {
         text: root.money_int;
         x: input.x;

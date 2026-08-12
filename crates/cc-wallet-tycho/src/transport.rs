@@ -17,59 +17,27 @@ use tycho_types::models::{BlockchainConfig, SignatureContext};
 
 #[derive(Debug, Clone)]
 pub struct Transport {
-    inner: TransportInner,
-}
-
-#[derive(Debug, Clone)]
-enum TransportInner {
-    Jrpc(JrpcTransport),
-}
-
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum TransportKind {
-    Jrpc,
-}
-
-impl fmt::Display for TransportKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Jrpc => f.write_str("jrpc"),
-        }
-    }
+    inner: JrpcTransport,
 }
 
 impl Transport {
     pub fn jrpc(endpoint: impl AsRef<str>) -> Result<Self> {
         Ok(Self {
-            inner: TransportInner::Jrpc(JrpcTransport::new(endpoint)?),
+            inner: JrpcTransport::new(endpoint)?,
         })
     }
 
     #[inline]
-    pub fn kind(&self) -> TransportKind {
-        match &self.inner {
-            TransportInner::Jrpc(_) => TransportKind::Jrpc,
-        }
-    }
-
-    #[inline]
     pub fn endpoint(&self) -> &str {
-        match &self.inner {
-            TransportInner::Jrpc(transport) => transport.endpoint(),
-        }
+        self.inner.endpoint()
     }
 
     pub async fn get_blockchain_config_observed(&self) -> Result<ObservedBlockchainConfigState> {
-        match &self.inner {
-            TransportInner::Jrpc(transport) => transport.get_blockchain_config_observed().await,
-        }
+        self.inner.get_blockchain_config_observed().await
     }
 
     pub async fn get_latest_key_block(&self) -> Result<Cell> {
-        match &self.inner {
-            TransportInner::Jrpc(transport) => transport.get_latest_key_block().await,
-        }
+        self.inner.get_latest_key_block().await
     }
 
     pub async fn get_account_state(&self, address: impl AsRef<str>) -> Result<AccountState> {
@@ -81,22 +49,16 @@ impl Transport {
         address: impl AsRef<str>,
         last_transaction_lt: Option<u64>,
     ) -> Result<AccountState> {
-        match &self.inner {
-            TransportInner::Jrpc(transport) => {
-                transport
-                    .get_account_state_since(address, last_transaction_lt)
-                    .await
-            }
-        }
+        self.inner
+            .get_account_state_since(address, last_transaction_lt)
+            .await
     }
 
     pub async fn get_account_state_observed(
         &self,
         address: impl AsRef<str>,
     ) -> Result<ObservedAccountState> {
-        match &self.inner {
-            TransportInner::Jrpc(transport) => transport.get_account_state_observed(address).await,
-        }
+        self.inner.get_account_state_observed(address).await
     }
 
     pub async fn get_account_state_observed_since(
@@ -104,19 +66,13 @@ impl Transport {
         address: impl AsRef<str>,
         last_transaction_lt: Option<u64>,
     ) -> Result<ObservedAccountState> {
-        match &self.inner {
-            TransportInner::Jrpc(transport) => {
-                transport
-                    .get_account_state_observed_since(address, last_transaction_lt)
-                    .await
-            }
-        }
+        self.inner
+            .get_account_state_observed_since(address, last_transaction_lt)
+            .await
     }
 
     pub async fn resolve_send_route(&self) -> Result<ResolvedSendRoute> {
-        match &self.inner {
-            TransportInner::Jrpc(transport) => transport.resolve_send_route().await,
-        }
+        self.inner.resolve_send_route().await
     }
 
     pub async fn send_message_cell_candidate_classified(
@@ -125,32 +81,24 @@ impl Transport {
         candidate_index: usize,
         message: impl AsRef<DynCell>,
     ) -> std::result::Result<BroadcastAcknowledgement, SendAttemptOutcome> {
-        match &self.inner {
-            TransportInner::Jrpc(transport) => {
-                transport
-                    .send_message_base64_candidate_classified(
-                        route,
-                        candidate_index,
-                        Boc::encode_base64(message),
-                    )
-                    .await
-            }
-        }
+        self.inner
+            .send_message_base64_candidate_classified(
+                route,
+                candidate_index,
+                Boc::encode_base64(message),
+            )
+            .await
     }
 
     pub async fn get_transaction(&self, hash: impl AsRef<str>) -> Result<Option<String>> {
-        match &self.inner {
-            TransportInner::Jrpc(transport) => transport.get_transaction(hash).await,
-        }
+        self.inner.get_transaction(hash).await
     }
 
     pub async fn get_dst_transaction(
         &self,
         message_hash: impl AsRef<str>,
     ) -> Result<Option<String>> {
-        match &self.inner {
-            TransportInner::Jrpc(transport) => transport.get_dst_transaction(message_hash).await,
-        }
+        self.inner.get_dst_transaction(message_hash).await
     }
 
     pub async fn get_transactions_list(
@@ -159,13 +107,9 @@ impl Transport {
         limit: u32,
         before_lt: Option<u64>,
     ) -> Result<Vec<String>> {
-        match &self.inner {
-            TransportInner::Jrpc(transport) => {
-                transport
-                    .get_transactions_list(account, limit, before_lt)
-                    .await
-            }
-        }
+        self.inner
+            .get_transactions_list(account, limit, before_lt)
+            .await
     }
 
     pub async fn get_transactions_list_observed(
@@ -174,27 +118,9 @@ impl Transport {
         limit: u32,
         before_lt: Option<u64>,
     ) -> Result<ObservedTransactionsList> {
-        match &self.inner {
-            TransportInner::Jrpc(transport) => {
-                transport
-                    .get_transactions_list_observed(account, limit, before_lt)
-                    .await
-            }
-        }
-    }
-}
-
-impl From<JrpcTransport> for Transport {
-    fn from(value: JrpcTransport) -> Self {
-        Self {
-            inner: TransportInner::Jrpc(value),
-        }
-    }
-}
-
-impl From<&Transport> for Transport {
-    fn from(value: &Transport) -> Self {
-        value.clone()
+        self.inner
+            .get_transactions_list_observed(account, limit, before_lt)
+            .await
     }
 }
 
@@ -1134,10 +1060,11 @@ where
         bail!("JRPC error for `{method}`: {error}");
     }
 
-    let result = value
-        .get("result")
-        .cloned()
-        .ok_or_else(|| anyhow!("missing `result` field in JRPC response for `{method}`"))?;
+    let result = match value {
+        Value::Object(mut map) => map.remove("result"),
+        _ => None,
+    }
+    .ok_or_else(|| anyhow!("missing `result` field in JRPC response for `{method}`"))?;
 
     serde_json::from_value(result)
         .with_context(|| format!("failed to deserialize result for `{method}`"))

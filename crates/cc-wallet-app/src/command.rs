@@ -210,99 +210,54 @@ pub enum AppCommand {
     ClearError,
 }
 
-impl AppCommand {
-    pub(crate) fn frozen_while_authorization_pending(&self) -> bool {
-        match self {
-            Self::RequestRiskOverride
-            | Self::QuickSend(_)
-            | Self::GenerateSeed
-            | Self::SaveSeed(_)
-            | Self::ImportSeed(_)
-            | Self::UseSeed
-            | Self::DiscardSeed
-            | Self::ChangePasswordRequest
-            | Self::RevealSeed
-            | Self::DeleteWallet
-            | Self::SetAssetVisibility { .. }
-            | Self::SelectAsset(_)
-            | Self::SetSendDestination(_)
-            | Self::SetSendAmount(_)
-            | Self::SetSendComment(_)
-            | Self::SetEncryptComment(_)
-            | Self::SendChatMessage
-            | Self::SetMaxAmount
-            | Self::SetAllowUnbounced(_)
-            | Self::SetSwapFromToken(_)
-            | Self::SetSwapToToken(_)
-            | Self::SetSwapAmount(_)
-            | Self::SetMaxSwapAmount
-            | Self::SetSwapSlippage(_)
-            | Self::StepSwapSlippage(_)
-            | Self::EditSwapSlippage(_)
-            | Self::FlipSwap
-            | Self::DismissSwapReceipt
-            | Self::CreateStorage
-            | Self::SetStorageTitle(_)
-            | Self::SetStorageData(_)
-            | Self::AddStorageRecord
-            | Self::ClearStorageForm
-            | Self::RevealStorageRecords
-            | Self::DeleteStorageRecord(_)
-            | Self::AddEndpoint(_)
-            | Self::SelectEndpoint(_)
-            | Self::RemoveEndpoint(_) => true,
-            Self::Init
-            | Self::SelectWallet(_)
-            | Self::NewWalletRequest
-            | Self::DeleteWalletFromPicker { .. }
-            | Self::BackToPicker
-            | Self::CreateWallet { .. }
-            | Self::Unlock(_)
-            | Self::LockNow
-            | Self::SwitchWallet
-            | Self::SwitchToWallet(_)
-            | Self::SelectTab(_)
-            | Self::OnboardImportSeed(_)
-            | Self::SetSeedBackupConfirmed(_)
-            | Self::HideSeed
-            | Self::CopySeed(_)
-            | Self::CopyText(_)
-            | Self::RefreshWallet
-            | Self::SaveContact { .. }
-            | Self::DeleteContact(_)
-            | Self::ReorderContacts { .. }
-            | Self::RequestSend
-            | Self::RequestSwap
-            | Self::SetRiskOverlap { .. }
-            | Self::ConfirmRiskOverride { .. }
-            | Self::CancelRiskOverride
-            | Self::AuthSubmit { .. }
-            | Self::AuthCancel
-            | Self::SetAutosign(_)
-            | Self::SetScreenLock(_)
-            | Self::TestEndpoint(_)
-            | Self::InspectAccount(_)
-            | Self::OpenInExplorer { .. }
-            | Self::TraceTransaction(_)
-            | Self::CloseTrace
-            | Self::OpenChat(_)
-            | Self::CloseChat
-            | Self::SetChatDraft(_)
-            | Self::RefreshStorage
-            | Self::HideStorageRecords
-            | Self::CopyStorageRecord(_)
-            | Self::ClearError => false,
-        }
-    }
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CommandGate {
+    Identity,
+    Frozen,
+    Open,
+}
 
-    pub(crate) fn changes_wallet_identity_or_endpoint(&self) -> bool {
+impl AppCommand {
+    fn gate(&self) -> CommandGate {
         match self {
             Self::GenerateSeed
             | Self::SaveSeed(_)
             | Self::ImportSeed(_)
             | Self::UseSeed
             | Self::SelectEndpoint(_)
-            | Self::RemoveEndpoint(_) => true,
+            | Self::RemoveEndpoint(_) => CommandGate::Identity,
+            Self::RequestRiskOverride
+            | Self::QuickSend(_)
+            | Self::DiscardSeed
+            | Self::ChangePasswordRequest
+            | Self::RevealSeed
+            | Self::DeleteWallet
+            | Self::SetAssetVisibility { .. }
+            | Self::SelectAsset(_)
+            | Self::SetSendDestination(_)
+            | Self::SetSendAmount(_)
+            | Self::SetSendComment(_)
+            | Self::SetEncryptComment(_)
+            | Self::SendChatMessage
+            | Self::SetMaxAmount
+            | Self::SetAllowUnbounced(_)
+            | Self::SetSwapFromToken(_)
+            | Self::SetSwapToToken(_)
+            | Self::SetSwapAmount(_)
+            | Self::SetMaxSwapAmount
+            | Self::SetSwapSlippage(_)
+            | Self::StepSwapSlippage(_)
+            | Self::EditSwapSlippage(_)
+            | Self::FlipSwap
+            | Self::DismissSwapReceipt
+            | Self::CreateStorage
+            | Self::SetStorageTitle(_)
+            | Self::SetStorageData(_)
+            | Self::AddStorageRecord
+            | Self::ClearStorageForm
+            | Self::RevealStorageRecords
+            | Self::DeleteStorageRecord(_)
+            | Self::AddEndpoint(_) => CommandGate::Frozen,
             Self::Init
             | Self::SelectWallet(_)
             | Self::NewWalletRequest
@@ -313,12 +268,9 @@ impl AppCommand {
             | Self::LockNow
             | Self::SwitchWallet
             | Self::SwitchToWallet(_)
-            | Self::DeleteWallet
             | Self::SelectTab(_)
             | Self::OnboardImportSeed(_)
             | Self::SetSeedBackupConfirmed(_)
-            | Self::DiscardSeed
-            | Self::RevealSeed
             | Self::HideSeed
             | Self::CopySeed(_)
             | Self::CopyText(_)
@@ -326,36 +278,15 @@ impl AppCommand {
             | Self::SaveContact { .. }
             | Self::DeleteContact(_)
             | Self::ReorderContacts { .. }
-            | Self::QuickSend(_)
-            | Self::SetAssetVisibility { .. }
-            | Self::SelectAsset(_)
-            | Self::SetSendDestination(_)
-            | Self::SetSendAmount(_)
-            | Self::SetSendComment(_)
-            | Self::SetEncryptComment(_)
-            | Self::SetMaxAmount
-            | Self::SetAllowUnbounced(_)
             | Self::RequestSend
-            | Self::SetSwapFromToken(_)
-            | Self::SetSwapToToken(_)
-            | Self::SetSwapAmount(_)
-            | Self::SetMaxSwapAmount
-            | Self::SetSwapSlippage(_)
-            | Self::StepSwapSlippage(_)
-            | Self::EditSwapSlippage(_)
-            | Self::FlipSwap
-            | Self::DismissSwapReceipt
             | Self::RequestSwap
-            | Self::RequestRiskOverride
             | Self::SetRiskOverlap { .. }
             | Self::ConfirmRiskOverride { .. }
             | Self::CancelRiskOverride
-            | Self::ChangePasswordRequest
             | Self::AuthSubmit { .. }
             | Self::AuthCancel
             | Self::SetAutosign(_)
             | Self::SetScreenLock(_)
-            | Self::AddEndpoint(_)
             | Self::TestEndpoint(_)
             | Self::InspectAccount(_)
             | Self::OpenInExplorer { .. }
@@ -364,18 +295,20 @@ impl AppCommand {
             | Self::OpenChat(_)
             | Self::CloseChat
             | Self::SetChatDraft(_)
-            | Self::SendChatMessage
             | Self::RefreshStorage
-            | Self::CreateStorage
-            | Self::SetStorageTitle(_)
-            | Self::SetStorageData(_)
-            | Self::AddStorageRecord
-            | Self::ClearStorageForm
-            | Self::RevealStorageRecords
             | Self::HideStorageRecords
-            | Self::DeleteStorageRecord(_)
             | Self::CopyStorageRecord(_)
-            | Self::ClearError => false,
+            | Self::ClearError => CommandGate::Open,
         }
     }
+
+    pub(crate) fn frozen_while_authorization_pending(&self) -> bool {
+        !matches!(self.gate(), CommandGate::Open)
+    }
+
+    pub(crate) fn changes_wallet_identity_or_endpoint(&self) -> bool {
+        matches!(self.gate(), CommandGate::Identity)
+    }
 }
+
+impl AppCommand {}

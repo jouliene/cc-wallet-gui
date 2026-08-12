@@ -1,7 +1,7 @@
 mod atomic;
 mod error;
-pub mod paths;
-pub mod vault_store;
+mod paths;
+mod vault_store;
 
 pub use error::{StorageError, StorageResult};
 pub use paths::{
@@ -9,8 +9,6 @@ pub use paths::{
     resolve_startup_cwd,
 };
 pub use vault_store::{
-    DEFAULT_WALLET_NAME, DestroyArtifactKind, DestroyArtifactOutcome, DestroyError, DestroyReport,
-    OverwriteOutcome, PreparedVaultWrite, SelectedCandidate, UnlockedVault, VaultStore,
-    VaultStoreError, VaultStoreResult, VaultWriter, WALLET_EXT, WalletListing, WriteReceipt,
-    list_wallet_entries, list_wallets,
+    DEFAULT_WALLET_NAME, SelectedCandidate, VaultStore, VaultStoreResult, VaultWriter, WALLET_EXT,
+    WalletListing, WriteReceipt, list_wallet_entries, list_wallets,
 };

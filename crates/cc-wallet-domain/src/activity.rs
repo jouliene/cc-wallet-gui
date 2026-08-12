@@ -1,6 +1,4 @@
-use serde::de::{self, DeserializeOwned};
-use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::value::RawValue;
+use serde::{Deserialize, Serialize};
 
 use crate::amount::AssetAmount;
 use crate::asset::AssetId;
@@ -27,13 +25,6 @@ pub struct AssetMovement {
     pub amount: AssetAmount,
 }
 
-/// What a transfer carried besides money.
-///
-/// A plain comment is legible to anyone with a block explorer; a sealed one is
-/// legible only to the two ends, and is kept here exactly as it travelled. The
-/// ciphertext is what gets written to disk — opening it needs the wallet's key,
-/// and that is asked for at the moment of reading, not held open in the
-/// history file.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ActivityMessage {
@@ -41,9 +32,6 @@ pub enum ActivityMessage {
         text: String,
     },
     Sealed {
-        /// The key the sender published in the message itself. For a message we
-        /// received it is the other end's; for one we sent it is our own, and
-        /// reading our own words back needs the recipient's key instead.
         sender_key: PublicKey32,
         #[serde(with = "hex_bytes")]
         blob: Vec<u8>,
@@ -61,11 +49,7 @@ mod hex_bytes {
     use serde::{Deserialize, Deserializer, Serializer};
 
     pub fn serialize<S: Serializer>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
-        let mut hex = String::with_capacity(bytes.len() * 2);
-        for byte in bytes {
-            hex.push_str(&format!("{byte:02x}"));
-        }
-        serializer.serialize_str(&hex)
+        serializer.serialize_str(&crate::ids::hex_lower_encode(bytes))
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<u8>, D::Error> {
@@ -73,26 +57,18 @@ mod hex_bytes {
         if !text.len().is_multiple_of(2) {
             return Err(D::Error::custom("a hex blob has an even number of digits"));
         }
-        (0..text.len() / 2)
-            .map(|i| {
-                let pair = &text[2 * i..2 * i + 2];
-                if pair
-                    .bytes()
-                    .any(|b| !b.is_ascii_digit() && !(b'a'..=b'f').contains(&b))
-                {
-                    return Err(D::Error::custom("a hex blob is lowercase ASCII hex"));
-                }
-                u8::from_str_radix(pair, 16).map_err(D::Error::custom)
-            })
-            .collect()
+        crate::ids::hex_lower_decode(&text)
+            .ok_or_else(|| D::Error::custom("a hex blob is lowercase ASCII hex"))
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ActivityEvent {
     pub direction: ActivityDirection,
     pub lt: u64,
     pub time_unix: u64,
+    #[serde(deserialize_with = "crate::strict::required_nullable")]
     pub tx_hash: Option<Digest32>,
     pub counterparty: String,
     pub movements: Vec<AssetMovement>,
@@ -101,72 +77,15 @@ pub struct ActivityEvent {
     pub success: bool,
     pub bounced: bool,
     pub exit_code: i32,
+    #[serde(deserialize_with = "crate::strict::required_nullable")]
     pub ext_msg_hash: Option<Digest32>,
+    #[serde(deserialize_with = "crate::strict::required_nullable")]
     pub int_msg_hash: Option<Digest32>,
+    #[serde(deserialize_with = "crate::strict::required_nullable")]
     pub finality_ms: Option<u64>,
     pub pending: bool,
+    #[serde(deserialize_with = "crate::strict::required_nullable")]
     pub message: Option<ActivityMessage>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ActivityEventWire {
-    direction: ActivityDirection,
-    lt: u64,
-    time_unix: u64,
-    tx_hash: RequiredNullable<Digest32>,
-    counterparty: String,
-    movements: Vec<AssetMovement>,
-    #[serde(with = "crate::amount::native_scalar")]
-    fee_native: u128,
-    success: bool,
-    bounced: bool,
-    exit_code: i32,
-    ext_msg_hash: RequiredNullable<Digest32>,
-    int_msg_hash: RequiredNullable<Digest32>,
-    finality_ms: RequiredNullable<u64>,
-    pending: bool,
-    message: RequiredNullable<ActivityMessage>,
-}
-
-#[derive(Debug)]
-struct RequiredNullable<T>(Option<T>);
-
-impl<'de, T: DeserializeOwned> Deserialize<'de> for RequiredNullable<T> {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = Box::<RawValue>::deserialize(deserializer)?;
-        if raw.get() == "null" {
-            Ok(Self(None))
-        } else {
-            serde_json::from_str(raw.get())
-                .map(Some)
-                .map(Self)
-                .map_err(de::Error::custom)
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for ActivityEvent {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let wire = ActivityEventWire::deserialize(deserializer)?;
-        Ok(Self {
-            direction: wire.direction,
-            lt: wire.lt,
-            time_unix: wire.time_unix,
-            tx_hash: wire.tx_hash.0,
-            counterparty: wire.counterparty,
-            movements: wire.movements,
-            fee_native: wire.fee_native,
-            success: wire.success,
-            bounced: wire.bounced,
-            exit_code: wire.exit_code,
-            ext_msg_hash: wire.ext_msg_hash.0,
-            int_msg_hash: wire.int_msg_hash.0,
-            finality_ms: wire.finality_ms.0,
-            pending: wire.pending,
-            message: wire.message.0,
-        })
-    }
 }
 
 impl ActivityEvent {

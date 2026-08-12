@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use serde::de::{self, DeserializeOwned};
+use serde::de::{self};
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::value::RawValue;
@@ -117,30 +117,13 @@ fn parse_canonical_address(value: &str) -> Result<CanonicalAddress, JournalError
             "address workchain is not canonical 0 or -1",
         ));
     }
-    if account.len() != 64
-        || !account
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
-    {
-        return Err(JournalError::InvalidTicket(
+    let bytes: [u8; 32] = crate::ids::hex_lower_decode(account)
+        .filter(|decoded| decoded.len() == 32)
+        .and_then(|decoded| decoded.try_into().ok())
+        .ok_or(JournalError::InvalidTicket(
             "address hash is not 64 lowercase hex digits",
-        ));
-    }
-    let mut bytes = [0u8; 32];
-    for (index, byte) in bytes.iter_mut().enumerate() {
-        let hi = hex_value(account.as_bytes()[index * 2]);
-        let lo = hex_value(account.as_bytes()[index * 2 + 1]);
-        *byte = (hi << 4) | lo;
-    }
+        ))?;
     Ok(CanonicalAddress::new(workchain, bytes))
-}
-
-fn hex_value(byte: u8) -> u8 {
-    match byte {
-        b'0'..=b'9' => byte - b'0',
-        b'a'..=b'f' => byte - b'a' + 10,
-        _ => unreachable!("canonical address validation precedes hex conversion"),
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -208,42 +191,6 @@ impl SendTicket {
         })
     }
 
-    pub fn record_id(&self) -> &RecordId {
-        &self.record_id
-    }
-
-    pub fn sender_wallet_id(&self) -> &str {
-        &self.sender_wallet_id
-    }
-
-    pub fn sender_address(&self) -> &str {
-        &self.sender_address
-    }
-
-    pub fn network_global_id(&self) -> i32 {
-        self.network_global_id
-    }
-
-    pub fn endpoint_identity(&self) -> &str {
-        &self.endpoint_identity
-    }
-
-    pub fn request(&self) -> &SendRequest {
-        &self.request
-    }
-
-    pub fn bounce(&self) -> bool {
-        self.bounce
-    }
-
-    pub fn auth_generation(&self) -> u64 {
-        self.auth_generation
-    }
-
-    pub fn auth_nonce(&self) -> u64 {
-        self.auth_nonce
-    }
-
     pub fn digest(&self) -> Result<Digest32, DigestError> {
         let sender_address = parse_canonical_address(&self.sender_address)
             .expect("SendTicket construction keeps its sender address canonical");
@@ -264,23 +211,39 @@ impl SendTicket {
     }
 }
 
-impl<'de> Deserialize<'de> for SendTicket {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let wire = SendTicketWire::deserialize(deserializer)?;
-        Self::new(
-            wire.record_id,
-            wire.sender_wallet_id,
-            wire.sender_address,
-            wire.network_global_id,
-            wire.endpoint_identity,
-            wire.request,
-            wire.bounce,
-            wire.auth_generation,
-            wire.auth_nonce,
+impl SendTicket {
+    pub fn scope(&self) -> (&str, &str, i32) {
+        (
+            &self.sender_wallet_id,
+            &self.sender_address,
+            self.network_global_id,
         )
-        .map_err(de::Error::custom)
     }
 }
+
+accessors!(SendTicket {
+    record_id: ref RecordId,
+    sender_wallet_id: ref str,
+    sender_address: ref str,
+    network_global_id: copy i32,
+    endpoint_identity: ref str,
+    request: ref SendRequest,
+    bounce: copy bool,
+    auth_generation: copy u64,
+    auth_nonce: copy u64
+});
+
+wire_deserialize!(SendTicket via SendTicketWire {
+    record_id,
+    sender_wallet_id,
+    sender_address,
+    network_global_id,
+    endpoint_identity,
+    request,
+    bounce,
+    auth_generation,
+    auth_nonce
+});
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct NetworkTimeProvenance {
@@ -318,32 +281,20 @@ impl NetworkTimeProvenance {
             observed_at_mono_ms,
         })
     }
-
-    pub fn value(&self) -> u32 {
-        self.value
-    }
-
-    pub fn source_endpoint(&self) -> &str {
-        &self.source_endpoint
-    }
-
-    pub fn request_id(&self) -> &str {
-        &self.request_id
-    }
 }
 
-impl<'de> Deserialize<'de> for NetworkTimeProvenance {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let wire = NetworkTimeProvenanceWire::deserialize(deserializer)?;
-        Self::new(
-            wire.value,
-            wire.source_endpoint,
-            wire.request_id,
-            wire.observed_at_mono_ms,
-        )
-        .map_err(de::Error::custom)
-    }
-}
+accessors!(NetworkTimeProvenance {
+    value: copy u32,
+    source_endpoint: ref str,
+    request_id: ref str
+});
+
+wire_deserialize!(NetworkTimeProvenance via NetworkTimeProvenanceWire {
+    value,
+    source_endpoint,
+    request_id,
+    observed_at_mono_ms
+});
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PrepareProvenance {
@@ -379,7 +330,8 @@ struct PrepareProvenanceWire {
     signature_context_hash: Digest32,
     signature_global_id: i32,
     signature_with_id: bool,
-    network_time: RequiredNullable<NetworkTimeProvenance>,
+    #[serde(deserialize_with = "crate::strict::required_nullable")]
+    network_time: Option<NetworkTimeProvenance>,
     fee_input_hash: Digest32,
     #[serde(with = "crate::amount::native_scalar")]
     estimated_fee_native: u128,
@@ -466,72 +418,34 @@ impl PrepareProvenance {
             authorized_overlap,
         })
     }
-
-    pub fn source_endpoint(&self) -> &str {
-        &self.source_endpoint
-    }
-
-    pub fn route_id(&self) -> &str {
-        &self.route_id
-    }
-
-    pub fn request_ids(&self) -> &[String] {
-        &self.request_ids
-    }
-
-    pub fn balances(&self) -> &[AssetAmount] {
-        &self.balances
-    }
-
-    pub fn network_time(&self) -> Option<&NetworkTimeProvenance> {
-        self.network_time.as_ref()
-    }
-
-    pub fn authorized_overlap(&self) -> &[Reservation] {
-        &self.authorized_overlap
-    }
 }
 
-impl<'de> Deserialize<'de> for PrepareProvenance {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let wire = PrepareProvenanceWire::deserialize(deserializer)?;
-        Self::new(
-            wire.source_endpoint,
-            wire.route_id,
-            wire.request_ids,
-            wire.observed_at_mono_ms,
-            wire.account_state_hash,
-            wire.state_init_required,
-            wire.balances,
-            wire.signature_context_hash,
-            wire.signature_global_id,
-            wire.signature_with_id,
-            wire.network_time.0,
-            wire.fee_input_hash,
-            wire.estimated_fee_native,
-            wire.local_fee_ceiling_native,
-            wire.authorized_overlap,
-        )
-        .map_err(de::Error::custom)
-    }
-}
+accessors!(PrepareProvenance {
+    source_endpoint: ref str,
+    route_id: ref str,
+    request_ids: ref [String],
+    balances: ref [AssetAmount],
+    network_time: opt NetworkTimeProvenance,
+    authorized_overlap: ref [Reservation]
+});
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct RequiredNullable<T>(Option<T>);
-
-impl<'de, T: DeserializeOwned> Deserialize<'de> for RequiredNullable<T> {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = Box::<RawValue>::deserialize(deserializer)?;
-        if raw.get() == "null" {
-            Ok(Self(None))
-        } else {
-            serde_json::from_str(raw.get())
-                .map(Some)
-                .map(Self)
-                .map_err(de::Error::custom)
-        }
-    }
-}
+wire_deserialize!(PrepareProvenance via PrepareProvenanceWire {
+    source_endpoint,
+    route_id,
+    request_ids,
+    observed_at_mono_ms,
+    account_state_hash,
+    state_init_required,
+    balances,
+    signature_context_hash,
+    signature_global_id,
+    signature_with_id,
+    network_time,
+    fee_input_hash,
+    estimated_fee_native,
+    local_fee_ceiling_native,
+    authorized_overlap
+});
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -603,61 +517,31 @@ impl EndpointTransactionEvidence {
         validate_endpoint_tx(&evidence)?;
         Ok(evidence)
     }
-
-    pub fn source_endpoint(&self) -> &str {
-        &self.source_endpoint
-    }
-
-    pub fn request_id(&self) -> &str {
-        &self.request_id
-    }
-
-    pub fn sender_address(&self) -> &str {
-        &self.sender_address
-    }
-
-    pub fn tx_hash(&self) -> &Digest32 {
-        &self.tx_hash
-    }
-
-    pub fn ext_msg_hash(&self) -> &Digest32 {
-        &self.ext_msg_hash
-    }
-
-    pub fn lt(&self) -> u64 {
-        self.lt
-    }
-
-    pub fn success(&self) -> bool {
-        self.success
-    }
-
-    pub fn exit_code(&self) -> i32 {
-        self.exit_code
-    }
-
-    pub fn effects(&self) -> &[AssetMovement] {
-        &self.effects
-    }
 }
 
-impl<'de> Deserialize<'de> for EndpointTransactionEvidence {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let wire = EndpointTransactionEvidenceWire::deserialize(deserializer)?;
-        Self::new(
-            wire.source_endpoint,
-            wire.request_id,
-            wire.sender_address,
-            wire.tx_hash,
-            wire.ext_msg_hash,
-            wire.lt,
-            wire.success,
-            wire.exit_code,
-            wire.effects,
-        )
-        .map_err(de::Error::custom)
-    }
-}
+accessors!(EndpointTransactionEvidence {
+    source_endpoint: ref str,
+    request_id: ref str,
+    sender_address: ref str,
+    tx_hash: ref Digest32,
+    ext_msg_hash: ref Digest32,
+    lt: copy u64,
+    success: copy bool,
+    exit_code: copy i32,
+    effects: ref [AssetMovement]
+});
+
+wire_deserialize!(EndpointTransactionEvidence via EndpointTransactionEvidenceWire {
+    source_endpoint,
+    request_id,
+    sender_address,
+    tx_hash,
+    ext_msg_hash,
+    lt,
+    success,
+    exit_code,
+    effects
+});
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
@@ -788,15 +672,12 @@ impl DeliveryEvent {
             evidence,
         })
     }
-
-    pub fn journal_seq(&self) -> u64 {
-        self.journal_seq
-    }
-
-    pub fn evidence(&self) -> &DeliveryEvidence {
-        &self.evidence
-    }
 }
+
+accessors!(DeliveryEvent {
+    journal_seq: copy u64,
+    evidence: ref DeliveryEvidence
+});
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -816,10 +697,6 @@ impl RiskEvent {
         })
     }
 
-    pub fn journal_seq(&self) -> u64 {
-        self.journal_seq
-    }
-
     pub fn grant(&self) -> Option<&RiskGrant> {
         match &self.action {
             RiskAction::Granted(grant) => Some(grant),
@@ -835,6 +712,10 @@ impl RiskEvent {
     }
 }
 
+accessors!(RiskEvent {
+    journal_seq: copy u64
+});
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreparedRecord {
     ticket: SendTicket,
@@ -842,6 +723,25 @@ pub struct PreparedRecord {
     ext_msg_hash: Digest32,
     expire_at: u32,
     reservations: Vec<Reservation>,
+}
+
+fn check_prepared_shape(
+    ticket: &SendTicket,
+    prepare_provenance: &PrepareProvenance,
+    reservations: &[Reservation],
+) -> Result<(), JournalError> {
+    if prepare_provenance.source_endpoint != ticket.endpoint_identity
+        || prepare_provenance.signature_global_id != ticket.network_global_id
+    {
+        return Err(JournalError::InvalidProvenance(
+            "prepare source/global id does not match the immutable ticket",
+        ));
+    }
+    validate_reservations(
+        ticket,
+        prepare_provenance.local_fee_ceiling_native,
+        reservations,
+    )
 }
 
 impl PreparedRecord {
@@ -852,18 +752,7 @@ impl PreparedRecord {
         expire_at: u32,
         reservations: Vec<Reservation>,
     ) -> Result<Self, JournalError> {
-        if prepare_provenance.source_endpoint != ticket.endpoint_identity
-            || prepare_provenance.signature_global_id != ticket.network_global_id
-        {
-            return Err(JournalError::InvalidProvenance(
-                "prepare source/global id does not match the immutable ticket",
-            ));
-        }
-        validate_reservations(
-            &ticket,
-            prepare_provenance.local_fee_ceiling_native,
-            &reservations,
-        )?;
+        check_prepared_shape(&ticket, &prepare_provenance, &reservations)?;
         Ok(Self {
             ticket,
             prepare_provenance,
@@ -872,27 +761,15 @@ impl PreparedRecord {
             reservations,
         })
     }
-
-    pub fn ticket(&self) -> &SendTicket {
-        &self.ticket
-    }
-
-    pub fn prepare_provenance(&self) -> &PrepareProvenance {
-        &self.prepare_provenance
-    }
-
-    pub fn ext_msg_hash(&self) -> &Digest32 {
-        &self.ext_msg_hash
-    }
-
-    pub fn expire_at(&self) -> u32 {
-        self.expire_at
-    }
-
-    pub fn reservations(&self) -> &[Reservation] {
-        &self.reservations
-    }
 }
+
+accessors!(PreparedRecord {
+    ticket: ref SendTicket,
+    prepare_provenance: ref PrepareProvenance,
+    ext_msg_hash: ref Digest32,
+    expire_at: copy u32,
+    reservations: ref [Reservation]
+});
 
 fn validate_reservations(
     ticket: &SendTicket,
@@ -956,30 +833,6 @@ pub struct SendRecord {
 }
 
 impl SendRecord {
-    pub fn ticket(&self) -> &SendTicket {
-        &self.ticket
-    }
-
-    pub fn prepare_provenance(&self) -> &PrepareProvenance {
-        &self.prepare_provenance
-    }
-
-    pub fn ext_msg_hash(&self) -> &Digest32 {
-        &self.ext_msg_hash
-    }
-
-    pub fn expire_at(&self) -> u32 {
-        self.expire_at
-    }
-
-    pub fn reservations(&self) -> &[Reservation] {
-        &self.reservations
-    }
-
-    pub fn delivery_events(&self) -> &[DeliveryEvent] {
-        &self.delivery_events
-    }
-
     pub fn latest_evidence(&self) -> &DeliveryEvidence {
         &self
             .delivery_events
@@ -997,9 +850,7 @@ impl SendRecord {
     }
 
     pub fn has_duplicate_fingerprint(&self, ticket: &SendTicket) -> bool {
-        self.ticket.sender_wallet_id == ticket.sender_wallet_id
-            && self.ticket.sender_address == ticket.sender_address
-            && self.ticket.network_global_id == ticket.network_global_id
+        self.ticket.scope() == ticket.scope()
             && self.ticket.request.destination() == ticket.request.destination()
             && self.ticket.request.asset_id() == ticket.request.asset_id()
     }
@@ -1017,14 +868,7 @@ impl SendRecord {
                 "each record requires exactly one first Prepared event",
             ));
         }
-        let prepared = PreparedRecord::new(
-            self.ticket.clone(),
-            self.prepare_provenance.clone(),
-            self.ext_msg_hash.clone(),
-            self.expire_at,
-            self.reservations.clone(),
-        )?;
-        let _ = prepared;
+        check_prepared_shape(&self.ticket, &self.prepare_provenance, &self.reservations)?;
         let mut prior = 0u64;
         let mut terminal = false;
         let mut previous_evidence: Option<&DeliveryEvidence> = None;
@@ -1078,6 +922,15 @@ impl SendRecord {
         Ok(())
     }
 }
+
+accessors!(SendRecord {
+    ticket: ref SendTicket,
+    prepare_provenance: ref PrepareProvenance,
+    ext_msg_hash: ref Digest32,
+    expire_at: copy u32,
+    reservations: ref [Reservation],
+    delivery_events: ref [DeliveryEvent]
+});
 
 fn valid_delivery_transition(previous: &DeliveryEvidence, next: &DeliveryEvidence) -> bool {
     match (previous, next) {
@@ -1204,20 +1057,10 @@ pub(crate) fn validate_replay(
     risk_events: &[RiskEvent],
 ) -> Result<(), JournalError> {
     let mut record_ids = BTreeSet::new();
-    let identity = records.first().map(|record| {
-        (
-            record.ticket.sender_wallet_id.as_str(),
-            record.ticket.sender_address.as_str(),
-            record.ticket.network_global_id,
-        )
-    });
+    let identity = records.first().map(|record| record.ticket.scope());
     for record in records {
         record.validate_static()?;
-        if identity.is_some_and(|(wallet_id, sender, network)| {
-            record.ticket.sender_wallet_id != wallet_id
-                || record.ticket.sender_address != sender
-                || record.ticket.network_global_id != network
-        }) {
+        if identity.is_some_and(|scope| record.ticket.scope() != scope) {
             return Err(JournalError::InvalidDelivery(
                 "one encrypted Journal cannot mix wallet, sender, or network identities",
             ));
@@ -1252,6 +1095,7 @@ pub(crate) fn validate_replay(
     }
 
     let mut active: BTreeMap<RecordId, (&SendRecord, EvidenceTag)> = BTreeMap::new();
+    let mut blocking: BTreeMap<RecordId, (&SendRecord, EvidenceTag)> = BTreeMap::new();
     let mut grants: BTreeMap<crate::RiskNonce, &RiskGrant> = BTreeMap::new();
     let mut consumed = BTreeSet::new();
     let mut pending_consumption: Option<(&RiskGrant, &RiskGrantConsumption)> = None;
@@ -1277,7 +1121,7 @@ pub(crate) fn validate_replay(
                     if grant.warning_version() != crate::RISK_WARNING_VERSION {
                         return Err(JournalError::UnsupportedWarningVersion);
                     }
-                    validate_grant_old_state(grant, &active)?;
+                    validate_grant_old_state(grant, &blocking)?;
                     if grants
                         .insert(grant.one_use_nonce().clone(), grant)
                         .is_some()
@@ -1311,20 +1155,20 @@ pub(crate) fn validate_replay(
                             {
                                 return Err(JournalError::ConsumptionMismatch);
                             }
-                            validate_grant_state(grant, record, &active)?;
+                            validate_grant_state(grant, record, &blocking)?;
                         }
                         None => {
                             if !record.prepare_provenance.authorized_overlap.is_empty() {
                                 return Err(JournalError::OrphanConsumption);
                             }
-                            if active.values().any(|(prior_record, evidence)| {
+                            if blocking.values().any(|(prior_record, evidence)| {
                                 same_signing_scope(prior_record, record) && evidence.is_blocking()
                             }) {
                                 return Err(JournalError::OrdinarySigningBlocked);
                             }
                         }
                     }
-                    let active_reservations: Vec<_> = active
+                    let active_reservations: Vec<_> = blocking
                         .values()
                         .filter(|(prior_record, evidence)| {
                             same_signing_scope(prior_record, record) && evidence.is_blocking()
@@ -1356,11 +1200,21 @@ pub(crate) fn validate_replay(
                         record.ticket.record_id.clone(),
                         (record, EvidenceTag::Prepared),
                     );
+                    blocking.insert(
+                        record.ticket.record_id.clone(),
+                        (record, EvidenceTag::Prepared),
+                    );
                 } else {
                     let state = active
                         .get_mut(record.ticket.record_id())
                         .ok_or(JournalError::InvalidDelivery("event precedes Prepared"))?;
-                    state.1 = event.evidence.tag();
+                    let tag = event.evidence.tag();
+                    state.1 = tag;
+                    if tag.is_blocking() {
+                        blocking.insert(record.ticket.record_id.clone(), (record, tag));
+                    } else {
+                        blocking.remove(record.ticket.record_id());
+                    }
                 }
             }
         }
@@ -1435,9 +1289,7 @@ fn validate_grant_state(
 }
 
 fn same_signing_scope(left: &SendRecord, right: &SendRecord) -> bool {
-    left.ticket.sender_wallet_id == right.ticket.sender_wallet_id
-        && left.ticket.sender_address == right.ticket.sender_address
-        && left.ticket.network_global_id == right.ticket.network_global_id
+    left.ticket.scope() == right.ticket.scope()
 }
 
 pub(crate) fn prepared_record(

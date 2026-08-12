@@ -214,30 +214,21 @@ impl SwapRequest {
         })
     }
 
-    pub fn input(&self) -> &AssetAmount {
-        &self.input
-    }
-
     pub fn in_asset(&self) -> AssetId {
         self.input.asset_id()
-    }
-
-    pub fn output(&self) -> AssetId {
-        self.output
     }
 
     pub fn in_units(&self) -> u128 {
         base_units_u128(&self.input).expect("input base units fit u128, checked in new")
     }
-
-    pub fn min_out_units(&self) -> u128 {
-        self.min_out_units
-    }
-
-    pub fn slippage_bps(&self) -> u16 {
-        self.slippage_bps
-    }
 }
+
+accessors!(SwapRequest {
+    input: ref AssetAmount,
+    output: copy AssetId,
+    min_out_units: copy u128,
+    slippage_bps: copy u16
+});
 
 #[cfg(test)]
 mod tests {

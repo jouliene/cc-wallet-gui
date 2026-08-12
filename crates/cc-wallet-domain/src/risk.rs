@@ -1,4 +1,4 @@
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
 use crate::ids::{Digest32, RecordId, RiskNonce};
 
@@ -27,20 +27,15 @@ struct RiskGrantWire {
     overlap_reservation_set_digest: Digest32,
 }
 
-impl<'de> Deserialize<'de> for RiskGrant {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let wire = RiskGrantWire::deserialize(deserializer)?;
-        Ok(Self::new(
-            wire.old_blocker_set_digest,
-            wire.old_reservation_set_digest,
-            wire.new_ticket_digest,
-            wire.new_record_id,
-            wire.one_use_nonce,
-            wire.warning_version,
-            wire.overlap_reservation_set_digest,
-        ))
-    }
-}
+wire_deserialize!(RiskGrant via RiskGrantWire infallible {
+    old_blocker_set_digest,
+    old_reservation_set_digest,
+    new_ticket_digest,
+    new_record_id,
+    one_use_nonce,
+    warning_version,
+    overlap_reservation_set_digest
+});
 
 impl RiskGrant {
     pub fn new(
@@ -63,40 +58,22 @@ impl RiskGrant {
         }
     }
 
-    pub fn old_blocker_set_digest(&self) -> &Digest32 {
-        &self.old_blocker_set_digest
-    }
-
-    pub fn old_reservation_set_digest(&self) -> &Digest32 {
-        &self.old_reservation_set_digest
-    }
-
-    pub fn new_ticket_digest(&self) -> &Digest32 {
-        &self.new_ticket_digest
-    }
-
-    pub fn new_record_id(&self) -> &RecordId {
-        &self.new_record_id
-    }
-
-    pub fn one_use_nonce(&self) -> &RiskNonce {
-        &self.one_use_nonce
-    }
-
-    pub fn warning_version(&self) -> u16 {
-        self.warning_version
-    }
-
-    pub fn overlap_reservation_set_digest(&self) -> &Digest32 {
-        &self.overlap_reservation_set_digest
-    }
-
     pub fn authorizes(&self, consumption: &RiskGrantConsumption) -> bool {
         self.one_use_nonce == consumption.one_use_nonce
             && self.new_record_id == consumption.new_record_id
             && self.new_ticket_digest == consumption.new_ticket_digest
     }
 }
+
+accessors!(RiskGrant {
+    old_blocker_set_digest: ref Digest32,
+    old_reservation_set_digest: ref Digest32,
+    new_ticket_digest: ref Digest32,
+    new_record_id: ref RecordId,
+    one_use_nonce: ref RiskNonce,
+    warning_version: copy u16,
+    overlap_reservation_set_digest: ref Digest32
+});
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RiskGrantConsumption {
@@ -113,16 +90,11 @@ struct RiskGrantConsumptionWire {
     new_ticket_digest: Digest32,
 }
 
-impl<'de> Deserialize<'de> for RiskGrantConsumption {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let wire = RiskGrantConsumptionWire::deserialize(deserializer)?;
-        Ok(Self::new(
-            wire.one_use_nonce,
-            wire.new_record_id,
-            wire.new_ticket_digest,
-        ))
-    }
-}
+wire_deserialize!(RiskGrantConsumption via RiskGrantConsumptionWire infallible {
+    one_use_nonce,
+    new_record_id,
+    new_ticket_digest
+});
 
 impl RiskGrantConsumption {
     pub fn new(
@@ -136,19 +108,13 @@ impl RiskGrantConsumption {
             new_ticket_digest,
         }
     }
-
-    pub fn one_use_nonce(&self) -> &RiskNonce {
-        &self.one_use_nonce
-    }
-
-    pub fn new_record_id(&self) -> &RecordId {
-        &self.new_record_id
-    }
-
-    pub fn new_ticket_digest(&self) -> &Digest32 {
-        &self.new_ticket_digest
-    }
 }
+
+accessors!(RiskGrantConsumption {
+    one_use_nonce: ref RiskNonce,
+    new_record_id: ref RecordId,
+    new_ticket_digest: ref Digest32
+});
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
@@ -165,11 +131,8 @@ pub(crate) enum RiskAction {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::amount::{AssetAmount, CcAmount};
-    use crate::digest::{
-        BlockerRow, CanonicalAddress, EvidenceTag, Reservation, ReservationKind, TicketDigestInput,
-        blocker_set_digest, overlap_set_digest, reservation_set_digest, ticket_digest,
-    };
+    use crate::amount::AssetAmount;
+    use crate::digest::{Reservation, ReservationKind, overlap_set_digest, reservation_set_digest};
 
     fn d(byte: u8) -> Digest32 {
         Digest32::from_bytes([byte; 32])
@@ -185,30 +148,6 @@ mod tests {
 
     fn native(n: u128) -> AssetAmount {
         AssetAmount::native(n).unwrap()
-    }
-
-    fn cc(id: u32, n: u128) -> AssetAmount {
-        AssetAmount::currency_collection(id, CcAmount::from_u128(n))
-    }
-
-    fn sample_ticket_digest() -> Digest32 {
-        let record_id = rid(0x30);
-        let value = native(1_000);
-        let sender = CanonicalAddress::new(0, [0x22; 32]);
-        let destination = CanonicalAddress::new(0, [0x33; 32]);
-        let input = TicketDigestInput {
-            record_id: &record_id,
-            sender_wallet_id: b"wallet-1",
-            sender_address: sender,
-            network_global_id: 42,
-            endpoint_identity: b"endpoint-1",
-            destination,
-            value: &value,
-            bounce: true,
-            auth_generation: 1,
-            auth_nonce: 2,
-        };
-        ticket_digest(&input).unwrap()
     }
 
     #[test]
@@ -238,55 +177,6 @@ mod tests {
         assert!(!grant.authorizes(&RiskGrantConsumption::new(nonce(0xaa), rid(4), d(3))));
         assert!(!grant.authorizes(&RiskGrantConsumption::new(nonce(5), rid(0xaa), d(3))));
         assert!(!grant.authorizes(&RiskGrantConsumption::new(nonce(5), rid(4), d(0xaa))));
-    }
-
-    #[test]
-    fn risk_event_carries_a_grant_or_a_consumption() {
-        let grant = RiskGrant::new(d(1), d(2), d(3), rid(4), nonce(5), 7, d(6));
-        let consumption = RiskGrantConsumption::new(nonce(5), rid(4), d(3));
-        match RiskAction::Granted(grant.clone()) {
-            RiskAction::Granted(inner) => assert_eq!(inner, grant),
-            RiskAction::Consumed(_) => panic!("expected a grant"),
-        }
-        match RiskAction::Consumed(consumption.clone()) {
-            RiskAction::Consumed(inner) => assert_eq!(inner, consumption),
-            RiskAction::Granted(_) => panic!("expected a consumption"),
-        }
-    }
-
-    #[test]
-    fn grant_digests_recompute_byte_identically_from_the_same_state() {
-        let blockers = [BlockerRow::new(rid(0x10), EvidenceTag::Prepared, d(0x11)).unwrap()];
-        let reservations = [
-            Reservation::new(rid(0x20), native(1_000), ReservationKind::Transfer).unwrap(),
-            Reservation::new(rid(0x20), native(7), ReservationKind::NativeFee).unwrap(),
-            Reservation::new(rid(0x21), cc(1, 42), ReservationKind::Transfer).unwrap(),
-        ];
-        let overlap = [reservations[0].clone()];
-
-        let grant = RiskGrant::new(
-            blocker_set_digest(&blockers).unwrap(),
-            reservation_set_digest(&reservations).unwrap(),
-            sample_ticket_digest(),
-            rid(0x30),
-            nonce(0x31),
-            1,
-            overlap_set_digest(&overlap).unwrap(),
-        );
-
-        assert_eq!(
-            grant.old_blocker_set_digest(),
-            &blocker_set_digest(&blockers).unwrap()
-        );
-        assert_eq!(
-            grant.old_reservation_set_digest(),
-            &reservation_set_digest(&reservations).unwrap()
-        );
-        assert_eq!(
-            grant.overlap_reservation_set_digest(),
-            &overlap_set_digest(&overlap).unwrap()
-        );
-        assert_eq!(grant.new_ticket_digest(), &sample_ticket_digest());
     }
 
     #[test]

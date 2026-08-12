@@ -203,10 +203,11 @@ pub fn emulate_external_message(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        AccountTimings, EverTransfer, EverWallet, KeyPair, SignatureContext, make_wallet_state_init,
-    };
+    use crate::crypto::KeyPair;
+    use crate::everwallet::{EverTransfer, EverWallet, make_wallet_state_init};
+    use crate::transport::AccountTimings;
     use tycho_types::dict::Dict;
+    use tycho_types::models::SignatureContext;
     use tycho_types::models::{GasLimitsPrices, GlobalVersion, MsgForwardPrices, StoragePrices};
 
     const NOW: u32 = 1_700_000_000;

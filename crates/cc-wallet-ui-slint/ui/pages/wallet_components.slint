@@ -19,14 +19,6 @@ export component AssetListRow inherits Rectangle {
         mouse-cursor: root.asset.sendable ? pointer : default;
         clicked => { root.clicked(); }
     }
-    // Neither column may be sized by what it holds: the amount would take
-    // whatever it wanted and the name would collapse, and the amount cannot ask
-    // how much room it has if the answer depends on what it printed. The card
-    // divides its own width and hands both columns down.
-    // The row is told how much room it has rather than measuring itself: what
-    // it prints would otherwise decide how much room it has, and the answer
-    // would chase itself. Mono digits make the rest countable — the point costs
-    // one character, every group its separator plus three digits.
     in property <length> free_w;
     in property <length> char_w;
     in property <length> avatar_w: 32px;
@@ -35,9 +27,6 @@ export component AssetListRow inherits Rectangle {
     property <length> amount_w: min(root.amount_want, max(0px, root.free_w - root.name_min_w));
     property <length> name_min_w: 96px;
     property <length> name_w: root.free_w - root.amount_w;
-    // Counted in whole characters, not in fractions of one: the division that
-    // asked how many characters fit could land a hair under a round number and
-    // drop a group that did fit.
     property <int> room_chars: round(root.amount_w / root.char_w);
     property <int> frac_groups: floor(max(0, root.room_chars - root.int_chars - 1) / 4);
 
@@ -231,9 +220,6 @@ export component ActivityListRow inherits Rectangle {
                             clicked => { root.open_in_explorer(); }
                         }
                     }
-                    // Coloured, unlike its neighbours: those two do the same
-                    // thing to every row, while this one only appears where
-                    // there is something to read, and is worth finding.
                     if root.item.has_message: VerticalLayout {
                         alignment: center;
                         IconButton {

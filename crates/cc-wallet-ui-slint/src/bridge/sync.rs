@@ -552,8 +552,6 @@ pub(super) fn sync_ui(ui: &AppWindow, state: &AppState, form_locked: bool, cache
         ui.set_comment(state.send_form.comment.clone().into());
     }
     ui.set_comment_bytes(state.send_form.comment.len() as i32);
-    // Sealing costs bytes out of the same budget, so the limit the counter
-    // shows is the limit that is actually left.
     ui.set_comment_limit(state.comment_limit() as i32);
     ui.set_encrypt_available(state.encrypt_available());
     ui.set_encrypt_on(state.send_form.encrypt);
@@ -598,9 +596,15 @@ pub(super) fn sync_ui(ui: &AppWindow, state: &AppState, form_locked: bool, cache
         ui.set_clock_active_green(false);
     }
 
-    render_explorer_account(ui, state, cache, now);
-    sync_swap(ui, state, cache);
-    sync_storage(ui, state, cache);
+    if state.selected_tab == AppTab::Explorer {
+        render_explorer_account(ui, state, cache, now);
+    }
+    if state.selected_tab == AppTab::Swap {
+        sync_swap(ui, state, cache);
+    }
+    if state.selected_tab == AppTab::Storage {
+        sync_storage(ui, state, cache);
+    }
 
     if state.risk_review_open != cache.risk_was_open {
         ui.set_risk_typed_confirmation(SharedString::new());
@@ -690,10 +694,6 @@ pub(super) fn sync_ui(ui: &AppWindow, state: &AppState, form_locked: bool, cache
 
     ui.set_chat_open(state.chat.open);
     ui.set_chat_peer(state.chat.peer.clone().into());
-    // A conversation with someone in the address book is named for them, with
-    // the same mark they carry on the Contacts page. With anyone else there is
-    // nothing to add: the address is written out directly underneath, and
-    // saying it twice, once abbreviated, tells nobody anything.
     let peer_contact = state
         .contacts
         .iter()
@@ -704,15 +704,17 @@ pub(super) fn sync_ui(ui: &AppWindow, state: &AppState, form_locked: bool, cache
             .unwrap_or_default()
             .into(),
     );
+    let peer_row = peer_contact
+        .map(|entry| crate::bridge::render::contact_row(&entry.name, &entry.address, ""));
     ui.set_chat_peer_mark(
-        peer_contact
-            .map(|entry| crate::bridge::render::contact_row(&entry.name, &entry.address, ""))
-            .map(|row| row.initial)
+        peer_row
+            .as_ref()
+            .map(|row| row.initial.clone())
             .unwrap_or_default(),
     );
     ui.set_chat_peer_tone(
-        peer_contact
-            .map(|entry| crate::bridge::render::contact_row(&entry.name, &entry.address, ""))
+        peer_row
+            .as_ref()
             .map(|row| row.color)
             .unwrap_or(slint::Color::from_argb_u8(0, 0, 0, 0)),
     );
@@ -726,7 +728,10 @@ pub(super) fn sync_ui(ui: &AppWindow, state: &AppState, form_locked: bool, cache
     ui.set_chat_can_encrypt(state.chat.peer_key_known);
     ui.set_chat_busy(state.chat.sending || state.sending);
     ui.set_chat_can_send(state.chat.can_send() && !state.sending);
-    if state.chat.open {
+    let chat_day = crate::bridge::render::today_bucket(now);
+    if state.chat.open && (cache.chat_lines != state.chat.lines || cache.chat_day != chat_day) {
+        cache.chat_lines.clone_from(&state.chat.lines);
+        cache.chat_day = chat_day;
         let lines = crate::bridge::render::chat_line_rows(&state.chat.lines, now);
         ui.set_chat_lines(ModelRc::from(Rc::new(VecModel::from(lines))));
     }
@@ -814,6 +819,9 @@ fn sync_auth(ui: &AppWindow, state: &AppState, cache: &mut UiCache) {
     };
     ui.set_auth_purpose(purpose.into());
     ui.set_auth_danger(state.auth.purpose == AuthPurpose::Storage && state.storage.pending_danger);
+    if !state.auth.open {
+        return;
+    }
     let confirm = state.swap.confirm.as_ref();
     ui.set_swap_confirm_in(match confirm {
         Some(figures) => token_amount(
@@ -895,11 +903,6 @@ fn sync_auth(ui: &AppWindow, state: &AppState, cache: &mut UiCache) {
 
     if show_summary {
         if auth_opened {
-            // The dialog describes the transfer being signed. Usually that is
-            // what the send form holds, but a reply written in a conversation
-            // never goes near the form — and reading the form anyway left this
-            // screen showing an empty amount and an unknown recipient for a
-            // transfer that was perfectly well specified.
             let (asset, amount, dest) = match state.pending_transfer.as_ref() {
                 Some(request) => (
                     request.value().asset_id(),
@@ -935,10 +938,6 @@ fn sync_auth(ui: &AppWindow, state: &AppState, cache: &mut UiCache) {
                 .expect("a validated fee estimate is in the native domain"),
         );
         let _ = native_symbol;
-        // The fee is money, and money in this wallet is written one way: the
-        // integer heavy, the fraction quiet, the token beside it with its mark.
-        // A sentence with the symbol spelled out was the only place that broke
-        // the rule, and it broke it on the screen that exists to be read.
         ui.set_tx_fee_amount(token_amount(
             AssetId::Native,
             &format_native_fixed9(state.effective_send_fee())
@@ -1057,9 +1056,6 @@ fn sync_storage(ui: &AppWindow, state: &AppState, cache: &mut UiCache) {
     }
 }
 
-/// Rebuilding the row model recreates the rows, and with them any state the row
-/// itself owns — the copy button's "copied" tick most visibly. So the model is
-/// replaced only when what it would show actually changed.
 fn storage_rows_hash(storage: &cc_wallet_app::StorageUi) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();

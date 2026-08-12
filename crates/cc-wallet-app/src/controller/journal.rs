@@ -634,17 +634,6 @@ impl AppController {
         accepted_match
     }
 
-    /// Stops the spinner the moment the stream says the account moved.
-    ///
-    /// One transfer of ours is on the wire and the chain has just said this
-    /// account changed. That is the news the person is waiting for, and it is
-    /// the earliest there is — anything else the wallet could ask costs another
-    /// round trip, which is a delay they would sit and watch for no gain they
-    /// can see. So the row settles here, on the frame itself.
-    ///
-    /// It is not *proof* the movement is ours; only the replay guard is, and
-    /// that follows a beat later and is what the Journal waits for before it
-    /// lets another transfer go out. The display leads, the ledger confirms.
     pub(super) fn confirm_in_flight_from_announcement(&mut self) {
         let Some((record_id, _)) = self.session.awaiting_replay.as_ref() else {
             return;
@@ -659,27 +648,11 @@ impl AppController {
         self.settle_optimistic_row(&ext_msg_hash);
     }
 
-    /// The same news, for everything else of ours on the wire.
     pub(super) fn end_waits_on_announcement(&mut self) {
         self.confirm_in_flight_from_announcement();
         self.end_external_waits();
     }
 
-    /// Confirms an in-flight transfer from the wallet's own replay guard.
-    ///
-    /// The account state carries the timestamp the wallet contract stored the
-    /// last time it executed one of our messages, and the node serves that as
-    /// soon as it applies the block — measurably sooner than the same
-    /// transaction reaches its transaction index, and on a slow index by
-    /// several seconds. If the guard has reached the timestamp our signed
-    /// message carries, that message ran and committed: an aborted transaction
-    /// rolls the storage back, so the guard could not have moved.
-    ///
-    /// That answers the same question the transaction listing is asked, only
-    /// earlier, so it is terminal evidence and the record stops blocking. The
-    /// listing is still wanted — for the hash, the fee and the effects — but no
-    /// longer for telling the person in front of the wallet that their transfer
-    /// went through.
     pub(super) fn reconcile_from_replay_guard(&mut self) {
         let Some((record_id, sent_ms)) = self.session.awaiting_replay.clone() else {
             return;
@@ -695,8 +668,6 @@ impl AppController {
         let Some(snapshot) = self.state.wallet.as_ref() else {
             return;
         };
-        // A test-only prepared send carries no timestamp, and a snapshot that
-        // is not our wallet code carries no guard. Neither can confirm.
         if sent_ms == 0 || snapshot.last_message_ms() < sent_ms {
             return;
         }
@@ -751,8 +722,6 @@ impl AppController {
         self.session.fee_reestimate_at = None;
         self.state.send_form.destination.clear();
         self.state.send_form.amount.clear();
-        // A note belongs to the transfer that carried it. Leaving it behind
-        // attaches it to whatever is sent next.
         self.state.send_form.comment.clear();
         self.clear_chat_draft_after_send();
         self.state.reset_recipient_status();

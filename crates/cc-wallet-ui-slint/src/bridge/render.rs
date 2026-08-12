@@ -638,8 +638,6 @@ fn activity_row(
     contacts: &[AddressBookEntry],
 ) -> ActivityRow {
     let movements = movement_rows(&event.movements);
-    // A row we are still standing in for has no transaction of its own, so
-    // nobody has paid a fee yet. The zero it was born with is not a fee.
     let fee = token_amount(
         AssetId::Native,
         &if event.tx_hash.is_some() {
@@ -692,12 +690,6 @@ fn activity_row(
     }
 }
 
-/// A conversation, ready to draw, with each day named once.
-///
-/// A bubble carries a time and nothing else, which reads fine until the thread
-/// spans more than one day and yesterday's answer looks like this morning's.
-/// The activity list already names its days; a conversation is the same history
-/// and names them the same way.
 pub(super) fn chat_line_rows(lines: &[cc_wallet_app::ChatLine], now: u64) -> Vec<ChatLineRow> {
     let today_bucket = day_bucket(now);
     let mut last_bucket: Option<i64> = None;
@@ -939,8 +931,16 @@ mod activity_group_tests {
 
     #[test]
     fn a_conversation_names_each_day_once_and_only_at_its_first_line() {
-        let day = 86_400u64;
-        let now = 10 * day + 4_000;
+        use chrono::TimeZone;
+
+        let noon = |day: u32| {
+            chrono::Local
+                .with_ymd_and_hms(1970, 1, day, 12, 0, 0)
+                .single()
+                .expect("a 1970 midday is unambiguous in every zone")
+                .timestamp() as u64
+        };
+        let now = noon(11);
         let line = |time_unix: u64| cc_wallet_app::ChatLine {
             outgoing: false,
             time_unix,
@@ -952,10 +952,10 @@ mod activity_group_tests {
         };
         let rows = super::chat_line_rows(
             &[
-                line(8 * day + 100),
-                line(8 * day + 200),
-                line(9 * day + 100),
-                line(10 * day + 100),
+                line(noon(9) + 100),
+                line(noon(9) + 200),
+                line(noon(10) + 100),
+                line(noon(11) + 100),
             ],
             now,
         );
@@ -1438,85 +1438,36 @@ mod helper_tests {
         );
     }
 
-    fn ui_sources() -> Vec<(&'static str, &'static str)> {
-        vec![
-            ("app.slint", include_str!("../../ui/app.slint")),
-            ("theme.slint", include_str!("../../ui/theme.slint")),
-            ("widgets.slint", include_str!("../../ui/widgets.slint")),
-            ("models.slint", include_str!("../../ui/models.slint")),
-            (
-                "components/auth_modal.slint",
-                include_str!("../../ui/components/auth_modal.slint"),
-            ),
-            (
-                "components/brand_mark.slint",
-                include_str!("../../ui/components/brand_mark.slint"),
-            ),
-            (
-                "components/lock_screen.slint",
-                include_str!("../../ui/components/lock_screen.slint"),
-            ),
-            (
-                "components/risk_modal.slint",
-                include_str!("../../ui/components/risk_modal.slint"),
-            ),
-            (
-                "components/top_nav.slint",
-                include_str!("../../ui/components/top_nav.slint"),
-            ),
-            (
-                "components/trace_diagram.slint",
-                include_str!("../../ui/components/trace_diagram.slint"),
-            ),
-            (
-                "components/validator_clock.slint",
-                include_str!("../../ui/components/validator_clock.slint"),
-            ),
-            (
-                "components/wallet_picker.slint",
-                include_str!("../../ui/components/wallet_picker.slint"),
-            ),
-            (
-                "pages/contacts_components.slint",
-                include_str!("../../ui/pages/contacts_components.slint"),
-            ),
-            (
-                "pages/contacts_page.slint",
-                include_str!("../../ui/pages/contacts_page.slint"),
-            ),
-            (
-                "pages/explorer_page.slint",
-                include_str!("../../ui/pages/explorer_page.slint"),
-            ),
-            (
-                "pages/settings_components.slint",
-                include_str!("../../ui/pages/settings_components.slint"),
-            ),
-            (
-                "pages/settings_page.slint",
-                include_str!("../../ui/pages/settings_page.slint"),
-            ),
-            (
-                "pages/swap_page.slint",
-                include_str!("../../ui/pages/swap_page.slint"),
-            ),
-            (
-                "pages/wallet_components.slint",
-                include_str!("../../ui/pages/wallet_components.slint"),
-            ),
-            (
-                "pages/wallet_menus.slint",
-                include_str!("../../ui/pages/wallet_menus.slint"),
-            ),
-            (
-                "pages/wallet_page.slint",
-                include_str!("../../ui/pages/wallet_page.slint"),
-            ),
-            (
-                "pages/wallet_sections.slint",
-                include_str!("../../ui/pages/wallet_sections.slint"),
-            ),
-        ]
+    macro_rules! ui_sources {
+        ($($path:literal),* $(,)?) => {
+            fn ui_sources() -> Vec<(&'static str, &'static str)> {
+                vec![$(($path, include_str!(concat!("../../ui/", $path)))),*]
+            }
+        };
+    }
+    ui_sources! {
+        "app.slint",
+        "theme.slint",
+        "widgets.slint",
+        "models.slint",
+        "components/auth_modal.slint",
+        "components/brand_mark.slint",
+        "components/lock_screen.slint",
+        "components/risk_modal.slint",
+        "components/top_nav.slint",
+        "components/trace_diagram.slint",
+        "components/validator_clock.slint",
+        "components/wallet_picker.slint",
+        "pages/contacts_components.slint",
+        "pages/contacts_page.slint",
+        "pages/explorer_page.slint",
+        "pages/settings_components.slint",
+        "pages/settings_page.slint",
+        "pages/swap_page.slint",
+        "pages/wallet_components.slint",
+        "pages/wallet_menus.slint",
+        "pages/wallet_page.slint",
+        "pages/wallet_sections.slint"
     }
 
     #[test]
@@ -2255,10 +2206,6 @@ mod seed_exposure_tests {
     }
 }
 
-/// A fraction cut to whole groups. The caller says how many three-digit groups
-/// it has room for; anything dropped is owed an ellipsis, so a reader can tell
-/// a rounded figure from a complete one. Cutting mid-group would read as a
-/// different number.
 pub(super) fn fit_fraction(frac: &str, groups: i32) -> String {
     let Some(digits) = frac.strip_prefix('.') else {
         return frac.to_owned();

@@ -412,13 +412,8 @@ impl AppController {
         let tx = self.tx.clone();
         let chain = self.chain.clone();
         self.session.dest_check_task = Some(self.runtime.spawn(async move {
-            let report = tokio::time::timeout(
-                std::time::Duration::from_secs(12),
-                chain.check_destination(&inputs, address.clone()),
-            )
-            .await
-            .ok()
-            .and_then(Result::ok);
+            let report =
+                super::broadcast::probe_destination(chain.as_ref(), &inputs, address.clone()).await;
             let _ = tx.send(AppEvent::DestinationChecked {
                 generation,
                 seq,

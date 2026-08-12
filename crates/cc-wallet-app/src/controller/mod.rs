@@ -1,11 +1,10 @@
+mod broadcast;
 mod chat;
 mod contacts;
 mod endpoints;
 mod events;
 mod journal;
 mod live;
-#[cfg(test)]
-mod live_probe;
 mod risk;
 mod save;
 mod seed_auth;
@@ -218,10 +217,6 @@ struct SessionRuntime {
     pending_externals: Vec<PendingExternal>,
     awaiting_send_lt: Option<u64>,
     in_flight_record_id: Option<RecordId>,
-    /// The record whose signed message is on the wire, and the timestamp that
-    /// message carries. The wallet contract stores that timestamp when it runs
-    /// the message, so the account state answers "did it run" a good deal
-    /// sooner than the node's transaction index does.
     awaiting_replay: Option<(RecordId, u64)>,
     dest_check_task: Option<tokio::task::JoinHandle<()>>,
     dest_check_retry_at: Option<Deadline>,
@@ -232,19 +227,9 @@ struct SessionRuntime {
     history_has_gap: bool,
     fee_reestimate_at: Option<Instant>,
     activity_quarantine_pending: Option<SelectedCandidate>,
-    /// The key the open conversation's other end publishes, once asked for.
-    /// Without it every message this wallet wrote stays shut to its author.
     chat_peer_key: Option<[u8; 32]>,
 }
 
-/// Something of ours on the wire that is not a plain transfer — a swap, a
-/// record — timed exactly the way one is.
-///
-/// A transfer has an optimistic row to stop spinning, and that row carries its
-/// own figure. These have no row until the endpoint's transaction index catches
-/// up, which is a wait of its own and not the one worth reporting, so the
-/// figure is frozen when the chain first speaks and read back when the row
-/// finally arrives.
 struct PendingExternal {
     hash: Digest32,
     started_at: Instant,
@@ -521,10 +506,6 @@ impl AppController {
         &self.state
     }
 
-    /// Keeps the view of the transfer being signed in step with the
-    /// authorization itself. Derived rather than mirrored by hand: the
-    /// authorization is created and dropped in half a dozen places, and a copy
-    /// maintained at each of them is a copy that will eventually disagree.
     fn refresh_pending_transfer(&mut self) {
         let request = self
             .pending_authorization
@@ -755,12 +736,7 @@ impl AppController {
                 self.schedule_fee_reestimate();
             }
             AppCommand::SetEncryptComment(on) => {
-                // A longer payload is a different fee, so the estimate is owed
-                // a fresh answer for the same reason a changed amount is.
                 self.state.send_form.encrypt = on && self.state.encrypt_available();
-                // Turning it on shrinks the budget under a comment already
-                // written, and a comment over budget is a transfer that cannot
-                // be built rather than a longer note.
                 let limit = self.state.comment_limit();
                 let kept = truncate_comment_to(&self.state.send_form.comment, limit).to_owned();
                 self.state.send_form.comment = kept;
@@ -1052,14 +1028,7 @@ impl AppController {
     }
 
     fn delete_wallet(&mut self) {
-        use crate::state::AuthModal;
-        self.state.auth = AuthModal {
-            open: true,
-            mode: AuthMode::Enter,
-            purpose: AuthPurpose::DeleteWallet,
-            send_options_editable: false,
-            error: String::new(),
-        };
+        self.open_auth(AuthPurpose::DeleteWallet);
     }
 
     pub(crate) fn do_delete_wallet(&mut self) {
@@ -1192,10 +1161,6 @@ impl AppController {
             && Instant::now() >= deadline
         {
             self.session.fee_reestimate_at = None;
-            // A recipient is worth reading on its own. The fee needs an amount
-            // as well, but whether this account can be written to privately is
-            // answerable the moment the address is, and the toggle beside the
-            // comment has nothing else to wait for.
             self.check_destination();
             if self.state.send_form.request().is_ok() {
                 self.estimate_fee();

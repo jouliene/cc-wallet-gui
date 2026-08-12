@@ -1,3 +1,4 @@
+use super::broadcast::{broadcast_reached_node, outcome_detail};
 use std::time::{Duration, Instant};
 
 use cc_wallet_chain::{CandidateBroadcastOutcome, ChainError, MAX_STORAGE_RECORDS};
@@ -6,7 +7,7 @@ use zeroize::Zeroizing;
 
 use super::AppController;
 use crate::event::{AppEvent, BroadcastDispatch};
-use crate::state::{AuthModal, AuthMode, AuthPurpose, Deadline, StorageUi};
+use crate::state::{AuthPurpose, Deadline, StorageUi};
 
 pub(super) struct PendingStorage {
     pub op: StorageOp,
@@ -123,11 +124,6 @@ impl AppController {
         }
     }
 
-    /// A record is only done when the contract has run and our own account has
-    /// taken the change back — and that second transaction is announced on the
-    /// same subscription. So an announcement is the moment to look again,
-    /// rather than sitting out the rest of a poll interval that was only ever a
-    /// fallback for a silent subscription.
     pub(super) fn expedite_storage_settlement(&mut self) {
         if self.storage_watch.is_none() || self.state.storage.loading {
             return;
@@ -153,11 +149,6 @@ impl AppController {
             watch.next_poll = now + STORAGE_POLL_EVERY;
         }
         self.refresh_storage();
-        // A transfer keeps re-reading its own history until its transaction
-        // turns up, and the finality it reports is measured against the moment
-        // it does. A record is on the wire the same way, so it has to look for
-        // itself on the same cadence — otherwise its reading is not slower
-        // because the chain was, but because nobody went to look.
         self.fetch_transactions(self.subscription_generation);
     }
 
@@ -170,10 +161,6 @@ impl AppController {
         self.state.storage.error = error;
     }
 
-    /// A read whose wallet identity changed under it is discarded, but it is
-    /// still the answer to the only request in flight. Leaving `loading` set
-    /// would strand the page on "Looking for your storage…" with nothing left to
-    /// resolve it, so the read is re-armed instead.
     fn abandon_stale_storage_read(&mut self, seq: u64) {
         if seq != self.storage_seq || !self.state.storage.loading {
             return;
@@ -238,8 +225,6 @@ impl AppController {
     }
 
     pub(super) fn copy_storage_record(&mut self, id: u32) {
-        // The button is only drawn once the records are open, and this is the
-        // same rule said where it is enforced rather than where it is offered.
         if !self.state.storage.revealed {
             return;
         }
@@ -260,13 +245,7 @@ impl AppController {
         if self.state.storage.records.is_empty() {
             return;
         }
-        self.state.auth = AuthModal {
-            open: true,
-            mode: AuthMode::Enter,
-            purpose: AuthPurpose::RevealRecords,
-            send_options_editable: false,
-            error: String::new(),
-        };
+        self.open_auth(AuthPurpose::RevealRecords);
     }
 
     pub(super) fn show_records_for_one_minute(&mut self) {
@@ -328,18 +307,7 @@ impl AppController {
             inputs,
             generation,
         });
-        let mode = if self.state.within_autosign() {
-            AuthMode::Confirm
-        } else {
-            AuthMode::Enter
-        };
-        self.state.auth = AuthModal {
-            open: true,
-            mode,
-            purpose: AuthPurpose::Storage,
-            send_options_editable: false,
-            error: String::new(),
-        };
+        self.open_signing_auth(AuthPurpose::Storage, false);
     }
 
     pub(super) fn clear_pending_storage(&mut self) {
@@ -400,22 +368,14 @@ impl AppController {
         op: StorageOp,
         result: Result<BroadcastDispatch, ChainError>,
     ) {
-        // Even a result this session can no longer act on has to release the
-        // page: `busy` gates the form, and leaving it set would lock the user
-        // out of typing with nothing left to clear it.
         self.state.storage.busy = false;
         self.state.storage.pending_label.clear();
         self.state.busy = false;
         if generation != self.session_generation {
             return;
         }
-        self.state.storage.pending_label.clear();
-        self.state.busy = false;
         match result {
             Ok(dispatch) if broadcast_reached_node(&dispatch.outcome) => {
-                // The row this message becomes in Activity is owed a finality
-                // reading like any other transfer, and the only thing that can
-                // tie the two together is the hash we just put on the wire.
                 self.session.pending_externals.push(super::PendingExternal {
                     hash: dispatch.ext_msg_hash,
                     started_at: dispatch.broadcast_started_at,
@@ -475,20 +435,4 @@ async fn broadcast_all_candidates(
         }
     }
     Ok(last.expect("at least one candidate was attempted"))
-}
-
-fn broadcast_reached_node(outcome: &CandidateBroadcastOutcome) -> bool {
-    matches!(
-        outcome,
-        CandidateBroadcastOutcome::NodeResponseObserved { .. }
-            | CandidateBroadcastOutcome::MayHaveBroadcast { .. }
-    )
-}
-
-fn outcome_detail(outcome: &CandidateBroadcastOutcome) -> String {
-    match outcome {
-        CandidateBroadcastOutcome::NotTransmitted { detail, .. }
-        | CandidateBroadcastOutcome::MayHaveBroadcast { detail }
-        | CandidateBroadcastOutcome::NodeResponseObserved { detail, .. } => detail.clone(),
-    }
 }

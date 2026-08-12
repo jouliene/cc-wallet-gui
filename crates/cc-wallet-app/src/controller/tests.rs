@@ -45,6 +45,39 @@ const TEST_SEED: &str = "one two three four five six seven eight nine ten eleven
 const SECOND_TEST_SEED: &str = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu";
 const SAMPLE_OUTGOING_TX_BOC: &str = "te6ccgECDgEAAlQAA7VwzzhGQlR3sl+wKYzKg5koqj2AnfeL7BBKJsobaROsRBAAAACK7GwwGgcwWFKMa8g66ETBeeRt4c79JAfyFUe1eNHxlXNeOZRQAAAAiuLiyBakn0sQADRwEpVoBQQBAg8MQYYatTzEQAMCAG/JiGRwTBZhFAAAAAAAAgAAAAAAAukK7RGaZSwH/agd9NxiT57Z4ZZD4TbYukvxsWBojuFWQJAVDACdQsXjE4gAAAAAAAAAACFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIACCcmlvgB7nHr8Wj5J+/J0ToF8Kci6qDR5xzygO8/XJyzjVll1zOCkik1erJGrKLt6HZUDMceiBI/DK6YN15z3sWsgCAeAJBgEB3wcCqUgAGecIyEqO9kv2BTGZUHMlFUewE77xfYIJRNlDbSJ1iIMABI0VniXh4eJeYVGVGR1iUWEWHRXR1RUVFVFRVRVRUVFCBhZhNgAAABFdjYYE1JPpYsAIDQAToAAAAAMgU6cRNAFFiAAZ5wjISo72S/YFMZlQcyUVR7ATvvF9gglE2UNtInWIggwKAYBPrqUvmbcaZSAV9NpJvQtZGL5oyDmsSfPGM+LZZZTTIsNYbjZPTk/kv/Rd7cdzaim7GE7CF/+pJHNQ2FjSUZYOCwEggACAAGpJ9O0AAAAVneWKAwwBVYACRorPEvDw8S8wqMqMjrEosIsOiujqioqKqKiqiqioqKAAAAAGQKdOImQNAAA=";
 
+macro_rules! key_ok {
+    ($($field:ident : $value:expr),* $(,)?) => {
+        KeyMsg::Ok {
+            history_corrupt: false,
+            journal: cc_wallet_domain::JournalEnvelope::empty(),
+            selected: None,
+            $($field: $value),*
+        }
+    };
+}
+
+macro_rules! txs_loaded {
+    ($($field:ident : $value:expr),* $(,)?) => {
+        AppEvent::TransactionsLoaded {
+            head_refresh_only: false,
+            events: Vec::new(),
+            integrity_error: None,
+            $($field: $value),*
+        }
+    };
+}
+
+fn elapse_risk_cooling(c: &mut AppController) {
+    c.session.risk_cooling_started_at = Some(
+        Instant::now()
+            .checked_sub(Duration::from_secs(
+                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
+            ))
+            .expect("the cooling window is shorter than the process uptime"),
+    );
+    c.refresh_journal_policy();
+}
+
 fn fresh_sample_transaction() -> ChainTransaction {
     let mut transaction = parse_transaction_for_test(SAMPLE_OUTGOING_TX_BOC).unwrap();
     transaction.now = u32::try_from(
@@ -225,16 +258,13 @@ fn unlocked(dir: &Path, profile: WalletProfile) -> AppController {
     let mut c = controller(dir);
     let vault = Vault::create_with(PW, CHEAP).unwrap();
     let writer = c.store.writer_for_new().unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: Some(writer),
         generation: c.key_generation(),
         history: Vec::new(),
         action: KeyAction::Create,
-        vault,
-        profile,
+        vault: vault,
+        profile: profile,
     });
     assert!(c.drain_save_task());
     c.save_profile();
@@ -914,15 +944,12 @@ fn create_completion_enters_unlocked_empty_wallet() {
     let mut c = controller(&dir);
     let vault = Vault::create_with(PW, CHEAP).unwrap();
     let writer = c.store.writer_for_new().unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: Some(writer),
         generation: c.key_generation(),
         history: Vec::new(),
         action: KeyAction::Create,
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
     assert_eq!(c.state().phase, AppPhase::Unlocked);
@@ -1144,6 +1171,13 @@ fn command_freeze_classifiers_match_the_documented_denylists() {
             false,
         ),
         ("SetSendAmount", SetSendAmount("1".to_owned()), true, false),
+        (
+            "SetSendComment",
+            SetSendComment("hi".to_owned()),
+            true,
+            false,
+        ),
+        ("SetEncryptComment", SetEncryptComment(true), true, false),
         ("SetMaxAmount", SetMaxAmount, true, false),
         ("SetAllowUnbounced", SetAllowUnbounced(true), true, false),
         ("RequestSend", RequestSend, false, false),
@@ -1172,6 +1206,26 @@ fn command_freeze_classifiers_match_the_documented_denylists() {
         ("FlipSwap", FlipSwap, true, false),
         ("RequestSwap", RequestSwap, false, false),
         ("DismissSwapReceipt", DismissSwapReceipt, true, false),
+        ("RefreshStorage", RefreshStorage, false, false),
+        ("CreateStorage", CreateStorage, true, false),
+        (
+            "SetStorageTitle",
+            SetStorageTitle("t".to_owned()),
+            true,
+            false,
+        ),
+        (
+            "SetStorageData",
+            SetStorageData("d".to_owned()),
+            true,
+            false,
+        ),
+        ("AddStorageRecord", AddStorageRecord, true, false),
+        ("ClearStorageForm", ClearStorageForm, true, false),
+        ("RevealStorageRecords", RevealStorageRecords, true, false),
+        ("HideStorageRecords", HideStorageRecords, false, false),
+        ("DeleteStorageRecord", DeleteStorageRecord(1), true, false),
+        ("CopyStorageRecord", CopyStorageRecord(1), false, false),
         ("RequestRiskOverride", RequestRiskOverride, true, false),
         (
             "SetRiskOverlap",
@@ -1229,6 +1283,10 @@ fn command_freeze_classifiers_match_the_documented_denylists() {
             false,
         ),
         ("CloseTrace", CloseTrace, false, false),
+        ("OpenChat", OpenChat("0:1".to_owned()), false, false),
+        ("CloseChat", CloseChat, false, false),
+        ("SetChatDraft", SetChatDraft("d".to_owned()), false, false),
+        ("SendChatMessage", SendChatMessage, true, false),
         ("AddEndpoint", AddEndpoint("e".to_owned()), true, false),
         ("SelectEndpoint", SelectEndpoint(0), true, true),
         ("RemoveEndpoint", RemoveEndpoint("e".to_owned()), true, true),
@@ -1238,13 +1296,13 @@ fn command_freeze_classifiers_match_the_documented_denylists() {
 
     assert_eq!(
         cases.len(),
-        63,
-        "every AppCommand variant is classified exactly once"
+        79,
+        "all 79 AppCommand variants are classified here; add the row when the enum grows"
     );
     assert_eq!(
         cases.iter().filter(|(_, _, f, _)| *f).count(),
-        28,
-        "the authorization-snapshot freeze list has exactly 28 commands"
+        38,
+        "the authorization-snapshot freeze list has exactly 38 commands"
     );
     assert_eq!(
         cases.iter().filter(|(_, _, _, i)| *i).count(),
@@ -2157,15 +2215,12 @@ fn change_password_always_reverifies_the_current_password_first() {
     assert!(!c.state().auth.error.is_empty());
 
     let vault = Vault::create_with(PW, CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
         action: KeyAction::VerifyForChangePassword,
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
     assert!(c.state().auth.open);
@@ -2186,15 +2241,12 @@ fn revealing_the_seed_requires_the_password_even_when_unlocked() {
     assert!(!c.state().show_seed);
 
     let vault = Vault::create_with(PW, CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
         action: KeyAction::RevealSeed,
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
     assert!(c.state().show_seed);
@@ -2296,15 +2348,12 @@ fn deleting_the_wallet_requires_the_password_then_returns_to_onboarding() {
     c.state_mut().lock_error = "This wallet uses an unsupported older format".to_owned();
 
     let vault = Vault::create_with(PW, CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
         action: KeyAction::DeleteWallet,
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
     assert!(c.state().seed.is_empty());
@@ -2628,10 +2677,7 @@ fn change_password_completion_keeps_the_session_open() {
     };
     let mut c = unlocked(&dir, profile);
     let new_vault = Vault::create_with(b"brand-new-password", CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
@@ -2654,10 +2700,7 @@ fn change_password_persists_the_new_keyslot_before_reporting_success() {
     };
     let mut c = unlocked(&dir, profile);
     let new_vault = Vault::create_with(b"brand-new-password", CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
@@ -2867,10 +2910,7 @@ fn re_auth_send_opens_the_autosign_window_only_when_remember_is_ticked() {
 
     c.pending_authorization = Some(send_authorization(1, 2));
     let vault = Vault::create_with(PW, CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
@@ -2879,7 +2919,7 @@ fn re_auth_send_opens_the_autosign_window_only_when_remember_is_ticked() {
             auth_generation: 1,
             auth_nonce: 2,
         },
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
     assert!(
@@ -2891,10 +2931,7 @@ fn re_auth_send_opens_the_autosign_window_only_when_remember_is_ticked() {
     c.pending_authorization = Some(send_authorization(3, 4));
     c.state_mut().recipient_check = RecipientCheck::Known(DestinationAccountStatus::Active);
     let vault = Vault::create_with(PW, CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
@@ -2903,7 +2940,7 @@ fn re_auth_send_opens_the_autosign_window_only_when_remember_is_ticked() {
             auth_generation: 3,
             auth_nonce: 4,
         },
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
     assert!(
@@ -3165,7 +3202,6 @@ fn the_finality_figure_is_how_long_the_row_spun_and_it_never_moves_afterwards() 
     c.arm_awaiting_send_finality();
     std::thread::sleep(Duration::from_millis(40));
 
-    // The chain says the account moved, which is what stops the spinner.
     c.settle_optimistic_row(&digest("exthash"));
     let spun = armed.elapsed().as_millis();
 
@@ -3180,9 +3216,6 @@ fn the_finality_figure_is_how_long_the_row_spun_and_it_never_moves_afterwards() 
         "finality {reported} ms is not the {spun} ms the row actually spun"
     );
 
-    // The transaction itself turns up much later with the fee and the hash. It
-    // brings no new answer to "how long did I wait", and must not rewrite the
-    // one already on screen.
     std::thread::sleep(Duration::from_millis(200));
     c.merge_activity(vec![ActivityEvent {
         tx_hash: optional_digest("realtx"),
@@ -3209,10 +3242,6 @@ fn a_second_transfer_is_timed_from_its_own_start_and_not_the_one_before_it() {
     let dir = temp_dir("finality-per-send");
     let mut c = unlocked(&dir, WalletProfile::default());
 
-    // The first transfer goes out and the wallet's own replay guard confirms
-    // it. That is what the guard is for: it answers before the endpoint's
-    // transaction index does, so this row settles here and the journal lets the
-    // next transfer go out.
     let first = c.push_pending_send(&native_request(SEND_DEST, 5_000));
     c.state
         .activity
@@ -3224,17 +3253,11 @@ fn a_second_transfer_is_timed_from_its_own_start_and_not_the_one_before_it() {
     c.arm_awaiting_send_finality();
     std::thread::sleep(Duration::from_millis(40));
     c.settle_optimistic_row(&digest("ext-one"));
-    // All that clearing the in-flight send does on that path: the transfer is
-    // no longer in flight, but its row and the start it was timed from stay
-    // until the transaction is indexed.
     c.session.awaiting_send_lt = None;
     let first_reported = c.state().activity[0]
         .finality_ms
         .expect("the first row says how long it spun");
 
-    // The index is still catching up on the first transfer when the second one
-    // is sent — the gap the guard exists to skip, and seconds wide on a slow
-    // endpoint.
     std::thread::sleep(Duration::from_millis(150));
     assert!(
         c.session.pending_sends.iter().any(|(lt, _)| *lt == first),
@@ -4070,15 +4093,12 @@ fn entering_unlocked_clears_every_rust_seed_presentation_flag() {
 
     let vault = Vault::create_with(PW, CHEAP).unwrap();
     let writer = c.store.writer_for_new().unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: Some(writer),
         generation: c.key_generation(),
         history: Vec::new(),
         action: KeyAction::Create,
-        vault,
+        vault: vault,
         profile: WalletProfile {
             seed: test_seed(),
             ..WalletProfile::default()
@@ -5167,12 +5187,9 @@ fn a_key_result_is_single_use() {
     let mut c = unlocked(&dir, WalletProfile::default());
     let generation = c.key_generation();
 
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
-        generation,
+        generation: generation,
         action: KeyAction::ChangePassword,
         vault: Vault::create_with(PW, CHEAP).unwrap(),
         profile: WalletProfile::default(),
@@ -5185,12 +5202,9 @@ fn a_key_result_is_single_use() {
     );
 
     c.state_mut().status = "sentinel".to_owned();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
-        generation,
+        generation: generation,
         action: KeyAction::ChangePassword,
         vault: Vault::create_with(PW, CHEAP).unwrap(),
         profile: WalletProfile::default(),
@@ -5210,12 +5224,9 @@ fn the_history_incomplete_banner_clears_on_a_later_clean_fetch() {
     let mut c = unlocked(&dir, WalletProfile::default());
     let generation = c.subscription_generation;
 
-    c.apply_event(AppEvent::TransactionsLoaded {
-        generation,
+    c.apply_event(txs_loaded! {
+        generation: generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: vec![],
-        integrity_error: None,
         incomplete: true,
         gap: true,
         deepest_lt: None,
@@ -5225,12 +5236,9 @@ fn the_history_incomplete_banner_clears_on_a_later_clean_fetch() {
         "an incomplete fetch raises the banner"
     );
 
-    c.apply_event(AppEvent::TransactionsLoaded {
-        generation,
+    c.apply_event(txs_loaded! {
+        generation: generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: vec![],
-        integrity_error: None,
         incomplete: false,
         gap: false,
         deepest_lt: Some(100),
@@ -5273,24 +5281,18 @@ fn malformed_full_width_history_blocks_signing_until_a_complete_valid_refresh() 
             .is_some_and(|error| error.contains("extra-currency 77"))
     );
 
-    c.apply_event(AppEvent::TransactionsLoaded {
-        generation,
+    c.apply_event(txs_loaded! {
+        generation: generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: true,
         gap: false,
         deepest_lt: Some(100),
     });
     assert!(!c.state().send_enabled());
 
-    c.apply_event(AppEvent::TransactionsLoaded {
-        generation,
+    c.apply_event(txs_loaded! {
+        generation: generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: false,
         gap: false,
         deepest_lt: Some(100),
@@ -5357,12 +5359,9 @@ fn a_stale_transactions_result_still_clears_the_fetch_guard() {
     c.load.fetch_in_flight = true;
     c.load.fetch_in_flight_id = Some(77);
 
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: c.subscription_generation.wrapping_add(9),
         fetch_id: 77,
-        head_refresh_only: false,
-        events: vec![],
-        integrity_error: None,
         incomplete: false,
         gap: false,
         deepest_lt: None,
@@ -5381,12 +5380,9 @@ fn an_old_fetch_completion_cannot_release_a_new_session_fetch_guard() {
     c.load.fetch_in_flight = true;
     c.load.fetch_in_flight_id = Some(102);
 
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: c.subscription_generation.wrapping_sub(1),
         fetch_id: 101,
-        head_refresh_only: false,
-        events: vec![],
-        integrity_error: None,
         incomplete: true,
         gap: true,
         deepest_lt: None,
@@ -5452,12 +5448,9 @@ fn a_scan_that_ran_out_of_continuations_still_refreshes_the_head() {
     c.load.fetch_again = false;
     c.load.fetch_head_after_history_scan = false;
 
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: c.subscription_generation,
         fetch_id: 401,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: true,
         gap: false,
         deepest_lt: Some(500),
@@ -5494,12 +5487,9 @@ fn a_stale_owned_completion_redrives_the_current_generations_scan() {
     c.load.fetch_in_flight_id = Some(301);
     c.load.fetch_again = true;
 
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: c.subscription_generation.wrapping_sub(1),
         fetch_id: 301,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: true,
         gap: false,
         deepest_lt: Some(500),
@@ -5519,12 +5509,9 @@ fn an_interrupted_fetch_forces_the_next_fetch_to_close_the_gap() {
     let mut c = unlocked(&dir, WalletProfile::default());
     let generation = c.subscription_generation;
 
-    c.apply_event(AppEvent::TransactionsLoaded {
-        generation,
+    c.apply_event(txs_loaded! {
+        generation: generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: vec![],
-        integrity_error: None,
         incomplete: false,
         gap: false,
         deepest_lt: Some(500),
@@ -5532,12 +5519,9 @@ fn an_interrupted_fetch_forces_the_next_fetch_to_close_the_gap() {
     assert_eq!(c.session.history_synced_floor, Some(500));
     assert!(!c.session.history_has_gap);
 
-    c.apply_event(AppEvent::TransactionsLoaded {
-        generation,
+    c.apply_event(txs_loaded! {
+        generation: generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: vec![],
-        integrity_error: None,
         incomplete: true,
         gap: true,
         deepest_lt: Some(450),
@@ -5552,12 +5536,9 @@ fn an_interrupted_fetch_forces_the_next_fetch_to_close_the_gap() {
         "an RPC error flags a gap so the next fetch re-walks to close it"
     );
 
-    c.apply_event(AppEvent::TransactionsLoaded {
-        generation,
+    c.apply_event(txs_loaded! {
+        generation: generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: vec![],
-        integrity_error: None,
         incomplete: false,
         gap: false,
         deepest_lt: Some(300),
@@ -5572,12 +5553,9 @@ fn an_interrupted_fetch_forces_the_next_fetch_to_close_the_gap() {
         "the gap is closed by a clean fetch"
     );
 
-    c.apply_event(AppEvent::TransactionsLoaded {
-        generation,
+    c.apply_event(txs_loaded! {
+        generation: generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: vec![],
-        integrity_error: None,
         incomplete: false,
         gap: false,
         deepest_lt: Some(900),
@@ -5596,12 +5574,9 @@ fn an_empty_account_fetch_does_not_poison_the_no_gap_floor() {
     let mut c = unlocked(&dir, WalletProfile::default());
     let generation = c.subscription_generation;
 
-    c.apply_event(AppEvent::TransactionsLoaded {
-        generation,
+    c.apply_event(txs_loaded! {
+        generation: generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: vec![],
-        integrity_error: None,
         incomplete: false,
         gap: false,
         deepest_lt: None,
@@ -5620,12 +5595,9 @@ fn an_incomplete_batch_without_scan_progress_never_advances_the_trusted_floor() 
     let mut c = unlocked(&dir, WalletProfile::default());
     let generation = c.subscription_generation;
 
-    c.apply_event(AppEvent::TransactionsLoaded {
-        generation,
+    c.apply_event(txs_loaded! {
+        generation: generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: vec![],
-        integrity_error: None,
         incomplete: true,
         gap: false,
         deepest_lt: Some(700),
@@ -5813,15 +5785,12 @@ fn loading_old_only_history_uses_the_conservative_chain_anchor() {
         .collect();
     let vault = Vault::create_with(PW, CHEAP).unwrap();
     let writer = c.store.writer_for_new().unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: Some(writer),
         generation: c.key_generation(),
-        history,
+        history: history,
         action: KeyAction::Unlock,
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
 
@@ -5853,14 +5822,11 @@ fn changing_the_password_revokes_the_autosign_window() {
     assert!(c.state().within_autosign(), "the auto-sign window is open");
 
     let vault = Vault::create_with(b"a-new-password!!", CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         action: KeyAction::ChangePassword,
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
         history: Vec::new(),
     });
@@ -5892,10 +5858,7 @@ fn a_cancelled_change_password_never_touches_the_container() {
     let stale = c.key_generation();
     c.cancel_auth();
     let rekeyed = Vault::create_with(b"a-brand-new-pass", CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: stale,
         action: KeyAction::ChangePassword,
@@ -5925,15 +5888,12 @@ fn a_stale_key_result_is_discarded_after_a_context_switch() {
     assert_ne!(stale, c.key_generation());
 
     let vault = Vault::create_with(PW, CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: stale,
         history: Vec::new(),
         action: KeyAction::DeleteWallet,
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
 
@@ -6314,8 +6274,6 @@ fn wallet_with_replay_guard(last_message_ms: u64, last_trans_lt: u64) -> WalletS
     snapshot.with_last_message_ms(last_message_ms)
 }
 
-/// A send that reached the node and is waiting to be heard about, with the
-/// timestamp its signed message carries known to the session.
 fn awaiting_replay_guard(c: &mut AppController, sent_ms: u64) -> (RecordId, String, Digest32) {
     let ext_hash = digest("REPLAY-GUARD");
     let (record_id, endpoint) = install_blocking_history_record(c, ext_hash.clone(), 0x61);
@@ -6344,8 +6302,6 @@ fn the_wallets_own_replay_guard_confirms_a_transfer_the_transaction_list_has_not
     awaiting_replay_guard(&mut c, SENT_MS);
     assert!(c.state().journal_blocking, "the send starts out unresolved");
 
-    // An account read from before our message ran carries the guard the
-    // previous send left behind, and that confirms nothing.
     let live = c.subscription_generation;
     apply_owned_auto_load(&mut c, live, wallet_with_replay_guard(SENT_MS - 1, 8_000));
     assert!(
@@ -6357,7 +6313,6 @@ fn the_wallets_own_replay_guard_confirms_a_transfer_the_transaction_list_has_not
         "the row keeps spinning until the wallet's own guard moves"
     );
 
-    // And now the wallet's own storage says it ran our message.
     let live = c.subscription_generation;
     apply_owned_auto_load(&mut c, live, wallet_with_replay_guard(SENT_MS, 9_000));
 
@@ -6392,8 +6347,6 @@ fn a_row_the_replay_guard_confirmed_still_takes_its_details_from_the_chain() {
     apply_owned_auto_load(&mut c, live, wallet_with_replay_guard(SENT_MS, 9_000));
     assert!(!c.state().journal_blocking);
 
-    // The listing turns up later, as it always does. It has nothing left to
-    // resolve, and saying so must not read as a conflict.
     let observation = endpoint_observation(
         ext_hash.clone(),
         &endpoint,
@@ -6444,8 +6397,6 @@ fn a_confirmed_row_without_its_transaction_yet_stays_at_the_top_of_the_list() {
     let live = c.subscription_generation;
     apply_owned_auto_load(&mut c, live, wallet_with_replay_guard(SENT_MS, 9_000));
 
-    // History arrives for everything except our own transfer, whose synthetic
-    // ordering number is tiny next to a real one.
     c.merge_activity(vec![ActivityEvent {
         tx_hash: optional_digest("older-tx"),
         counterparty: SEND_DEST.to_owned(),
@@ -6670,10 +6621,6 @@ impl ChainService for FakeChain {
         _peer_key: Option<&[u8; 32]>,
         sealed: &[cc_wallet_chain::SealedComment<'_>],
     ) -> Result<Vec<Option<String>>, ChainError> {
-        // The fake speaks the format rather than the cipher: a blob that is
-        // valid UTF-8 opens to itself, anything else stays shut. That keeps the
-        // conversation's own logic — which line is locked, which is legible —
-        // testable without a seed.
         Ok(sealed
             .iter()
             .map(|comment| String::from_utf8(comment.blob.to_vec()).ok())
@@ -6939,10 +6886,6 @@ fn activating_a_new_seed_clears_the_chain_key_cache() {
     cleanup(&dir);
 }
 
-/// The cached network parameters never expire on their own, so an endpoint that
-/// serves a different chain has to evict them. This is the whole of what keeps
-/// the cache honest, which is why it is pinned here rather than left to
-/// whichever code path happens to call the clear.
 #[test]
 fn changing_the_endpoint_evicts_the_network_parameters() {
     let dir = temp_dir("endpoint-clears-config");
@@ -7256,10 +7199,7 @@ fn stale_authorization_generation_or_nonce_is_consumed_without_sending() {
     let authorization_generation = authorization.generation();
     let stale_nonce = authorization.nonce().wrapping_add(1);
     let vault = Vault::create_with(PW, CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
@@ -7268,7 +7208,7 @@ fn stale_authorization_generation_or_nonce_is_consumed_without_sending() {
             auth_generation: authorization_generation,
             auth_nonce: stale_nonce,
         },
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
 
@@ -7300,10 +7240,7 @@ fn post_auth_send_consumes_only_the_exact_snapshot_not_the_live_form() {
     assert!(c.state().can_afford_send());
 
     let vault = Vault::create_with(PW, CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
@@ -7312,7 +7249,7 @@ fn post_auth_send_consumes_only_the_exact_snapshot_not_the_live_form() {
             auth_generation: authorization_generation,
             auth_nonce: authorization_nonce,
         },
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
     c.pump_events();
@@ -8001,14 +7938,7 @@ fn wall_time_and_suspend_never_accelerate_cooling_or_change_delivery_evidence() 
         .unwrap();
     assert!(c.persist_journal_barrier());
     c.refresh_journal_policy();
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     assert!(c.state().risk_override_eligible);
 
     c.last_tick = Some((Instant::now(), SystemTime::now() - Duration::from_secs(300)));
@@ -8077,12 +8007,9 @@ fn endpoint_reconciliation_requires_exact_hash_account_and_is_idempotent() {
         "wrong hash and wrong sender observations change no evidence"
     );
 
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: c.subscription_generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: true,
         gap: true,
         deepest_lt: None,
@@ -8279,12 +8206,9 @@ fn a_pruned_rpc_does_not_erase_local_history_or_poll_an_old_record_forever() {
         "an expired unresolved record remains blocked without perpetual background archive walks"
     );
 
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: c.subscription_generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: false,
         gap: false,
         deepest_lt: None,
@@ -8312,14 +8236,7 @@ fn risk_review_reconciles_fresh_history_before_opening_the_override() {
     )
     .unwrap();
     let (record_id, endpoint) = install_blocking_history_record(&mut c, ext_msg_hash, 0xa1);
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     fake.push_page(Ok(TransactionPage {
         transactions: vec![matching],
         skipped: 0,
@@ -8356,14 +8273,7 @@ fn cancelling_the_preflight_history_check_ignores_its_late_completion() {
     let dir = temp_dir("risk-cancel-preflight");
     let (mut c, fake) = ready_to_send(&dir);
     install_blocking_history_record(&mut c, digest("RISK-CANCEL-BLOCKER"), 0xa2);
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     fake.push_page(Ok(TransactionPage {
         transactions: Vec::new(),
         skipped: 0,
@@ -8393,14 +8303,7 @@ fn a_reconnect_during_the_risk_preflight_aborts_the_stranded_reconciliation() {
     let dir = temp_dir("risk-preflight-reconnect");
     let (mut c, fake) = ready_to_send(&dir);
     install_blocking_history_record(&mut c, digest("RISK-RECONNECT-BLOCKER"), 0xa4);
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     fake.push_page(Ok(TransactionPage {
         transactions: Vec::new(),
         skipped: 0,
@@ -8439,14 +8342,7 @@ fn a_stale_completion_with_a_queued_refire_does_not_abort_the_preflight() {
     let dir = temp_dir("risk-preflight-refire-gate");
     let (mut c, fake) = ready_to_send(&dir);
     install_blocking_history_record(&mut c, digest("RISK-REFIRE-BLOCKER"), 0xa5);
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     fake.push_page(Ok(TransactionPage {
         transactions: Vec::new(),
         skipped: 0,
@@ -8460,12 +8356,9 @@ fn a_stale_completion_with_a_queued_refire_does_not_abort_the_preflight() {
 
     c.subscription_generation = c.subscription_generation.wrapping_add(1);
     c.load.fetch_again = true;
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: stale_gen,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: false,
         gap: false,
         deepest_lt: None,
@@ -8882,14 +8775,7 @@ fn duplicate_risk_request_with_an_empty_new_form_is_friendly_and_edit_scoped() {
     }));
     c.dispatch_test_authorization();
     c.pump_events();
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     assert!(c.state().risk_override_eligible);
 
     c.state_mut().send_form.destination = SEND_DEST.to_owned();
@@ -8961,14 +8847,7 @@ fn ambiguous_transfer_can_use_one_durable_exact_duplicate_risk_grant() {
     let mut fresh = timed_wallet("0:me");
     set_native_balance(&mut fresh, 5_000_000_000);
     fake.set_load_wallet(Ok(fresh));
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     assert!(c.state().risk_override_eligible);
 
     c.handle_command(AppCommand::RequestRiskOverride);
@@ -9024,10 +8903,7 @@ fn ambiguous_transfer_can_use_one_durable_exact_duplicate_risk_grant() {
     assert!(!c.state().auth.send_options_editable);
 
     let vault = Vault::create_with(PW, CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
@@ -9036,7 +8912,7 @@ fn ambiguous_transfer_can_use_one_durable_exact_duplicate_risk_grant() {
             auth_generation: authorization_generation,
             auth_nonce: authorization_nonce,
         },
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
     c.pump_events();
@@ -9094,14 +8970,7 @@ fn endpoint_observation_cancels_a_stale_risk_grant_and_releases_the_blocker() {
     let mut fresh = timed_wallet("0:me");
     set_native_balance(&mut fresh, 5_000_000_000);
     fake.set_load_wallet(Ok(fresh));
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     c.handle_command(AppCommand::RequestRiskOverride);
     c.pump_events();
     c.handle_command(AppCommand::SetRiskOverlap {
@@ -9124,10 +8993,7 @@ fn endpoint_observation_cancels_a_stale_risk_grant_and_releases_the_blocker() {
     assert_eq!(persisted_journal(&dir).risk_events().len(), 1);
 
     let vault = Vault::create_with(PW, CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
@@ -9136,7 +9002,7 @@ fn endpoint_observation_cancels_a_stale_risk_grant_and_releases_the_blocker() {
             auth_generation: authorization_generation,
             auth_nonce: authorization_nonce,
         },
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
     assert!(c.state().sending);
@@ -9208,14 +9074,7 @@ fn endpoint_observation_silently_cancels_a_queued_stale_risk_context_failure() {
     fake.set_load_wallet(Err(ChainError::Wallet(
         "late risk-context failure".to_owned(),
     )));
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     c.handle_command(AppCommand::RequestRiskOverride);
     assert!(c.pending_risk_context.is_some());
     assert!(c.state().busy);
@@ -9276,14 +9135,7 @@ fn risk_context_rpc_keeps_the_exact_authorization_busy_gate_installed() {
     let mut fresh = timed_wallet("0:me");
     set_native_balance(&mut fresh, 5_000_000_000);
     fake.set_load_wallet(Ok(fresh));
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     let original_form = c.state().send_form.clone();
 
     c.handle_command(AppCommand::RequestRiskOverride);
@@ -9339,14 +9191,7 @@ fn risk_review_rejects_balances_with_network_time_from_another_endpoint() {
     .unwrap();
     set_native_balance(&mut wrong_source, 5_000_000_000);
     fake.set_load_wallet(Ok(wrong_source));
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
 
     c.handle_command(AppCommand::RequestRiskOverride);
     c.pump_events();
@@ -9429,14 +9274,7 @@ fn risk_grant_save_failure_never_reaches_authentication_or_signing() {
     let mut fresh = timed_wallet("0:me");
     set_native_balance(&mut fresh, 5_000_000_000);
     fake.set_load_wallet(Ok(fresh));
-    c.session.risk_cooling_started_at = Some(
-        Instant::now()
-            .checked_sub(Duration::from_secs(
-                cc_wallet_chain::RISK_OVERRIDE_COOLING_SECS,
-            ))
-            .unwrap(),
-    );
-    c.refresh_journal_policy();
+    elapse_risk_cooling(&mut c);
     c.handle_command(AppCommand::RequestRiskOverride);
     c.pump_events();
     assert!(c.state().risk_review_open);
@@ -10043,12 +9881,9 @@ fn an_update_queued_during_continuation_advances_then_refreshes_the_head() {
     c.load.fetch_in_flight_id = Some(41);
     c.load.fetch_again = true;
 
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: c.subscription_generation,
         fetch_id: 41,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: true,
         gap: false,
         deepest_lt: Some(500),
@@ -10119,12 +9954,9 @@ fn a_queued_head_refresh_runs_even_when_the_driven_continuation_hits_its_budget(
         request_id: "promised-head-refresh".to_owned(),
     }));
 
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: c.subscription_generation,
         fetch_id: 41,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: true,
         gap: false,
         deepest_lt: Some(CONTINUATION_START_LT),
@@ -10630,12 +10462,9 @@ fn a_clean_resync_does_not_clear_the_durable_quarantine_obligation() {
     c.save_profile();
     assert!(c.dirty, "the change is pending");
 
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: c.subscription_generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: false,
         gap: false,
         deepest_lt: None,
@@ -10665,12 +10494,9 @@ fn a_gapped_resync_does_not_clear_the_corruption_flag() {
     let mut c = unlocked(&dir, WalletProfile::default());
     c.state_mut().history_corrupt = true;
 
-    c.apply_event(AppEvent::TransactionsLoaded {
+    c.apply_event(txs_loaded! {
         generation: c.subscription_generation,
         fetch_id: 0,
-        head_refresh_only: false,
-        events: Vec::new(),
-        integrity_error: None,
         incomplete: true,
         gap: true,
         deepest_lt: None,
@@ -12049,8 +11875,6 @@ fn a_comment_is_cut_to_the_budget_that_is_actually_in_force() {
         "pasting more than fits leaves what fits, not a transfer that cannot be built"
     );
 
-    // Sealing spends part of the budget, so turning it on shortens what is
-    // already there rather than leaving it over the line.
     c.state_mut().recipient_encrypt_key = Some([4u8; 32]);
     c.state_mut().send_form.destination = SEND_DEST.to_owned();
     c.handle_command(AppCommand::SetEncryptComment(true));
@@ -12081,8 +11905,6 @@ fn a_row_no_send_of_ours_was_waiting_on_reports_no_finality() {
     let chain = FakeChain::default();
     let (mut c, _mem) = storage_controller(&dir, chain, vec![stored(1, "one", "a")]);
 
-    // Nothing of ours is on the wire — this row is history the wallet went and
-    // read, or somebody else's transfer arriving.
     assert!(c.session.pending_externals.is_empty());
     c.merge_activity(vec![ActivityEvent {
         direction: ActivityDirection::Out,
@@ -12127,12 +11949,9 @@ fn a_record_reports_the_wait_the_chain_ended_not_how_late_the_index_was() {
         }),
     });
 
-    // The chain speaks, which is where the wait ends. A record has no row on
-    // screen to stop spinning, so the figure is frozen here instead.
     std::thread::sleep(Duration::from_millis(40));
     c.end_external_waits();
 
-    // The endpoint's transaction index takes its time, as it does.
     std::thread::sleep(Duration::from_millis(250));
     c.merge_activity(vec![ActivityEvent {
         direction: ActivityDirection::Out,
@@ -12455,8 +12274,6 @@ fn a_save_in_flight_does_not_add_or_remove_anything_on_the_page() {
     let chain = FakeChain::default();
     let (mut c, _mem) = storage_controller(&dir, chain, vec![stored(1, "one", "a")]);
 
-    // The row that reports progress is always present, so a notice appearing or
-    // clearing can never change the page's layout under the user's cursor.
     let rows_before = c.state().storage.records.len();
     c.handle_command(AppCommand::SetStorageTitle("two".to_owned()));
     c.handle_command(AppCommand::SetStorageData("b".to_owned()));
@@ -12477,8 +12294,6 @@ fn a_result_this_session_cannot_use_still_unlocks_the_form() {
     let (mut c, _mem) = storage_controller(&dir, chain, vec![stored(1, "one", "a")]);
 
     c.state_mut().storage.busy = true;
-    // A generation this session will never match: the result is discarded, but
-    // the page must not stay locked because of it.
     c.apply_event(AppEvent::StorageFinished {
         generation: u64::MAX,
         op: StorageOp::Delete { id: 1 },
@@ -12543,8 +12358,6 @@ fn plain(text: &str) -> ActivityMessage {
     }
 }
 
-/// The fake opens a blob that is valid UTF-8 and shuts on anything else, so
-/// this is a message that will read and one that will not.
 fn sealed(text: &[u8]) -> ActivityMessage {
     ActivityMessage::Sealed {
         sender_key: cc_wallet_domain::PublicKey32::from_bytes([4u8; 32]),
@@ -12562,7 +12375,6 @@ fn a_conversation_is_one_counterpartys_messages_oldest_first() {
         spoken(3, true, SEND_DEST, plain("third")),
         spoken(1, false, SEND_DEST, plain("first")),
         spoken(2, true, other, plain("someone else")),
-        // A transfer with no message at all is not part of any conversation.
         history_event(4, HISTORY_NOW, AssetId::Native),
         spoken(5, false, SEND_DEST, plain("second")),
     ];
@@ -12597,7 +12409,6 @@ fn a_message_just_sent_sits_at_the_end_of_the_thread_not_the_start() {
     let mut c = unlocked_with_fake(&dir, &fake);
     c.state_mut().wallet = Some(timed_wallet("0:me"));
 
-    // What the chain has handed back, with a real ordering number.
     c.state_mut().activity.push(ActivityEvent {
         counterparty: SEND_DEST.to_owned(),
         message: Some(ActivityMessage::Plain {
@@ -12605,8 +12416,6 @@ fn a_message_just_sent_sits_at_the_end_of_the_thread_not_the_start() {
         }),
         ..ActivityEvent::test_stub(9_000_000, 1_700_000_000)
     });
-    // And what we have only just said: no transaction of its own yet, and an
-    // ordering number we invented, which is tiny beside a real one.
     c.state_mut().activity.push(ActivityEvent {
         counterparty: SEND_DEST.to_owned(),
         tx_hash: None,
@@ -12705,11 +12514,6 @@ fn switching_wallets_closes_whatever_was_being_read() {
     cleanup(&dir);
 }
 
-/// Measured on a masterchain wallet on 2026-08-10: MAX with a 32-byte sealed
-/// comment produced an amount the wallet then refused as unaffordable. The
-/// probe priced a bare transfer, but the transfer that goes out carries the
-/// message — and at 80 000 nano a byte in the masterchain, a sealed comment
-/// costs far more than the drift headroom MAX leaves behind.
 #[test]
 fn max_is_priced_against_the_message_it_will_actually_send() {
     let dir = temp_dir("max-with-comment");
@@ -12730,8 +12534,6 @@ fn max_is_priced_against_the_message_it_will_actually_send() {
     c.handle_command(AppCommand::SetMaxAmount);
     assert!(c.state().max_refining, "MAX went out to be priced");
 
-    // The estimate runs on the real runtime, so wait for it to land rather than
-    // racing it.
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     while fake.fee_requests().is_empty() && std::time::Instant::now() < deadline {
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -12824,10 +12626,6 @@ fn a_draft_is_cut_to_what_sealing_leaves_room_for() {
     cleanup(&dir);
 }
 
-/// A conversation is private or it is nothing. An account that publishes no key
-/// cannot be written to privately, and the failure that must never happen is
-/// the quiet one: the message going out in the clear. The plain path is still
-/// there, on the Send form.
 #[test]
 fn a_conversation_will_not_send_to_someone_it_cannot_seal_to() {
     let dir = temp_dir("chat-no-key");
@@ -12876,9 +12674,6 @@ fn a_conversation_will_not_send_to_an_account_that_is_not_there() {
     cleanup(&dir);
 }
 
-/// The peer's key is asked for once when a conversation opens, and the wallet
-/// resubscribing while the question is in flight used to throw the answer away
-/// — leaving the header reading "opening…" for as long as the thread was open.
 #[test]
 fn the_peer_key_answer_survives_the_wallet_resubscribing_under_it() {
     let dir = temp_dir("chat-key-race");
@@ -12938,10 +12733,6 @@ fn an_answer_about_another_conversation_is_ignored() {
     cleanup(&dir);
 }
 
-/// The signing dialog describes the transfer being signed. It used to read the
-/// send form instead, which for a reply written in a conversation held nothing
-/// at all — an empty amount, an unknown recipient, and a confirm button the
-/// gate would not let anyone press.
 #[test]
 fn the_signing_dialog_describes_a_reply_and_not_the_empty_form_behind_it() {
     let dir = temp_dir("chat-dialog");
