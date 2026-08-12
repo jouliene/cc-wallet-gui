@@ -728,7 +728,10 @@ pub(super) fn sync_ui(ui: &AppWindow, state: &AppState, form_locked: bool, cache
     ui.set_chat_can_encrypt(state.chat.peer_key_known);
     ui.set_chat_busy(state.chat.sending || state.sending);
     ui.set_chat_can_send(state.chat.can_send() && !state.sending);
-    if state.chat.open {
+    let chat_day = crate::bridge::render::today_bucket(now);
+    if state.chat.open && (cache.chat_lines != state.chat.lines || cache.chat_day != chat_day) {
+        cache.chat_lines.clone_from(&state.chat.lines);
+        cache.chat_day = chat_day;
         let lines = crate::bridge::render::chat_line_rows(&state.chat.lines, now);
         ui.set_chat_lines(ModelRc::from(Rc::new(VecModel::from(lines))));
     }

@@ -297,6 +297,8 @@ type SwapPoolKey = (Vec<(AssetId, u128)>, AssetId, AssetId);
 #[derive(Default)]
 struct UiCache {
     endpoint: String,
+    chat_lines: Vec<cc_wallet_app::ChatLine>,
+    chat_day: i64,
     assets_key: Option<(AssetId, Vec<AssetId>, Vec<AssetAmount>)>,
     contacts: Vec<AddressBookEntry>,
     contacts_rev: u64,
