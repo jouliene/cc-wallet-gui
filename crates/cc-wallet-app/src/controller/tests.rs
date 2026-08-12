@@ -45,6 +45,17 @@ const TEST_SEED: &str = "one two three four five six seven eight nine ten eleven
 const SECOND_TEST_SEED: &str = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu";
 const SAMPLE_OUTGOING_TX_BOC: &str = "te6ccgECDgEAAlQAA7VwzzhGQlR3sl+wKYzKg5koqj2AnfeL7BBKJsobaROsRBAAAACK7GwwGgcwWFKMa8g66ETBeeRt4c79JAfyFUe1eNHxlXNeOZRQAAAAiuLiyBakn0sQADRwEpVoBQQBAg8MQYYatTzEQAMCAG/JiGRwTBZhFAAAAAAAAgAAAAAAAukK7RGaZSwH/agd9NxiT57Z4ZZD4TbYukvxsWBojuFWQJAVDACdQsXjE4gAAAAAAAAAACFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIACCcmlvgB7nHr8Wj5J+/J0ToF8Kci6qDR5xzygO8/XJyzjVll1zOCkik1erJGrKLt6HZUDMceiBI/DK6YN15z3sWsgCAeAJBgEB3wcCqUgAGecIyEqO9kv2BTGZUHMlFUewE77xfYIJRNlDbSJ1iIMABI0VniXh4eJeYVGVGR1iUWEWHRXR1RUVFVFRVRVRUVFCBhZhNgAAABFdjYYE1JPpYsAIDQAToAAAAAMgU6cRNAFFiAAZ5wjISo72S/YFMZlQcyUVR7ATvvF9gglE2UNtInWIggwKAYBPrqUvmbcaZSAV9NpJvQtZGL5oyDmsSfPGM+LZZZTTIsNYbjZPTk/kv/Rd7cdzaim7GE7CF/+pJHNQ2FjSUZYOCwEggACAAGpJ9O0AAAAVneWKAwwBVYACRorPEvDw8S8wqMqMjrEosIsOiujqioqKqKiqiqioqKAAAAAGQKdOImQNAAA=";
 
+macro_rules! key_ok {
+    ($($field:ident : $value:expr),* $(,)?) => {
+        KeyMsg::Ok {
+            history_corrupt: false,
+            journal: cc_wallet_domain::JournalEnvelope::empty(),
+            selected: None,
+            $($field: $value),*
+        }
+    };
+}
+
 fn fresh_sample_transaction() -> ChainTransaction {
     let mut transaction = parse_transaction_for_test(SAMPLE_OUTGOING_TX_BOC).unwrap();
     transaction.now = u32::try_from(
@@ -225,16 +236,13 @@ fn unlocked(dir: &Path, profile: WalletProfile) -> AppController {
     let mut c = controller(dir);
     let vault = Vault::create_with(PW, CHEAP).unwrap();
     let writer = c.store.writer_for_new().unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: Some(writer),
         generation: c.key_generation(),
         history: Vec::new(),
         action: KeyAction::Create,
-        vault,
-        profile,
+        vault: vault,
+        profile: profile,
     });
     assert!(c.drain_save_task());
     c.save_profile();
@@ -914,15 +922,12 @@ fn create_completion_enters_unlocked_empty_wallet() {
     let mut c = controller(&dir);
     let vault = Vault::create_with(PW, CHEAP).unwrap();
     let writer = c.store.writer_for_new().unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: Some(writer),
         generation: c.key_generation(),
         history: Vec::new(),
         action: KeyAction::Create,
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
     assert_eq!(c.state().phase, AppPhase::Unlocked);
@@ -2188,15 +2193,12 @@ fn change_password_always_reverifies_the_current_password_first() {
     assert!(!c.state().auth.error.is_empty());
 
     let vault = Vault::create_with(PW, CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
         action: KeyAction::VerifyForChangePassword,
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
     assert!(c.state().auth.open);
@@ -2217,15 +2219,12 @@ fn revealing_the_seed_requires_the_password_even_when_unlocked() {
     assert!(!c.state().show_seed);
 
     let vault = Vault::create_with(PW, CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
         action: KeyAction::RevealSeed,
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
     assert!(c.state().show_seed);
@@ -2327,15 +2326,12 @@ fn deleting_the_wallet_requires_the_password_then_returns_to_onboarding() {
     c.state_mut().lock_error = "This wallet uses an unsupported older format".to_owned();
 
     let vault = Vault::create_with(PW, CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
         action: KeyAction::DeleteWallet,
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
     assert!(c.state().seed.is_empty());
@@ -2659,10 +2655,7 @@ fn change_password_completion_keeps_the_session_open() {
     };
     let mut c = unlocked(&dir, profile);
     let new_vault = Vault::create_with(b"brand-new-password", CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
@@ -2685,10 +2678,7 @@ fn change_password_persists_the_new_keyslot_before_reporting_success() {
     };
     let mut c = unlocked(&dir, profile);
     let new_vault = Vault::create_with(b"brand-new-password", CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
@@ -2898,10 +2888,7 @@ fn re_auth_send_opens_the_autosign_window_only_when_remember_is_ticked() {
 
     c.pending_authorization = Some(send_authorization(1, 2));
     let vault = Vault::create_with(PW, CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
@@ -2910,7 +2897,7 @@ fn re_auth_send_opens_the_autosign_window_only_when_remember_is_ticked() {
             auth_generation: 1,
             auth_nonce: 2,
         },
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
     assert!(
@@ -2922,10 +2909,7 @@ fn re_auth_send_opens_the_autosign_window_only_when_remember_is_ticked() {
     c.pending_authorization = Some(send_authorization(3, 4));
     c.state_mut().recipient_check = RecipientCheck::Known(DestinationAccountStatus::Active);
     let vault = Vault::create_with(PW, CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
@@ -2934,7 +2918,7 @@ fn re_auth_send_opens_the_autosign_window_only_when_remember_is_ticked() {
             auth_generation: 3,
             auth_nonce: 4,
         },
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
     assert!(
@@ -4087,15 +4071,12 @@ fn entering_unlocked_clears_every_rust_seed_presentation_flag() {
 
     let vault = Vault::create_with(PW, CHEAP).unwrap();
     let writer = c.store.writer_for_new().unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: Some(writer),
         generation: c.key_generation(),
         history: Vec::new(),
         action: KeyAction::Create,
-        vault,
+        vault: vault,
         profile: WalletProfile {
             seed: test_seed(),
             ..WalletProfile::default()
@@ -5184,12 +5165,9 @@ fn a_key_result_is_single_use() {
     let mut c = unlocked(&dir, WalletProfile::default());
     let generation = c.key_generation();
 
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
-        generation,
+        generation: generation,
         action: KeyAction::ChangePassword,
         vault: Vault::create_with(PW, CHEAP).unwrap(),
         profile: WalletProfile::default(),
@@ -5202,12 +5180,9 @@ fn a_key_result_is_single_use() {
     );
 
     c.state_mut().status = "sentinel".to_owned();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
-        generation,
+        generation: generation,
         action: KeyAction::ChangePassword,
         vault: Vault::create_with(PW, CHEAP).unwrap(),
         profile: WalletProfile::default(),
@@ -5830,15 +5805,12 @@ fn loading_old_only_history_uses_the_conservative_chain_anchor() {
         .collect();
     let vault = Vault::create_with(PW, CHEAP).unwrap();
     let writer = c.store.writer_for_new().unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: Some(writer),
         generation: c.key_generation(),
-        history,
+        history: history,
         action: KeyAction::Unlock,
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
 
@@ -5870,14 +5842,11 @@ fn changing_the_password_revokes_the_autosign_window() {
     assert!(c.state().within_autosign(), "the auto-sign window is open");
 
     let vault = Vault::create_with(b"a-new-password!!", CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         action: KeyAction::ChangePassword,
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
         history: Vec::new(),
     });
@@ -5909,10 +5878,7 @@ fn a_cancelled_change_password_never_touches_the_container() {
     let stale = c.key_generation();
     c.cancel_auth();
     let rekeyed = Vault::create_with(b"a-brand-new-pass", CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: stale,
         action: KeyAction::ChangePassword,
@@ -5942,15 +5908,12 @@ fn a_stale_key_result_is_discarded_after_a_context_switch() {
     assert_ne!(stale, c.key_generation());
 
     let vault = Vault::create_with(PW, CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: stale,
         history: Vec::new(),
         action: KeyAction::DeleteWallet,
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
 
@@ -7256,10 +7219,7 @@ fn stale_authorization_generation_or_nonce_is_consumed_without_sending() {
     let authorization_generation = authorization.generation();
     let stale_nonce = authorization.nonce().wrapping_add(1);
     let vault = Vault::create_with(PW, CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
@@ -7268,7 +7228,7 @@ fn stale_authorization_generation_or_nonce_is_consumed_without_sending() {
             auth_generation: authorization_generation,
             auth_nonce: stale_nonce,
         },
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
 
@@ -7300,10 +7260,7 @@ fn post_auth_send_consumes_only_the_exact_snapshot_not_the_live_form() {
     assert!(c.state().can_afford_send());
 
     let vault = Vault::create_with(PW, CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
@@ -7312,7 +7269,7 @@ fn post_auth_send_consumes_only_the_exact_snapshot_not_the_live_form() {
             auth_generation: authorization_generation,
             auth_nonce: authorization_nonce,
         },
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
     c.pump_events();
@@ -9024,10 +8981,7 @@ fn ambiguous_transfer_can_use_one_durable_exact_duplicate_risk_grant() {
     assert!(!c.state().auth.send_options_editable);
 
     let vault = Vault::create_with(PW, CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
@@ -9036,7 +8990,7 @@ fn ambiguous_transfer_can_use_one_durable_exact_duplicate_risk_grant() {
             auth_generation: authorization_generation,
             auth_nonce: authorization_nonce,
         },
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
     c.pump_events();
@@ -9124,10 +9078,7 @@ fn endpoint_observation_cancels_a_stale_risk_grant_and_releases_the_blocker() {
     assert_eq!(persisted_journal(&dir).risk_events().len(), 1);
 
     let vault = Vault::create_with(PW, CHEAP).unwrap();
-    c.apply_key_msg(KeyMsg::Ok {
-        history_corrupt: false,
-        journal: cc_wallet_domain::JournalEnvelope::empty(),
-        selected: None,
+    c.apply_key_msg(key_ok! {
         writer: None,
         generation: c.key_generation(),
         history: Vec::new(),
@@ -9136,7 +9087,7 @@ fn endpoint_observation_cancels_a_stale_risk_grant_and_releases_the_blocker() {
             auth_generation: authorization_generation,
             auth_nonce: authorization_nonce,
         },
-        vault,
+        vault: vault,
         profile: WalletProfile::default(),
     });
     assert!(c.state().sending);
