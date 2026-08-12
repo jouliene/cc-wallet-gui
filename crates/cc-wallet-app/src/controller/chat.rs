@@ -134,13 +134,8 @@ impl AppController {
         let chain = self.chain.clone();
         let tx = self.tx.clone();
         self.runtime.spawn(async move {
-            let report = tokio::time::timeout(
-                std::time::Duration::from_secs(12),
-                chain.check_destination(&inputs, peer.clone()),
-            )
-            .await
-            .ok()
-            .and_then(Result::ok);
+            let report =
+                super::broadcast::probe_destination(chain.as_ref(), &inputs, peer.clone()).await;
             let _ = tx.send(crate::event::AppEvent::ChatPeerKeyLoaded { seq, peer, report });
         });
     }

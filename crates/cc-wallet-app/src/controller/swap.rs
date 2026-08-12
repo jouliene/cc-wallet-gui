@@ -1,3 +1,4 @@
+use super::broadcast::{broadcast_reached_node, outcome_detail};
 use std::time::Instant;
 
 use cc_wallet_chain::{CandidateBroadcastOutcome, ChainError, PoolSnapshot};
@@ -470,22 +471,6 @@ async fn broadcast_all_candidates(
 
 fn settled_direction(event: &ActivityEvent, direction: ActivityDirection) -> bool {
     event.tx_hash.is_some() && event.direction == direction
-}
-
-fn broadcast_reached_node(outcome: &CandidateBroadcastOutcome) -> bool {
-    matches!(
-        outcome,
-        CandidateBroadcastOutcome::NodeResponseObserved { .. }
-            | CandidateBroadcastOutcome::MayHaveBroadcast { .. }
-    )
-}
-
-fn outcome_detail(outcome: &CandidateBroadcastOutcome) -> String {
-    match outcome {
-        CandidateBroadcastOutcome::NotTransmitted { detail, .. }
-        | CandidateBroadcastOutcome::MayHaveBroadcast { detail }
-        | CandidateBroadcastOutcome::NodeResponseObserved { detail, .. } => detail.clone(),
-    }
 }
 
 fn send_token(asset: AssetId) -> cc_wallet_domain::SendToken {

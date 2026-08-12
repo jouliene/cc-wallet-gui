@@ -1,3 +1,4 @@
+mod broadcast;
 mod chat;
 mod contacts;
 mod endpoints;

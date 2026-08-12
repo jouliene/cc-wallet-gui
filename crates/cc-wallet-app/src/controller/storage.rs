@@ -1,3 +1,4 @@
+use super::broadcast::{broadcast_reached_node, outcome_detail};
 use std::time::{Duration, Instant};
 
 use cc_wallet_chain::{CandidateBroadcastOutcome, ChainError, MAX_STORAGE_RECORDS};
@@ -434,20 +435,4 @@ async fn broadcast_all_candidates(
         }
     }
     Ok(last.expect("at least one candidate was attempted"))
-}
-
-fn broadcast_reached_node(outcome: &CandidateBroadcastOutcome) -> bool {
-    matches!(
-        outcome,
-        CandidateBroadcastOutcome::NodeResponseObserved { .. }
-            | CandidateBroadcastOutcome::MayHaveBroadcast { .. }
-    )
-}
-
-fn outcome_detail(outcome: &CandidateBroadcastOutcome) -> String {
-    match outcome {
-        CandidateBroadcastOutcome::NotTransmitted { detail, .. }
-        | CandidateBroadcastOutcome::MayHaveBroadcast { detail }
-        | CandidateBroadcastOutcome::NodeResponseObserved { detail, .. } => detail.clone(),
-    }
 }
