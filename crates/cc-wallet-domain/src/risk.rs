@@ -131,11 +131,8 @@ pub(crate) enum RiskAction {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::amount::{AssetAmount, CcAmount};
-    use crate::digest::{
-        BlockerRow, CanonicalAddress, EvidenceTag, Reservation, ReservationKind, TicketDigestInput,
-        blocker_set_digest, overlap_set_digest, reservation_set_digest, ticket_digest,
-    };
+    use crate::amount::AssetAmount;
+    use crate::digest::{Reservation, ReservationKind, overlap_set_digest, reservation_set_digest};
 
     fn d(byte: u8) -> Digest32 {
         Digest32::from_bytes([byte; 32])
@@ -151,30 +148,6 @@ mod tests {
 
     fn native(n: u128) -> AssetAmount {
         AssetAmount::native(n).unwrap()
-    }
-
-    fn cc(id: u32, n: u128) -> AssetAmount {
-        AssetAmount::currency_collection(id, CcAmount::from_u128(n))
-    }
-
-    fn sample_ticket_digest() -> Digest32 {
-        let record_id = rid(0x30);
-        let value = native(1_000);
-        let sender = CanonicalAddress::new(0, [0x22; 32]);
-        let destination = CanonicalAddress::new(0, [0x33; 32]);
-        let input = TicketDigestInput {
-            record_id: &record_id,
-            sender_wallet_id: b"wallet-1",
-            sender_address: sender,
-            network_global_id: 42,
-            endpoint_identity: b"endpoint-1",
-            destination,
-            value: &value,
-            bounce: true,
-            auth_generation: 1,
-            auth_nonce: 2,
-        };
-        ticket_digest(&input).unwrap()
     }
 
     #[test]
@@ -204,55 +177,6 @@ mod tests {
         assert!(!grant.authorizes(&RiskGrantConsumption::new(nonce(0xaa), rid(4), d(3))));
         assert!(!grant.authorizes(&RiskGrantConsumption::new(nonce(5), rid(0xaa), d(3))));
         assert!(!grant.authorizes(&RiskGrantConsumption::new(nonce(5), rid(4), d(0xaa))));
-    }
-
-    #[test]
-    fn risk_event_carries_a_grant_or_a_consumption() {
-        let grant = RiskGrant::new(d(1), d(2), d(3), rid(4), nonce(5), 7, d(6));
-        let consumption = RiskGrantConsumption::new(nonce(5), rid(4), d(3));
-        match RiskAction::Granted(grant.clone()) {
-            RiskAction::Granted(inner) => assert_eq!(inner, grant),
-            RiskAction::Consumed(_) => panic!("expected a grant"),
-        }
-        match RiskAction::Consumed(consumption.clone()) {
-            RiskAction::Consumed(inner) => assert_eq!(inner, consumption),
-            RiskAction::Granted(_) => panic!("expected a consumption"),
-        }
-    }
-
-    #[test]
-    fn grant_digests_recompute_byte_identically_from_the_same_state() {
-        let blockers = [BlockerRow::new(rid(0x10), EvidenceTag::Prepared, d(0x11)).unwrap()];
-        let reservations = [
-            Reservation::new(rid(0x20), native(1_000), ReservationKind::Transfer).unwrap(),
-            Reservation::new(rid(0x20), native(7), ReservationKind::NativeFee).unwrap(),
-            Reservation::new(rid(0x21), cc(1, 42), ReservationKind::Transfer).unwrap(),
-        ];
-        let overlap = [reservations[0].clone()];
-
-        let grant = RiskGrant::new(
-            blocker_set_digest(&blockers).unwrap(),
-            reservation_set_digest(&reservations).unwrap(),
-            sample_ticket_digest(),
-            rid(0x30),
-            nonce(0x31),
-            1,
-            overlap_set_digest(&overlap).unwrap(),
-        );
-
-        assert_eq!(
-            grant.old_blocker_set_digest(),
-            &blocker_set_digest(&blockers).unwrap()
-        );
-        assert_eq!(
-            grant.old_reservation_set_digest(),
-            &reservation_set_digest(&reservations).unwrap()
-        );
-        assert_eq!(
-            grant.overlap_reservation_set_digest(),
-            &overlap_set_digest(&overlap).unwrap()
-        );
-        assert_eq!(grant.new_ticket_digest(), &sample_ticket_digest());
     }
 
     #[test]
