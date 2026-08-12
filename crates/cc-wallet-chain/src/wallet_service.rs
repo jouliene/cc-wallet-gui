@@ -853,16 +853,27 @@ impl TychoWalletService {
             .to_string();
         let peer = canonicalize_recipient(peer).map_err(ChainError::invalid_input)?;
 
+        let outgoing_aad = comment_aad(&me, &peer);
+        let incoming_aad = comment_aad(&peer, &me);
+        let mut secrets: Vec<([u8; 32], Zeroizing<[u8; 32]>)> = Vec::new();
+
         Ok(sealed
             .iter()
             .map(|comment| {
                 let (their_key, aad) = if comment.outgoing {
-                    (peer_key?, comment_aad(&me, &peer))
+                    (peer_key?, &outgoing_aad)
                 } else {
-                    (comment.sender_key, comment_aad(&peer, &me))
+                    (comment.sender_key, &incoming_aad)
                 };
-                let secret = keys.comment_secret_for(their_key).ok()?;
-                let plain = open_record(&secret, &aad, comment.blob).ok()?;
+                let secret = match secrets.iter().find(|(key, _)| key == their_key) {
+                    Some((_, secret)) => secret.clone(),
+                    None => {
+                        let secret = keys.comment_secret_for(their_key).ok()?;
+                        secrets.push((*their_key, secret.clone()));
+                        secret
+                    }
+                };
+                let plain = open_record(&secret, aad, comment.blob).ok()?;
                 String::from_utf8(plain.to_vec()).ok()
             })
             .collect())
