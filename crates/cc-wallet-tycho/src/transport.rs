@@ -1060,10 +1060,11 @@ where
         bail!("JRPC error for `{method}`: {error}");
     }
 
-    let result = value
-        .get("result")
-        .cloned()
-        .ok_or_else(|| anyhow!("missing `result` field in JRPC response for `{method}`"))?;
+    let result = match value {
+        Value::Object(mut map) => map.remove("result"),
+        _ => None,
+    }
+    .ok_or_else(|| anyhow!("missing `result` field in JRPC response for `{method}`"))?;
 
     serde_json::from_value(result)
         .with_context(|| format!("failed to deserialize result for `{method}`"))

@@ -101,15 +101,22 @@ fn amount_to_biguint(amount: &AssetAmount) -> BigUint {
 }
 
 fn biguint_to_amount(value: &BigUint, asset: &AssetId) -> Option<AssetAmount> {
-    let decimal = value.to_str_radix(10);
     match asset {
-        AssetId::Native => decimal
-            .parse::<u128>()
+        AssetId::Native => u128::try_from(value)
             .ok()
             .and_then(|units| AssetAmount::native(units).ok()),
-        AssetId::CurrencyCollection(id) => CcAmount::try_from_canonical_decimal(&decimal)
-            .ok()
-            .map(|units| AssetAmount::currency_collection(*id, units)),
+        AssetId::CurrencyCollection(id) => {
+            let raw = value.to_bytes_be();
+            if raw.len() > 31 {
+                return None;
+            }
+            let mut out = [0u8; 31];
+            out[31 - raw.len()..].copy_from_slice(&raw);
+            Some(AssetAmount::currency_collection(
+                *id,
+                CcAmount::from_be_bytes_31(&out),
+            ))
+        }
     }
 }
 
@@ -241,6 +248,47 @@ pub fn evaluate_affordability(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn biguint_to_amount_matches_the_decimal_round_trip_it_replaced() {
+        fn reference(value: &BigUint, asset: &AssetId) -> Option<AssetAmount> {
+            let decimal = value.to_str_radix(10);
+            match asset {
+                AssetId::Native => decimal
+                    .parse::<u128>()
+                    .ok()
+                    .and_then(|units| AssetAmount::native(units).ok()),
+                AssetId::CurrencyCollection(id) => CcAmount::try_from_canonical_decimal(&decimal)
+                    .ok()
+                    .map(|units| AssetAmount::currency_collection(*id, units)),
+            }
+        }
+
+        let mut corpus = vec![
+            BigUint::from(0u8),
+            BigUint::from(1u8),
+            BigUint::from(9u8),
+            BigUint::from(u64::MAX),
+            BigUint::from(u128::MAX),
+            BigUint::from(crate::NATIVE_MAX_UNITS),
+            BigUint::from(crate::NATIVE_MAX_UNITS) + 1u8,
+        ];
+        for bits in [120u32, 127, 128, 247, 248, 249, 255, 256, 300] {
+            let base = BigUint::from(1u8) << bits;
+            corpus.push(base.clone() - 1u8);
+            corpus.push(base.clone());
+            corpus.push(base + 1u8);
+        }
+        for value in &corpus {
+            for asset in [AssetId::Native, AssetId::CurrencyCollection(7)] {
+                assert_eq!(
+                    biguint_to_amount(value, &asset),
+                    reference(value, &asset),
+                    "value {value} for {asset:?}"
+                );
+            }
+        }
+    }
     use super::*;
     use crate::amount::NATIVE_MAX_UNITS;
     use crate::digest::ReservationKind;
