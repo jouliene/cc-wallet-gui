@@ -1438,85 +1438,36 @@ mod helper_tests {
         );
     }
 
-    fn ui_sources() -> Vec<(&'static str, &'static str)> {
-        vec![
-            ("app.slint", include_str!("../../ui/app.slint")),
-            ("theme.slint", include_str!("../../ui/theme.slint")),
-            ("widgets.slint", include_str!("../../ui/widgets.slint")),
-            ("models.slint", include_str!("../../ui/models.slint")),
-            (
-                "components/auth_modal.slint",
-                include_str!("../../ui/components/auth_modal.slint"),
-            ),
-            (
-                "components/brand_mark.slint",
-                include_str!("../../ui/components/brand_mark.slint"),
-            ),
-            (
-                "components/lock_screen.slint",
-                include_str!("../../ui/components/lock_screen.slint"),
-            ),
-            (
-                "components/risk_modal.slint",
-                include_str!("../../ui/components/risk_modal.slint"),
-            ),
-            (
-                "components/top_nav.slint",
-                include_str!("../../ui/components/top_nav.slint"),
-            ),
-            (
-                "components/trace_diagram.slint",
-                include_str!("../../ui/components/trace_diagram.slint"),
-            ),
-            (
-                "components/validator_clock.slint",
-                include_str!("../../ui/components/validator_clock.slint"),
-            ),
-            (
-                "components/wallet_picker.slint",
-                include_str!("../../ui/components/wallet_picker.slint"),
-            ),
-            (
-                "pages/contacts_components.slint",
-                include_str!("../../ui/pages/contacts_components.slint"),
-            ),
-            (
-                "pages/contacts_page.slint",
-                include_str!("../../ui/pages/contacts_page.slint"),
-            ),
-            (
-                "pages/explorer_page.slint",
-                include_str!("../../ui/pages/explorer_page.slint"),
-            ),
-            (
-                "pages/settings_components.slint",
-                include_str!("../../ui/pages/settings_components.slint"),
-            ),
-            (
-                "pages/settings_page.slint",
-                include_str!("../../ui/pages/settings_page.slint"),
-            ),
-            (
-                "pages/swap_page.slint",
-                include_str!("../../ui/pages/swap_page.slint"),
-            ),
-            (
-                "pages/wallet_components.slint",
-                include_str!("../../ui/pages/wallet_components.slint"),
-            ),
-            (
-                "pages/wallet_menus.slint",
-                include_str!("../../ui/pages/wallet_menus.slint"),
-            ),
-            (
-                "pages/wallet_page.slint",
-                include_str!("../../ui/pages/wallet_page.slint"),
-            ),
-            (
-                "pages/wallet_sections.slint",
-                include_str!("../../ui/pages/wallet_sections.slint"),
-            ),
-        ]
+    macro_rules! ui_sources {
+        ($($path:literal),* $(,)?) => {
+            fn ui_sources() -> Vec<(&'static str, &'static str)> {
+                vec![$(($path, include_str!(concat!("../../ui/", $path)))),*]
+            }
+        };
+    }
+    ui_sources! {
+        "app.slint",
+        "theme.slint",
+        "widgets.slint",
+        "models.slint",
+        "components/auth_modal.slint",
+        "components/brand_mark.slint",
+        "components/lock_screen.slint",
+        "components/risk_modal.slint",
+        "components/top_nav.slint",
+        "components/trace_diagram.slint",
+        "components/validator_clock.slint",
+        "components/wallet_picker.slint",
+        "pages/contacts_components.slint",
+        "pages/contacts_page.slint",
+        "pages/explorer_page.slint",
+        "pages/settings_components.slint",
+        "pages/settings_page.slint",
+        "pages/swap_page.slint",
+        "pages/wallet_components.slint",
+        "pages/wallet_menus.slint",
+        "pages/wallet_page.slint",
+        "pages/wallet_sections.slint"
     }
 
     #[test]
