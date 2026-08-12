@@ -6,7 +6,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use tycho_types::boc::Boc;
 use tycho_types::models::{
     BouncePhase, ComputePhase, ComputePhaseSkipReason, ExtraCurrencyCollection, MsgInfo,
-    OwnedMessage, StateInit, Transaction, TxInfo,
+    OwnedMessage, Transaction, TxInfo,
 };
 use tycho_types::prelude::*;
 
@@ -32,10 +32,7 @@ pub struct ChainMessage {
     pub bounced: bool,
     pub created_lt: u64,
     pub created_at: u32,
-    pub state_init: Option<StateInit>,
-    pub state_init_hash: Option<String>,
     pub body: Cell,
-    pub body_boc_base64: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -174,16 +171,6 @@ fn parse_message(cell: &Cell) -> Result<ChainMessage> {
     let message = OwnedMessage::load_from(&mut slice).context("failed to parse message")?;
     let body_slice = CellSlice::apply(&message.body).context("failed to read message body")?;
     let body = CellBuilder::build_from(body_slice).context("failed to materialize message body")?;
-    let body_boc_base64 = Boc::encode_base64(&body);
-    let state_init = message.init.clone();
-    let state_init_hash = state_init
-        .as_ref()
-        .map(|state_init| {
-            CellBuilder::build_from(state_init)
-                .map(|cell| cell.repr_hash().to_string())
-                .context("failed to materialize message state init")
-        })
-        .transpose()?;
 
     Ok(match message.info {
         MsgInfo::Int(info) => ChainMessage {
@@ -198,10 +185,7 @@ fn parse_message(cell: &Cell) -> Result<ChainMessage> {
             bounced: info.bounced,
             created_lt: info.created_lt,
             created_at: info.created_at,
-            state_init,
-            state_init_hash,
             body,
-            body_boc_base64,
         },
         MsgInfo::ExtIn(info) => ChainMessage {
             kind: MsgKind::ExtIn,
@@ -215,10 +199,7 @@ fn parse_message(cell: &Cell) -> Result<ChainMessage> {
             bounced: false,
             created_lt: 0,
             created_at: 0,
-            state_init,
-            state_init_hash,
             body,
-            body_boc_base64,
         },
         MsgInfo::ExtOut(info) => ChainMessage {
             kind: MsgKind::ExtOut,
@@ -232,10 +213,7 @@ fn parse_message(cell: &Cell) -> Result<ChainMessage> {
             bounced: false,
             created_lt: info.created_lt,
             created_at: info.created_at,
-            state_init,
-            state_init_hash,
             body,
-            body_boc_base64,
         },
     })
 }
@@ -255,8 +233,7 @@ pub(crate) fn extra_currencies_to_strings(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tycho_types::dict::Dict;
-    use tycho_types::models::{IntAddr, IntMsgInfo, StateInit, StdAddr};
+
     use tycho_types::num::VarUint248;
 
     const SAMPLE_TX: &str = "te6ccgECDgEAAlQAA7VwzzhGQlR3sl+wKYzKg5koqj2AnfeL7BBKJsobaROsRBAAAACK7GwwGgcwWFKMa8g66ETBeeRt4c79JAfyFUe1eNHxlXNeOZRQAAAAiuLiyBakn0sQADRwEpVoBQQBAg8MQYYatTzEQAMCAG/JiGRwTBZhFAAAAAAAAgAAAAAAAukK7RGaZSwH/agd9NxiT57Z4ZZD4TbYukvxsWBojuFWQJAVDACdQsXjE4gAAAAAAAAAACFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIACCcmlvgB7nHr8Wj5J+/J0ToF8Kci6qDR5xzygO8/XJyzjVll1zOCkik1erJGrKLt6HZUDMceiBI/DK6YN15z3sWsgCAeAJBgEB3wcCqUgAGecIyEqO9kv2BTGZUHMlFUewE77xfYIJRNlDbSJ1iIMABI0VniXh4eJeYVGVGR1iUWEWHRXR1RUVFVFRVRVRUVFCBhZhNgAAABFdjYYE1JPpYsAIDQAToAAAAAMgU6cRNAFFiAAZ5wjISo72S/YFMZlQcyUVR7ATvvF9gglE2UNtInWIggwKAYBPrqUvmbcaZSAV9NpJvQtZGL5oyDmsSfPGM+LZZZTTIsNYbjZPTk/kv/Rd7cdzaim7GE7CF/+pJHNQ2FjSUZYOCwEggACAAGpJ9O0AAAAVneWKAwwBVYACRorPEvDw8S8wqMqMjrEosIsOiujqioqKqKiqiqioqKAAAAAGQKdOImQNAAA=";
@@ -295,12 +272,6 @@ mod tests {
             out.value_extra.contains_key(&3),
             "carries extra-currency id 3"
         );
-        assert_eq!(
-            Boc::decode_base64(&out.body_boc_base64)
-                .expect("body BOC")
-                .repr_hash(),
-            out.body.repr_hash()
-        );
         assert_eq!(tx.action_success, Some(true));
         assert_eq!(tx.action_result_code, Some(0));
         assert!(!tx.compute_skipped);
@@ -328,38 +299,6 @@ mod tests {
         assert!(
             error.to_string().contains("extra-currency"),
             "the error names the extra-currency context, got: {error}"
-        );
-    }
-
-    #[test]
-    fn parsed_message_retains_state_init_and_its_hash() {
-        let state_init = StateInit {
-            split_depth: None,
-            special: None,
-            code: Some(CellBuilder::build_from(0x11_u8).unwrap()),
-            data: Some(CellBuilder::build_from(0x22_u8).unwrap()),
-            libraries: Dict::new(),
-        };
-        let expected_hash = CellBuilder::build_from(&state_init)
-            .unwrap()
-            .repr_hash()
-            .to_string();
-        let cell = CellBuilder::build_from(OwnedMessage {
-            info: MsgInfo::Int(IntMsgInfo {
-                src: IntAddr::Std(StdAddr::new(0, HashBytes([0x11; 32]))),
-                dst: IntAddr::Std(StdAddr::new(0, HashBytes([0x22; 32]))),
-                ..Default::default()
-            }),
-            init: Some(state_init.clone()),
-            body: Cell::default().into(),
-            layout: None,
-        })
-        .unwrap();
-        let parsed = parse_message(&cell).unwrap();
-        assert_eq!(parsed.state_init, Some(state_init));
-        assert_eq!(
-            parsed.state_init_hash.as_deref(),
-            Some(expected_hash.as_str())
         );
     }
 }

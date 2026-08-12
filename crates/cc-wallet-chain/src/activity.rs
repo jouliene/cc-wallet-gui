@@ -206,10 +206,7 @@ mod tests {
             bounced: false,
             created_lt: 1,
             created_at: 1,
-            state_init: None,
-            state_init_hash: None,
             body: Cell::default(),
-            body_boc_base64: String::new(),
         }
     }
 
