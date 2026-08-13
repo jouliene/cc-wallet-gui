@@ -78,14 +78,14 @@ export component AuthModal inherits Rectangle {
             || (root.recipient_needs_ack && root.allow_unbounced));
 
     background: Elevation.scrim;
-    TouchArea { clicked => { if (root.purpose != "seedsetup") { root.cancel(); } } }
+    TouchArea { clicked => { root.cancel(); } }
 
     keys := FocusScope {
         width: 100%;
         height: 100%;
         init => { if (root.mode == "confirm") { self.focus(); } }
         key-pressed(event) => {
-            if (event.text == Key.Escape && root.purpose != "seedsetup") {
+            if (event.text == Key.Escape) {
                 root.cancel();
                 return accept;
             }
@@ -349,7 +349,7 @@ export component AuthModal inherits Rectangle {
                         pad_right: 38px;
                         init => { self.focus(); }
                         handles_escape: true;
-                        escape_pressed => { if (root.purpose != "seedsetup") { root.cancel(); } }
+                        escape_pressed => { root.cancel(); }
                         accepted => { if (root.can_submit) { root.submit(); } }
                     }
                     IconButton {
@@ -376,7 +376,7 @@ export component AuthModal inherits Rectangle {
                         placeholder: "••••••••";
                         pad_right: 38px;
                         handles_escape: true;
-                        escape_pressed => { if (root.purpose != "seedsetup") { root.cancel(); } }
+                        escape_pressed => { root.cancel(); }
                         accepted => { if (root.can_submit) { root.submit(); } }
                     }
                     IconButton {

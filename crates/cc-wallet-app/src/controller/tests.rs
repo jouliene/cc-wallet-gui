@@ -1126,7 +1126,6 @@ fn command_freeze_classifiers_match_the_documented_denylists() {
             false,
             false,
         ),
-        ("SaveSeed", SaveSeed(seed_input("x")), true, true),
         ("ImportSeed", ImportSeed(seed_input("x")), true, true),
         ("UseSeed", UseSeed, true, true),
         ("DiscardSeed", DiscardSeed, true, false),
@@ -1296,18 +1295,18 @@ fn command_freeze_classifiers_match_the_documented_denylists() {
 
     assert_eq!(
         cases.len(),
-        79,
-        "all 79 AppCommand variants are classified here; add the row when the enum grows"
+        78,
+        "all 78 AppCommand variants are classified here; add the row when the enum grows"
     );
     assert_eq!(
         cases.iter().filter(|(_, _, f, _)| *f).count(),
-        38,
-        "the authorization-snapshot freeze list has exactly 38 commands"
+        37,
+        "the authorization-snapshot freeze list has exactly 37 commands"
     );
     assert_eq!(
         cases.iter().filter(|(_, _, _, i)| *i).count(),
-        6,
-        "the identity freeze list has exactly 6 commands"
+        5,
+        "the identity freeze list has exactly 5 commands"
     );
     for (label, command, frozen, identity) in &cases {
         assert_eq!(
@@ -1595,7 +1594,7 @@ fn settings_seed_save_registers_and_clears_a_pasted_phrase() {
     let phrase = generated_seed_phrase();
     mem.board.borrow_mut().clipboard = phrase.clone();
 
-    c.handle_command(AppCommand::SaveSeed(seed_input(phrase)));
+    c.handle_command(AppCommand::ImportSeed(seed_input(phrase)));
 
     assert_eq!(
         clipboard_of(&mem),
@@ -4132,7 +4131,7 @@ fn replacing_the_seed_drops_the_old_wallets_fee_estimate() {
     });
     assert!(c.state().fee_estimate.is_some());
 
-    c.handle_command(AppCommand::SaveSeed(seed_input(TEST_SEED)));
+    c.handle_command(AppCommand::ImportSeed(seed_input(TEST_SEED)));
     assert_eq!(c.state().fee_estimate, None);
     cleanup(&dir);
 }
@@ -6877,7 +6876,7 @@ fn activating_a_new_seed_clears_the_chain_key_cache() {
     let mut c = unlocked_with_fake(&dir, &fake);
     let before = fake.clear_config_cache_calls();
 
-    c.handle_command(AppCommand::SaveSeed(seed_input(TEST_SEED)));
+    c.handle_command(AppCommand::ImportSeed(seed_input(TEST_SEED)));
 
     assert!(
         fake.clear_config_cache_calls() > before,
@@ -6968,7 +6967,7 @@ fn pending_authorization_busy_gates_every_value_and_network_control() {
     for command in [
         AppCommand::QuickSend(OTHER_DEST.to_owned()),
         AppCommand::GenerateSeed,
-        AppCommand::SaveSeed(seed_input(TEST_SEED)),
+        AppCommand::ImportSeed(seed_input(TEST_SEED)),
         AppCommand::ImportSeed(seed_input(TEST_SEED)),
         AppCommand::UseSeed,
         AppCommand::DiscardSeed,
@@ -12505,7 +12504,7 @@ fn switching_wallets_closes_whatever_was_being_read() {
     c.handle_command(AppCommand::OpenChat(SEND_DEST.to_owned()));
     assert!(c.state().chat.open);
 
-    c.handle_command(AppCommand::SaveSeed(seed_input(TEST_SEED)));
+    c.handle_command(AppCommand::ImportSeed(seed_input(TEST_SEED)));
 
     assert!(
         !c.state().chat.open,
