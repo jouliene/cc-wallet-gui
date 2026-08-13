@@ -680,7 +680,6 @@ impl AppController {
                 }
             }
             AppCommand::GenerateSeed => self.generate_seed(),
-            AppCommand::SaveSeed(seed) => self.save_seed(seed),
             AppCommand::ImportSeed(seed) => self.save_seed(seed),
             AppCommand::UseSeed => self.use_seed(),
             AppCommand::DiscardSeed => self.discard_seed(),
@@ -1794,7 +1793,10 @@ impl AppController {
                 self.pending_security_setting = None;
                 self.apply_security_setting(setting);
             }
-            _ => {}
+            KeyAction::Unlock
+            | KeyAction::Create
+            | KeyAction::ChangePassword
+            | KeyAction::DeleteWalletFromPicker => {}
         }
     }
 

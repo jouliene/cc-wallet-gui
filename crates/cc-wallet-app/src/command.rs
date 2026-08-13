@@ -119,7 +119,6 @@ pub enum AppCommand {
     GenerateSeed,
     OnboardImportSeed(SeedInput),
     SetSeedBackupConfirmed(bool),
-    SaveSeed(SeedInput),
     ImportSeed(SeedInput),
     UseSeed,
     DiscardSeed,
@@ -221,7 +220,6 @@ impl AppCommand {
     fn gate(&self) -> CommandGate {
         match self {
             Self::GenerateSeed
-            | Self::SaveSeed(_)
             | Self::ImportSeed(_)
             | Self::UseSeed
             | Self::SelectEndpoint(_)

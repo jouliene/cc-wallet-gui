@@ -38,10 +38,6 @@ pub fn generate_seed_phrase() -> Result<SeedInput, String> {
         .map_err(|error| error.to_string())
 }
 
-pub fn endpoint_is_valid(endpoint: &str) -> bool {
-    canonical_endpoint(endpoint).is_ok()
-}
-
 pub fn canonical_endpoint(endpoint: &str) -> Result<String, String> {
     cc_wallet_chain::canonicalize_endpoint(endpoint)
         .map(|url| url.to_string())

@@ -37,7 +37,10 @@ export component SettingsPage inherits VerticalLayout {
     callback remove_endpoint(string);
     callback add_endpoint(string);
     callback test_endpoint(string);
+    pure callback endpoint_problem(string) -> string;
     property <string> new_endpoint: "";
+    property <string> new_endpoint_problem: root.new_endpoint == "" ? "" : root.endpoint_problem(root.new_endpoint);
+    property <bool> new_endpoint_valid: root.new_endpoint != "" && root.new_endpoint_problem == "";
     callback import_edited();
     callback import_submit();
     callback distribute_seed(string) -> [string];
@@ -117,10 +120,16 @@ export component SettingsPage inherits VerticalLayout {
                         horizontal-stretch: 1;
                         placeholder: "Add new endpoint";
                         text <=> root.new_endpoint;
-                        accepted => { if (root.new_endpoint != "") { root.add_endpoint(root.new_endpoint); root.new_endpoint = ""; } }
+                        accepted => { if (root.new_endpoint_valid) { root.add_endpoint(root.new_endpoint); root.new_endpoint = ""; } }
                     }
-                    GhostButton { label: "Test"; height_: Theme.field_h; radius: Radii.md; pad_h: 18px; enabled: root.new_endpoint != ""; clicked => { root.test_endpoint(root.new_endpoint); } }
-                    PrimaryButton { label: "Add"; height_: Theme.field_h; enabled: root.new_endpoint != ""; clicked => { root.add_endpoint(root.new_endpoint); root.new_endpoint = ""; } }
+                    GhostButton { label: "Test"; height_: Theme.field_h; radius: Radii.md; pad_h: 18px; enabled: root.new_endpoint_valid; clicked => { root.test_endpoint(root.new_endpoint); } }
+                    PrimaryButton { label: "Add"; height_: Theme.field_h; enabled: root.new_endpoint_valid; clicked => { root.add_endpoint(root.new_endpoint); root.new_endpoint = ""; } }
+                }
+                Rectangle {
+                    height: 18px;
+                    if root.new_endpoint_problem != "": InlineError {
+                        text: root.new_endpoint_problem;
+                    }
                 }
                 if root.endpoint_test_result != "" : Text {
                     text: root.endpoint_test_result;
