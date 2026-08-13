@@ -1381,7 +1381,7 @@ fn endpoint_registry_add_select_remove_and_test_verdicts() {
         "no plaintext networks.json is ever written"
     );
 
-    assert!(!crate::endpoint_is_valid("http://has spaces"));
+    assert!(crate::canonical_endpoint("http://has spaces").is_err());
     c.handle_command(AppCommand::AddEndpoint("http://has spaces".to_owned()));
     assert_eq!(c.state().endpoint_display_list().len(), start_len + 1);
     assert!(!c.state().endpoint_test_result.is_empty());

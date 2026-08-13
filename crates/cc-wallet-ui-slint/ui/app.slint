@@ -314,7 +314,7 @@ export component AppWindow inherits Window {
     pure callback matching_contact_count(string) -> int;
     pure callback contact_search_rank(int, string, int) -> int;
     callback contact_conflict(int, string, string) -> string;
-    callback endpoint_is_valid(string) -> bool;
+    pure callback endpoint_problem(string) -> string;
     callback reveal_seed();
     callback hide_seed();
     callback copy_seed(string);
@@ -649,6 +649,7 @@ export component AppWindow inherits Window {
                 remove_endpoint(u) => { root.remove_endpoint(u); }
                 add_endpoint(u) => { root.add_endpoint(u); }
                 test_endpoint(u) => { root.test_endpoint(u); }
+                endpoint_problem(u) => { root.endpoint_problem(u) }
                 seed_words: root.seed_words;
                 seed_text: root.seed_text;
                 seed_saved: root.seed_saved;

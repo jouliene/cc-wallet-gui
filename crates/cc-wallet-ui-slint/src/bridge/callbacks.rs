@@ -355,7 +355,12 @@ pub(super) fn connect_callbacks(
         });
     }
 
-    ui.on_endpoint_is_valid(move |e| cc_wallet_app::endpoint_is_valid(&e));
+    ui.on_endpoint_problem(move |e| {
+        cc_wallet_app::canonical_endpoint(&e)
+            .err()
+            .unwrap_or_default()
+            .into()
+    });
     on0!(on_reveal_seed, AppCommand::RevealSeed);
     on0!(on_hide_seed, AppCommand::HideSeed);
     on1!(
@@ -1144,16 +1149,26 @@ mod tests {
     fn endpoint_add_gate_and_typographic_minus() {
         let settings = include_str!("../../ui/pages/settings_page.slint");
         assert!(
-            settings.contains("accepted => { if (root.new_endpoint != \"\")"),
-            "the endpoint Field gates Enter-submit on a non-empty value"
+            settings.contains("root.endpoint_problem(root.new_endpoint)"),
+            "the endpoint form asks the domain what is wrong with the address"
         );
-        let test_btn = settings
-            .find("label: \"Test\"")
-            .expect("the Test button exists");
         assert!(
-            settings[test_btn..(test_btn + 160).min(settings.len())]
-                .contains("enabled: root.new_endpoint != \"\""),
-            "the Test button is disabled while the endpoint field is empty"
+            settings.contains("accepted => { if (root.new_endpoint_valid)"),
+            "the endpoint Field gates Enter-submit on a usable address"
+        );
+        for label in ["Test", "Add"] {
+            let button = settings
+                .find(&format!("label: \"{label}\""))
+                .unwrap_or_else(|| panic!("the {label} button exists"));
+            assert!(
+                settings[button..(button + 160).min(settings.len())]
+                    .contains("enabled: root.new_endpoint_valid"),
+                "the {label} button is disabled until the endpoint is usable"
+            );
+        }
+        assert!(
+            settings.contains("if root.new_endpoint_problem != \"\": InlineError"),
+            "an unusable endpoint shows the domain's own reason inline"
         );
 
         let components = include_str!("../../ui/pages/wallet_components.slint");
